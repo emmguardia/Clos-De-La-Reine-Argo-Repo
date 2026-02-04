@@ -172,7 +172,8 @@ jobs:
       - name: Install and build frontend
         shell: powershell
         env:
-          VITE_API_URL: /api
+          # Vide pour éviter double /api : le front appelle déjà /api/auth/login etc.
+          VITE_API_URL: ""
         run: |
           Set-Location Frontend
           if (Test-Path package-lock.json) { npm ci } else { npm install }

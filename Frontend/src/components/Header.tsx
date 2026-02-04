@@ -14,7 +14,23 @@ export default function Header() {
   const { items: cartItems, refreshCart } = useCart();
   const { favorites, refreshFavorites } = useFavorites();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [user, setUser] = useState<UserData | null>(null);
+  const [user, setUser] = useState<UserData | null>(() => {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (!userStr) return null;
+      const parsed = JSON.parse(userStr);
+      if (parsed && typeof parsed === 'object' && parsed.firstName && parsed.lastName) {
+        return {
+          firstName: String(parsed.firstName).slice(0, 50),
+          lastName: String(parsed.lastName).slice(0, 50),
+          email: parsed.email ? String(parsed.email).slice(0, 255) : undefined
+        };
+      }
+    } catch (_e) {
+      localStorage.removeItem('user');
+    }
+    return null;
+  });
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -37,23 +53,6 @@ export default function Header() {
   const favoritesCount = favorites.length;
 
   useEffect(() => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const parsed = JSON.parse(userStr);
-        if (parsed && typeof parsed === 'object' && parsed.firstName && parsed.lastName) {
-          setUser({
-            firstName: String(parsed.firstName).slice(0, 50),
-            lastName: String(parsed.lastName).slice(0, 50),
-            email: parsed.email ? String(parsed.email).slice(0, 255) : undefined
-          });
-        }
-      } catch (e) {
-        console.error('Error parsing user data:', e);
-        localStorage.removeItem('user');
-      }
-    }
-
     const handleStorageChange = () => {
       const userStr = localStorage.getItem('user');
       if (userStr) {
@@ -68,7 +67,7 @@ export default function Header() {
           } else {
             setUser(null);
           }
-        } catch (e) {
+        } catch (_e) {
           setUser(null);
           localStorage.removeItem('user');
         }

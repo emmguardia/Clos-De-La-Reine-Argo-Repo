@@ -18,8 +18,10 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
 
   useEffect(() => {
     if (product) {
-      setCurrentImageIndex(0);
-      setFavorite(isFavorite(product.id));
+      queueMicrotask(() => {
+        setCurrentImageIndex(0);
+        setFavorite(isFavorite(product.id));
+      });
     }
   }, [product, isFavorite]);
 

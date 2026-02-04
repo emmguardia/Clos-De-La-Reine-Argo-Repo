@@ -52,7 +52,7 @@ export default function FAQAdminPage() {
           setFaqs(data);
         }
       }
-    } catch (error) {
+    } catch (_error) {
       console.error('Erreur:', error);
     } finally {
       setLoading(false);
@@ -120,7 +120,7 @@ export default function FAQAdminPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur' });
         setError(data.error || 'Erreur lors de l\'opération');
       }
-    } catch (error) {
+    } catch (_error) {
       setError('Erreur lors de l\'opération');
     }
   };
@@ -162,7 +162,7 @@ export default function FAQAdminPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur' });
         setError(data.error || 'Erreur lors de la suppression');
       }
-    } catch (error) {
+    } catch (_error) {
       setError('Erreur lors de la suppression');
     }
   };

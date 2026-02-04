@@ -44,7 +44,7 @@ export default function BoutiquePage() {
   );
   useEffect(() => {
     if (categoryParam && ['colliers', 'harnais', 'laisses'].includes(categoryParam)) {
-      setSelectedCategory(categoryParam);
+      queueMicrotask(() => setSelectedCategory(categoryParam));
     }
   }, [categoryParam]);
   const categories: { value: ProductCategory | 'all'; label: string }[] = [

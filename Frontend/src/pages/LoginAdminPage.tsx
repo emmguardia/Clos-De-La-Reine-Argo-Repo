@@ -33,7 +33,7 @@ export default function LoginAdminPage() {
       } else {
         localStorage.removeItem('adminToken');
       }
-    } catch (error) {
+    } catch (_error) {
       localStorage.removeItem('adminToken');
     }
   };
@@ -80,7 +80,7 @@ export default function LoginAdminPage() {
           setError('Trop de tentatives. Veuillez réessayer dans 15 minutes.');
         }
       }
-    } catch (err) {
+    } catch (_err) {
       setError('Erreur de connexion. Veuillez réessayer.');
       setPassword('');
     } finally {

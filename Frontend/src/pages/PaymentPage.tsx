@@ -74,7 +74,7 @@ export default function PaymentPage() {
           navigate('/profil?tab=commandes');
         }
       }
-    } catch (error) {
+    } catch (_error) {
       console.error('Erreur:', error);
     } finally {
       setLoading(false);
@@ -112,7 +112,7 @@ export default function PaymentPage() {
       }
 
       navigate('/profil?tab=commandes');
-    } catch (err) {
+    } catch (_err) {
       setError(err instanceof Error ? err.message : 'Erreur lors du paiement');
     } finally {
       setSubmitting(false);

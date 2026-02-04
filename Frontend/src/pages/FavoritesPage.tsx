@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import ProductCard from '../components/ProductCard';
 import ProductModal from '../components/ProductModal';
@@ -9,14 +9,12 @@ import type { Product } from '../data/products';
 export default function FavoritesPage() {
   const { products, loading } = useProducts();
   const { favorites, loading: favoritesLoading } = useFavorites();
-  const [favoriteProducts, setFavoriteProducts] = useState<Product[]>([]);
+  const favoriteProducts = useMemo(
+    () => products.filter(p => favorites.includes(p.id)),
+    [products, favorites]
+  );
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  useEffect(() => {
-    const favoriteProductsList = products.filter(p => favorites.includes(p.id));
-    setFavoriteProducts(favoriteProductsList);
-  }, [products, favorites]);
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-10">

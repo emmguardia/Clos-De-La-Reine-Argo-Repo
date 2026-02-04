@@ -51,7 +51,7 @@ export default function CounterProposalPage() {
         console.error('Erreur lors de la récupération des commandes');
         navigate('/profil?tab=commandes');
       }
-    } catch (error) {
+    } catch (_error) {
       console.error('Erreur:', error);
       navigate('/profil?tab=commandes');
     } finally {
@@ -88,7 +88,7 @@ export default function CounterProposalPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur' });
         setError(data.error || 'Erreur');
       }
-    } catch (err) {
+    } catch (_err) {
       setError('Erreur lors de l\'acceptation');
     } finally {
       setSubmitting(false);
@@ -132,7 +132,7 @@ export default function CounterProposalPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur' });
         setError(data.error || 'Erreur');
       }
-    } catch (err) {
+    } catch (_err) {
       setError('Erreur lors de l\'envoi');
     } finally {
       setSubmitting(false);

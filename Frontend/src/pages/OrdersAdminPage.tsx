@@ -79,7 +79,7 @@ export default function OrdersAdminPage() {
       }
 
       fetchOrders();
-    } catch (error) {
+    } catch (_error) {
       localStorage.removeItem('adminToken');
       window.location.href = '/admin/login';
     }
@@ -111,7 +111,7 @@ export default function OrdersAdminPage() {
           setOrders(data);
         }
       }
-    } catch (error) {
+    } catch (_error) {
       console.error('Erreur:', error);
     } finally {
       setLoading(false);
@@ -182,7 +182,7 @@ export default function OrdersAdminPage() {
       } else {
         setError('Erreur lors de l\'action');
       }
-    } catch (error) {
+    } catch (_error) {
       setError('Erreur lors de l\'action');
     }
   };
@@ -205,7 +205,7 @@ export default function OrdersAdminPage() {
       if (response.ok) {
         fetchOrders();
       }
-    } catch (error) {
+    } catch (_error) {
       console.error('Erreur:', error);
     }
   };
@@ -237,7 +237,7 @@ export default function OrdersAdminPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur lors du refus' });
         setError(data.error || 'Erreur lors du refus');
       }
-    } catch (error) {
+    } catch (_error) {
       setError('Erreur lors du refus');
     }
   };
@@ -265,7 +265,7 @@ export default function OrdersAdminPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur lors de la suppression' });
         setError(data.error || 'Erreur lors de la suppression');
       }
-    } catch (error) {
+    } catch (_error) {
       setError('Erreur lors de la suppression');
     }
   };
@@ -560,7 +560,7 @@ export default function OrdersAdminPage() {
                   if (response.ok) {
                     fetchOrders();
                   }
-                } catch (error) {
+                } catch (_error) {
                   console.error('Erreur:', error);
                 }
               }}

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: clos-de-la-reine-front
+  namespace: {{ include "clos.namespace" . }}
+  labels:
+    {{- include "clos.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.frontend.serviceType }}
+  selector:
+    app: clos-de-la-reine-front
+  ports:
+  - protocol: TCP
+    port: {{ .Values.frontend.port }}
+    targetPort: {{ .Values.frontend.port }}

@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap');
+
+@import "tailwindcss";
+
+:root {
+  --cream: #f8f4ef;
+  --blush: #f2dedd;
+  --mint: #e5f2eb;
+  --ink: #1f1f1f;
+  --shadow: 0 25px 60px -25px rgba(31, 31, 31, 0.18);
+}
+
+@layer utilities {
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-20px); }
+  }
+
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+  }
+
+  .animate-fadeIn { animation: fadeIn 0.8s ease-out forwards; }
+  .animate-fadeIn-delay-1 { animation: fadeIn 0.8s ease-out 0.15s forwards; opacity: 0; }
+  .animate-fadeIn-delay-2 { animation: fadeIn 0.8s ease-out 0.3s forwards; opacity: 0; }
+  .animate-fadeIn-delay-3 { animation: fadeIn 0.8s ease-out 0.45s forwards; opacity: 0; }
+  .animate-float { animation: float 3s ease-in-out infinite; }
+  .animate-slideDown { animation: slideDown 0.3s ease-out; }
+  .animate-pulse { animation: pulse 2s ease-in-out infinite; }
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background: var(--cream);
+  color: var(--ink);
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Playfair Display', 'Inter', serif;
+  letter-spacing: -0.02em;
+}

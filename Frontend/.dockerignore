@@ -1,0 +1,15 @@
+node_modules
+src
+.env
+.git
+.gitignore
+*.log
+.DS_Store
+package*.json
+tsconfig*.json
+vite.config.ts
+tailwind.config.js
+postcss.config.js
+eslint.config.js
+index.html
+

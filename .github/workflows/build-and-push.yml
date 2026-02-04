@@ -1,0 +1,230 @@
+name: Build and push to GHCR
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+concurrency:
+  group: build-and-push
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test & security
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Node
+        shell: powershell
+        run: |
+          $v = node --version
+          Write-Host "Node $v"
+          if (-not ($v -match '^v(\d+)\.')) { Write-Error "Node version inconnue: $v" }
+          if ([int]$Matches[1] -lt 20) { Write-Error "Node 20 ou plus requis (tu as $v). Installe https://nodejs.org" }
+
+      - name: Backend – install
+        shell: powershell
+        run: |
+          Set-Location Backend
+          npm ci
+
+      - name: Backend – audit (moderate+)
+        shell: powershell
+        run: |
+          Set-Location Backend
+          npm audit --audit-level=moderate
+
+      - name: Backend – test
+        shell: powershell
+        run: |
+          Set-Location Backend
+          npm test
+
+      - name: Frontend – install
+        shell: powershell
+        run: |
+          Set-Location Frontend
+          if (Test-Path package-lock.json) { npm ci } else { npm install }
+
+      - name: Frontend – audit (moderate+)
+        shell: powershell
+        run: |
+          Set-Location Frontend
+          npm audit --audit-level=moderate
+
+      - name: Frontend – lint
+        shell: powershell
+        run: |
+          Set-Location Frontend
+          npm run lint
+
+      - name: Frontend – test (if present)
+        shell: powershell
+        run: |
+          Set-Location Frontend
+          npm run test --if-present
+
+  build-and-push:
+    name: Build and push
+    needs: test
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Runner started
+        shell: powershell
+        run: Write-Host "Runner OK - $((Get-Date).ToUniversalTime().ToString('HH:mm:ss')) UTC"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump version
+        id: version
+        shell: powershell
+        run: |
+          $path = "version.txt"
+          $content = (Get-Content $path -Raw).Trim()
+          if (-not ($content -match '^(\d+)\.(\d+)\.(\d+)$')) { Write-Error "version.txt invalide: $content (attendu X.Y.Z)" }
+          $major = [int]$Matches[1]
+          $minor = [int]$Matches[2]
+          $patch = [int]$Matches[3]
+          if ($patch -lt 9) { $patch++ } else { $patch = 0; $minor++ }
+          $newVersion = "${major}.${minor}.${patch}"
+          Set-Content $path -Value $newVersion -NoNewline
+          $tag = "v$newVersion"
+          "VERSION_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "tag=$tag" >> $env:GITHUB_OUTPUT
+          echo "version=$newVersion" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $tag"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (backend)
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-back
+          tags: |
+            type=raw,value=${{ steps.version.outputs.tag }}
+
+      - name: Build and push backend
+        id: build-backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./Backend
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan (backend)
+        shell: powershell
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $img = "${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-back:${{ steps.version.outputs.tag }}"
+          docker run --rm -e TRIVY_USERNAME -e TRIVY_PASSWORD aquasec/trivy image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --format table $img
+
+      - name: Verify Node (self-hosted)
+        if: runner.self_hosted == true
+        shell: powershell
+        run: |
+          $v = node --version
+          Write-Host "Node $v"
+          if (-not ($v -match '^v(\d+)\.')) { Write-Error "Node version inconnue: $v" }
+          if ([int]$Matches[1] -lt 20) { Write-Error "Node 20 ou plus requis (tu as $v). Installe https://nodejs.org" }
+
+      - name: Install and build frontend
+        shell: powershell
+        env:
+          VITE_API_URL: /api
+        run: |
+          Set-Location Frontend
+          if (Test-Path package-lock.json) { npm ci } else { npm install }
+          npm run build
+
+      - name: Extract metadata (frontend)
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-front
+          tags: |
+            type=raw,value=${{ steps.version.outputs.tag }}
+
+      - name: Build and push frontend
+        id: build-frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./Frontend
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan (frontend)
+        shell: powershell
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $img = "${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-front:${{ steps.version.outputs.tag }}"
+          docker run --rm -e TRIVY_USERNAME -e TRIVY_PASSWORD aquasec/trivy image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --format table $img
+
+      - name: Pin Helm values to image digest
+        shell: powershell
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+          $digestBackend = "${{ steps.build-backend.outputs.digest }}"
+          $digestFrontend = "${{ steps.build-frontend.outputs.digest }}"
+          $owner = "${{ github.repository_owner }}"
+          $reg = "${{ env.REGISTRY }}"
+          $backendImage = if ($digestBackend) { "${reg}/${owner}/clos-de-la-reine-back@${digestBackend}" } else { "${reg}/${owner}/clos-de-la-reine-back:${tag}" }
+          $frontendImage = if ($digestFrontend) { "${reg}/${owner}/clos-de-la-reine-front@${digestFrontend}" } else { "${reg}/${owner}/clos-de-la-reine-front:${tag}" }
+          $valuesPath = "charts/clos-de-la-reine/values.yaml"
+          $content = Get-Content $valuesPath -Raw
+          $content = $content -replace '  image: ghcr\.io/[^\r\n]+clos-de-la-reine-back[^\r\n]*', "  image: $backendImage"
+          $content = $content -replace '  image: ghcr\.io/[^\r\n]+clos-de-la-reine-front[^\r\n]*', "  image: $frontendImage"
+          Set-Content $valuesPath -Value $content -NoNewline
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add version.txt $valuesPath
+          git diff --staged --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Helm values and version already up to date, skip commit"
+          } else {
+            git commit -m "chore(helm): pin images to digest $tag [skip ci]"
+            git push
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "git push a échoué. Vérifier: permissions GITHUB_TOKEN (contents: write), branch protection, règles push."
+              exit 1
+            }
+          }

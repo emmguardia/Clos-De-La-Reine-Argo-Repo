@@ -1,0 +1,28 @@
+# Dependencies
+*/node_modules/
+node_modules/
+
+# Secrets et env (ne jamais committer)
+.env
+.env.*
+!.env.example
+*.pem
+*-plain.yaml
+*-Secrets.yaml
+K3s/secrets.yaml
+charts/clos-de-la-reine/secrets/*-secrets.yaml
+charts/clos-de-la-reine/templates/sealed-output.yaml
+
+# Logs
+Logs/
+Logs Git Action/
+
+# Build / cache
+dist/
+*.log
+.npm
+.eslintcache
+
+# OS
+.DS_Store
+Thumbs.db

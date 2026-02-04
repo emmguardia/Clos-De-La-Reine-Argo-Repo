@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: clos-de-la-reine-back
+  namespace: clos-de-la-reine
+spec:
+  type: ClusterIP
+  selector:
+    app: clos-de-la-reine-back
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clos-de-la-reine-back
+  namespace: clos-de-la-reine
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: clos-de-la-reine-back
+  template:
+    metadata:
+      labels:
+        app: clos-de-la-reine-back
+    spec:
+      containers:
+      - name: backend
+        image: clos-de-la-reine-back:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PORT
+          value: "3000"
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: clos-secrets
+              key: mongodb-uri
+        - name: MONGODB_USER
+          valueFrom:
+            secretKeyRef:
+              name: clos-secrets
+              key: mongodb-user
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: clos-secrets
+              key: mongodb-password
+        - name: MONGODB_DB
+          valueFrom:
+            secretKeyRef:
+              name: clos-secrets
+              key: mongodb-db
+        - name: MONGODB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: clos-secrets
+              key: mongodb-host
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: clos-secrets
+              key: jwt-secret
+        - name: EMAIL_SERVICE_URL
+          value: "http://email-service.email-service.svc.cluster.local:8080"
+        - name: JWT_PRIVATE_KEY_PATH
+          value: "/app/secrets/jwt_private_key.pem"
+        volumeMounts:
+        - name: secrets
+          mountPath: /app/secrets
+          readOnly: true
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 5
+          successThreshold: 1
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+          successThreshold: 1
+      volumes:
+      - name: secrets
+        secret:
+          secretName: clos-secrets
+          items:
+          - key: jwt-private-key
+            path: jwt_private_key.pem
+          - key: jwt-public-key
+            path: jwt_public_key.pem
+

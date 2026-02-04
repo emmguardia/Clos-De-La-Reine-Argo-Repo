@@ -1,0 +1,25 @@
+{
+  "name": "clos-de-la-reine-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "build": "node build.js",
+    "start": "node dist/src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node -e \"process.exit(0)\""
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "mongodb": "^7.0.0",
+    "cors": "^2.8.5",
+    "bcrypt": "^6.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "express-rate-limit": "^8.2.1"
+  },
+  "overrides": {
+    "rimraf": "^5.0.5",
+    "glob": "^10.3.10"
+  }
+}
+

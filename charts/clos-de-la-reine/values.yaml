@@ -38,7 +38,7 @@ frontend:
   image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:03644354b49a2e4fe1eb1f981eb171b3d63f0106569ce217b6289fb2b28e8bd9
   imagePullPolicy: Always
   replicas: 2
-  serviceType: LoadBalancer
+  serviceType: NodePort
   port: 80
   resources:
     requests:

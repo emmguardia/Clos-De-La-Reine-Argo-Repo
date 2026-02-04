@@ -68,7 +68,7 @@ export default function AdminPromoCodesPage() {
       }
 
       fetchPromoCodes();
-    } catch (_error) {
+    } catch {
       localStorage.removeItem('adminToken');
       window.location.href = '/admin/login';
     }
@@ -96,7 +96,7 @@ export default function AdminPromoCodesPage() {
 
       const data = await safeJsonResponse(response, []) as PromoCode[];
       setPromoCodes(data);
-    } catch (_error) {
+    } catch {
       console.error('Erreur:', error);
     } finally {
       setLoading(false);
@@ -160,7 +160,7 @@ export default function AdminPromoCodesPage() {
         return;
       }
 
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         discountType: formData.discountType,
         discountValue: parseFloat(formData.discountValue),
         maxUses: parseInt(formData.maxUses),
@@ -208,7 +208,7 @@ export default function AdminPromoCodesPage() {
       setTimeout(() => {
         resetForm();
       }, 1500);
-    } catch (_error) {
+    } catch {
       setFormError(error instanceof Error ? error.message : 'Erreur lors de l\'enregistrement');
     } finally {
       setFormLoading(false);
@@ -243,7 +243,7 @@ export default function AdminPromoCodesPage() {
       }
 
       await fetchPromoCodes();
-    } catch (_error) {
+    } catch {
       alert(error instanceof Error ? error.message : 'Erreur lors de la suppression');
     } finally {
       setDeleteLoading({ ...deleteLoading, [id]: false });

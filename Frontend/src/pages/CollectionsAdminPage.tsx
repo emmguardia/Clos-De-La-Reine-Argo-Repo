@@ -45,7 +45,7 @@ export default function CollectionsAdminPage() {
           setCollections(data);
         }
       }
-    } catch (_error) {
+    } catch {
       console.error('Erreur:', error);
     } finally {
       setLoading(false);
@@ -103,7 +103,7 @@ export default function CollectionsAdminPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur' });
         setError(data.error || 'Erreur lors de l\'opération');
       }
-    } catch (_error) {
+    } catch {
       setError('Erreur lors de l\'opération');
     }
   };
@@ -141,7 +141,7 @@ export default function CollectionsAdminPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur' });
         setError(data.error || 'Erreur lors de la suppression');
       }
-    } catch (_error) {
+    } catch {
       setError('Erreur lors de la suppression');
     }
   };

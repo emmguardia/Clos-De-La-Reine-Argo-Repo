@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit, Trash2, Save, X, HelpCircle, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getTokenFromStorage, sanitizeInput, sanitizeText, safeJsonResponse } from '../utils/security';
@@ -11,6 +11,7 @@ interface FAQItem {
   question: string;
   answer: string;
   order: number;
+  categoryOrder?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,11 +31,7 @@ export default function FAQAdminPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    fetchFAQs();
-  }, []);
-
-  const fetchFAQs = async () => {
+  const fetchFAQs = useCallback(async () => {
     try {
       const token = getTokenFromStorage();
       if (!token) {
@@ -52,14 +49,18 @@ export default function FAQAdminPage() {
           setFaqs(data);
         }
       }
-    } catch (_error) {
-      console.error('Erreur:', error);
+    } catch {
+      setError('Erreur lors du chargement');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    fetchFAQs();
+  }, [fetchFAQs]);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -120,7 +121,7 @@ export default function FAQAdminPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur' });
         setError(data.error || 'Erreur lors de l\'opération');
       }
-    } catch (_error) {
+    } catch {
       setError('Erreur lors de l\'opération');
     }
   };
@@ -131,7 +132,7 @@ export default function FAQAdminPage() {
       question: faq.question,
       answer: faq.answer,
       order: faq.order,
-      categoryOrder: (faq as any).categoryOrder || 0
+      categoryOrder: faq.categoryOrder ?? 0
     });
     setEditingId(faq.id);
     setShowAddForm(true);
@@ -162,7 +163,7 @@ export default function FAQAdminPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur' });
         setError(data.error || 'Erreur lors de la suppression');
       }
-    } catch (_error) {
+    } catch {
       setError('Erreur lors de la suppression');
     }
   };
@@ -175,7 +176,7 @@ export default function FAQAdminPage() {
     setSuccess('');
   };
 
-  const categories = Array.from(new Set(faqs.map(f => f.category))).sort();
+  const categories = Array.from(new Set(faqs.map((f: FAQItem) => f.category))).sort();
 
   if (loading) {
     return (
@@ -335,7 +336,7 @@ export default function FAQAdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {faqs.map((faq) => (
+                  {faqs.map((faq: FAQItem) => (
                     <tr key={faq.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                       <td className="py-4 px-4">
                         <span className="font-medium text-gray-900">{faq.category}</span>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { ComponentType } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { User, Package, History, LogOut, Download, Trash2, Edit2, Save, X, CreditCard, CheckCircle, XCircle, Clock, Check, MessageSquare, XOctagon, Truck } from 'lucide-react';
 import { useProducts } from '../hooks/useProducts';
@@ -15,15 +16,16 @@ interface UserData {
   lastLogin?: string;
 }
 
+interface OrderItem { productId: number; quantity: number; price: number }
 interface Order {
   id: string;
   orderNumber?: string;
-  items: Array<{ productId: number; quantity: number; price: number }>;
+  items: OrderItem[];
   total: number;
   status: string;
-  counterProposal?: any;
+  counterProposal?: { items: OrderItem[]; total: number; message?: string };
   rejectionReason?: string;
-  paymentInfo?: any;
+  paymentInfo?: Record<string, unknown>;
   createdAt: string;
 }
 
@@ -112,7 +114,7 @@ export default function ProfilePage() {
   };
 
   const getStatusInfo = (status: string) => {
-    const statuses: Record<string, { label: string; icon: any; color: string }> = {
+    const statuses: Record<string, { label: string; icon: ComponentType<{ className?: string }>; color: string }> = {
       pending_validation: { label: 'En attente de validation', icon: Clock, color: 'text-yellow-600' },
       pending_counter_proposal: { label: 'Contre-proposition en attente', icon: Clock, color: 'text-blue-600' },
       validated: { label: 'Validée - Paiement requis', icon: CreditCard, color: 'text-green-600' },
@@ -310,7 +312,7 @@ export default function ProfilePage() {
                                 <>
                                   <p className="text-sm font-medium text-blue-900 mb-2">Contre-proposition reçue</p>
                                   <div className="space-y-1 text-sm text-blue-800 mb-3">
-                                    {order.counterProposal.items.map((item: any, idx: number) => (
+                                    {order.counterProposal.items.map((item: OrderItem, idx: number) => (
                                       <div key={idx}>
                                         {getProductName(item.productId)} x{item.quantity} - {(item.price * item.quantity).toFixed(2)}€
                                       </div>

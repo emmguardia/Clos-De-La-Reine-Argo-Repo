@@ -6,11 +6,21 @@ import { sanitizeInput, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJ
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
+interface OrderItem { productId: number; quantity: number; price: number }
+interface PaymentOrder {
+  id: string;
+  total: number;
+  items: OrderItem[];
+  shippingAddress?: Record<string, unknown>;
+  promoCode?: { code?: string; discountAmount?: number };
+  originalTotal?: number;
+}
+
 export default function PaymentPage() {
   const navigate = useNavigate();
   const { orderId } = useParams();
   const { products } = useProducts();
-  const [order, setOrder] = useState<any>(null);
+  const [order, setOrder] = useState<PaymentOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -74,7 +84,7 @@ export default function PaymentPage() {
           navigate('/profil?tab=commandes');
         }
       }
-    } catch (_error) {
+    } catch {
       console.error('Erreur:', error);
     } finally {
       setLoading(false);
@@ -112,7 +122,7 @@ export default function PaymentPage() {
       }
 
       navigate('/profil?tab=commandes');
-    } catch (_err) {
+    } catch {
       setError(err instanceof Error ? err.message : 'Erreur lors du paiement');
     } finally {
       setSubmitting(false);
@@ -322,7 +332,7 @@ export default function PaymentPage() {
               <div>
                 <h3 className="font-medium text-gray-900 mb-3">Produits</h3>
                 <div className="space-y-2">
-                  {order.items.map((item: any, idx: number) => (
+                  {order.items.map((item: OrderItem, idx: number) => (
                     <div key={idx} className="flex justify-between text-sm">
                       <span>{getProductName(item.productId)} x{item.quantity}</span>
                       <span>{(item.price * item.quantity).toFixed(2)}€</span>
@@ -347,15 +357,15 @@ export default function PaymentPage() {
                   </div>
                 </div>
               )}
-              {(order as any).promoCode && (
+              {order.promoCode && (
                 <div className="border-t pt-4 space-y-2">
                   <div className="flex justify-between text-sm text-gray-600">
                     <span>Sous-total</span>
-                    <span>{((order as any).originalTotal || order.total).toFixed(2)}€</span>
+                    <span>{(order.originalTotal ?? order.total).toFixed(2)}€</span>
                   </div>
                   <div className="flex justify-between text-sm text-green-600">
-                    <span>Réduction ({(order as any).promoCode.code || (order as any).promoCode})</span>
-                    <span>-{((order as any).promoCode.discountAmount || 0).toFixed(2)}€</span>
+                    <span>Réduction ({order.promoCode.code ?? String(order.promoCode)})</span>
+                    <span>-{(order.promoCode.discountAmount ?? 0).toFixed(2)}€</span>
                   </div>
                 </div>
               )}

@@ -80,7 +80,7 @@ export default function AdminPanelPage() {
 
       fetchCollections();
       fetchGalleryItems();
-    } catch (_error) {
+    } catch {
       localStorage.removeItem('adminToken');
       window.location.href = '/admin/login';
     }
@@ -99,7 +99,7 @@ export default function AdminPanelPage() {
           }
         }
       }
-    } catch (_error) {
+    } catch {
       console.error('Erreur:', error);
     }
   };
@@ -117,7 +117,7 @@ export default function AdminPanelPage() {
           setGalleryItems(data);
         }
       }
-    } catch (_error) {
+    } catch {
       console.error('Erreur:', error);
     } finally {
       setGalleryLoading(false);
@@ -168,7 +168,7 @@ export default function AdminPanelPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur' });
         setGalleryError(data.error || 'Erreur lors de l\'ajout');
       }
-    } catch (_error) {
+    } catch {
       setGalleryError('Erreur lors de l\'ajout');
     }
   };
@@ -196,7 +196,7 @@ export default function AdminPanelPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur' });
         setGalleryError(data.error || 'Erreur lors de la suppression');
       }
-    } catch (_error) {
+    } catch {
       setGalleryError('Erreur lors de la suppression');
     } finally {
       setGalleryDeleteLoading({ ...galleryDeleteLoading, [id]: false });
@@ -316,7 +316,7 @@ export default function AdminPanelPage() {
         resetForm();
         window.location.reload();
       }, 1500);
-    } catch (_err) {
+    } catch {
       setFormError(err instanceof Error ? err.message : 'Erreur lors de l\'opération');
     } finally {
       setFormLoading(false);
@@ -350,7 +350,7 @@ export default function AdminPanelPage() {
       }
 
       window.location.reload();
-    } catch (_err) {
+    } catch {
       alert(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     } finally {
       setDeleteLoading({ ...deleteLoading, [productId]: false });

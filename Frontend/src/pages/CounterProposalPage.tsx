@@ -6,11 +6,20 @@ import { safeJsonResponse, getTokenFromStorage } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
+interface OrderItem { productId: number; quantity: number; price: number }
+interface CounterOrder {
+  id: string;
+  status?: string;
+  total: number;
+  items: OrderItem[];
+  counterProposal?: { items: OrderItem[]; total: number; message?: string };
+}
+
 export default function CounterProposalPage() {
   const navigate = useNavigate();
   const { orderId, action } = useParams();
   const { products } = useProducts();
-  const [order, setOrder] = useState<any>(null);
+  const [order, setOrder] = useState<CounterOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -37,7 +46,7 @@ export default function CounterProposalPage() {
       });
       if (response.ok) {
         const orders = await safeJsonResponse(response, []);
-        const foundOrder = Array.isArray(orders) ? orders.find((o: any) => o.id === orderId) as { id: string; status?: string } | undefined : null;
+        const foundOrder = Array.isArray(orders) ? orders.find((o: { id: string }) => o.id === orderId) as CounterOrder | undefined : null;
         if (foundOrder) {
           if (foundOrder.status !== 'pending_counter_proposal') {
             navigate('/profil?tab=commandes');
@@ -51,7 +60,7 @@ export default function CounterProposalPage() {
         console.error('Erreur lors de la récupération des commandes');
         navigate('/profil?tab=commandes');
       }
-    } catch (_error) {
+    } catch {
       console.error('Erreur:', error);
       navigate('/profil?tab=commandes');
     } finally {
@@ -88,7 +97,7 @@ export default function CounterProposalPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur' });
         setError(data.error || 'Erreur');
       }
-    } catch (_err) {
+    } catch {
       setError('Erreur lors de l\'acceptation');
     } finally {
       setSubmitting(false);
@@ -132,7 +141,7 @@ export default function CounterProposalPage() {
         const data = await safeJsonResponse(response, { error: 'Erreur' });
         setError(data.error || 'Erreur');
       }
-    } catch (_err) {
+    } catch {
       setError('Erreur lors de l\'envoi');
     } finally {
       setSubmitting(false);
@@ -172,7 +181,7 @@ export default function CounterProposalPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-xl font-medium mb-4">Commande originale</h2>
           <div className="space-y-2 mb-4">
-            {order.items.map((item: any, idx: number) => (
+            {order.items.map((item: OrderItem, idx: number) => (
               <div key={idx} className="flex justify-between text-sm">
                 <span>{getProductName(item.productId)} x{item.quantity}</span>
                 <span>{(item.price * item.quantity).toFixed(2)}€</span>
@@ -186,7 +195,7 @@ export default function CounterProposalPage() {
           <div className="bg-blue-50 rounded-lg border border-blue-200 p-6 mb-6">
             <h2 className="text-xl font-medium mb-4 text-blue-900">Contre-proposition reçue</h2>
             <div className="space-y-2 mb-4">
-              {order.counterProposal.items.map((item: any, idx: number) => (
+              {order.counterProposal.items.map((item: OrderItem, idx: number) => (
                 <div key={idx} className="flex justify-between text-sm text-blue-800">
                   <span>{getProductName(item.productId)} x{item.quantity}</span>
                   <span>{(item.price * item.quantity).toFixed(2)}€</span>

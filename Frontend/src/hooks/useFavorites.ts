@@ -32,7 +32,9 @@ export function useFavorites() {
         const productsResponse = await fetch(`${API_URL}/api/products`);
         if (productsResponse.ok) {
           const products = await safeJsonResponse(productsResponse, []);
-          const existingProductIds = products.map((p: any) => p.id || p._id);
+          const existingProductIds = products
+            .map((p: { id?: number; _id?: number }) => p.id ?? p._id)
+            .filter((id): id is number => id != null);
           const validFavorites = data.filter((id: number) => 
             Number.isInteger(id) && id > 0 && existingProductIds.includes(id)
           );

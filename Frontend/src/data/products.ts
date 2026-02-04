@@ -25,20 +25,20 @@ export async function fetchProducts(): Promise<Product[]> {
       throw new Error('Erreur lors de la récupération des produits');
     }
     const products = await safeJsonResponse(response, []);
-    return products.map((p: any) => ({
-      id: p.id || p._id,
-      name: p.name,
-      price: p.price,
-      image: p.image,
-      secondImage: p.secondImage,
-      additionalImages: p.additionalImages || [],
-      category: p.category,
-      collection: p.collection,
-      color: p.color,
-      sizes: p.sizes,
-      isNew: p.isNew || false
+    return products.map((p: Record<string, unknown>) => ({
+      id: (p.id ?? p._id) as number,
+      name: p.name as string,
+      price: p.price as number,
+      image: p.image as string,
+      secondImage: p.secondImage as string | undefined,
+      additionalImages: (p.additionalImages as string[] | undefined) || [],
+      category: p.category as ProductCategory,
+      collection: p.collection as string,
+      color: p.color as string | string[],
+      sizes: (p.sizes as string[]) || [],
+      isNew: (p.isNew as boolean) || false
     }));
-  } catch (error) {
+  } catch {
     console.error('Erreur lors du chargement des produits:', error);
     return [];
   }

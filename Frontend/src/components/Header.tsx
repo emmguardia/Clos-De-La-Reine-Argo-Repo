@@ -26,7 +26,7 @@ export default function Header() {
           email: parsed.email ? String(parsed.email).slice(0, 255) : undefined
         };
       }
-    } catch (_e) {
+    } catch {
       localStorage.removeItem('user');
     }
     return null;
@@ -67,7 +67,7 @@ export default function Header() {
           } else {
             setUser(null);
           }
-        } catch (_e) {
+        } catch {
           setUser(null);
           localStorage.removeItem('user');
         }

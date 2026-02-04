@@ -125,6 +125,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build backend (dist/)
+        shell: powershell
+        run: |
+          Set-Location Backend
+          npm ci
+          npm run build
+
       - name: Extract metadata (backend)
         id: meta-backend
         uses: docker/metadata-action@v5

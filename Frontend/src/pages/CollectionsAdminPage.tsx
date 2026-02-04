@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Save, X, FolderOpen, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getTokenFromStorage, safeJsonResponse } from '../utils/security';
+import { safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
@@ -29,9 +29,9 @@ export default function CollectionsAdminPage() {
 
   const fetchCollections = async () => {
     try {
-      const token = getTokenFromStorage();
+      const token = localStorage.getItem('adminToken');
       if (!token) {
-        window.location.href = '/connexion';
+        window.location.href = '/admin/login';
         return;
       }
       const response = await fetch(`${API_URL}/api/collections`, {
@@ -58,8 +58,11 @@ export default function CollectionsAdminPage() {
     setSuccess('');
 
     try {
-      const token = getTokenFromStorage();
-      if (!token) return;
+      const token = localStorage.getItem('adminToken');
+      if (!token) {
+        window.location.href = '/admin/login';
+        return;
+      }
 
       const sanitizedName = formData.name.trim().slice(0, 100);
 
@@ -124,8 +127,11 @@ export default function CollectionsAdminPage() {
     }
 
     try {
-      const token = getTokenFromStorage();
-      if (!token) return;
+      const token = localStorage.getItem('adminToken');
+      if (!token) {
+        window.location.href = '/admin/login';
+        return;
+      }
 
       const response = await fetch(`${API_URL}/api/collections/${id}`, {
         method: 'DELETE',

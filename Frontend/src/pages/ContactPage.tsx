@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { sanitizeInput, sanitizeEmail, sanitizeText } from '../utils/security';
 
+const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
+
 export default function ContactPage() {
   const [formData, setFormData] = useState({
     name: '',
@@ -8,10 +10,37 @@ export default function ContactPage() {
     subject: '',
     message: '',
   });
-  const handleSubmit = (e: React.FormEvent) => {
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert('Merci pour votre message ! Nous vous répondrons dans les plus brefs délais.');
-    setFormData({ name: '', email: '', subject: '', message: '' });
+    setError('');
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/contact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          subject: formData.subject,
+          message: formData.message.trim(),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.success) {
+        setSuccess(true);
+        setFormData({ name: '', email: '', subject: '', message: '' });
+      } else {
+        setError(data.error || 'Erreur lors de l\'envoi. Réessayez.');
+      }
+    } catch {
+      setError('Erreur de connexion. Réessayez.');
+    } finally {
+      setLoading(false);
+    }
   };
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const value = e.target.value;
@@ -149,11 +178,13 @@ export default function ContactPage() {
               </div>
               <button
                 type="submit"
-                className="w-full bg-gray-900 text-white px-8 py-3 rounded-full hover:bg-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg shadow-gray-900/10"
+                disabled={loading}
+                className="w-full bg-gray-900 text-white px-8 py-3 rounded-full hover:bg-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg shadow-gray-900/10 disabled:opacity-60 disabled:pointer-events-none"
               >
-                Envoyer le message
+                {loading ? 'Envoi en cours...' : 'Envoyer le message'}
               </button>
             </form>
+            )}
           </div>
         </div>
       </main>

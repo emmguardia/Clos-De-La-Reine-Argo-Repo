@@ -11,7 +11,9 @@ node_modules/
 *-Secrets.yaml
 K3s/secrets.yaml
 charts/clos-de-la-reine/secrets/*-secrets.yaml
-charts/clos-de-la-reine/templates/sealed-output.yaml
+charts/clos-de-la-reine/secrets/clos-secrets.yaml
+sealed-output.yaml
+pub-cert.pem
 
 # Logs
 Logs/

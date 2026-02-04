@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit, Trash2, Save, X, HelpCircle, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getTokenFromStorage, sanitizeInput, sanitizeText, safeJsonResponse } from '../utils/security';
+import { sanitizeInput, sanitizeText, safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
@@ -33,7 +33,7 @@ export default function FAQAdminPage() {
 
   const fetchFAQs = useCallback(async () => {
     try {
-      const token = getTokenFromStorage();
+      const token = localStorage.getItem('adminToken');
       if (!token) {
         window.location.href = '/connexion';
         return;
@@ -66,8 +66,11 @@ export default function FAQAdminPage() {
     setSuccess('');
 
     try {
-      const token = getTokenFromStorage();
-      if (!token) return;
+      const token = localStorage.getItem('adminToken');
+      if (!token) {
+        window.location.href = '/admin/login';
+        return;
+      }
 
       const sanitizedCategory = sanitizeInput(formData.category).slice(0, 100);
       const sanitizedQuestion = sanitizeText(formData.question, 500);
@@ -146,7 +149,7 @@ export default function FAQAdminPage() {
     }
 
     try {
-      const token = getTokenFromStorage();
+      const token = localStorage.getItem('adminToken');
       if (!token) return;
 
       const response = await fetch(`${API_URL}/api/faq/${id}`, {

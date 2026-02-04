@@ -120,7 +120,8 @@ export const sendNewContactNotificationEmail = async (adminEmail, contactData) =
       : contactData.from_name || 'Client',
     from_email: contactData.email || contactData.from_email || '',
     message: contactData.message || '',
-    phone: contactData.phone || ''
+    phone: contactData.phone || '',
+    subject: contactData.subject || ''
   });
 };
 

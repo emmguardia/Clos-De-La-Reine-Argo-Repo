@@ -93,22 +93,25 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
               {images.length > 1 && (
                 <>
                   <button
-                    onClick={prevImage}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/90 backdrop-blur-md hover:bg-white transition-all duration-200 transform hover:scale-110"
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); prevImage(); }}
+                    className="absolute left-4 top-1/2 z-10 -translate-y-1/2 p-2 rounded-full bg-white/90 backdrop-blur-md hover:bg-white transition-all duration-200 transform hover:scale-110"
                   >
                     <ChevronLeft className="w-6 h-6 text-gray-900" />
                   </button>
                   <button
-                    onClick={nextImage}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/90 backdrop-blur-md hover:bg-white transition-all duration-200 transform hover:scale-110"
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); nextImage(); }}
+                    className="absolute right-4 top-1/2 z-10 -translate-y-1/2 p-2 rounded-full bg-white/90 backdrop-blur-md hover:bg-white transition-all duration-200 transform hover:scale-110"
                   >
                     <ChevronRight className="w-6 h-6 text-gray-900" />
                   </button>
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
                     {images.map((_, index) => (
-                      <button
+                        <button
+                        type="button"
                         key={index}
-                        onClick={() => setCurrentImageIndex(index)}
+                        onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(index); }}
                         className={`w-2 h-2 rounded-full transition-all duration-200 ${
                           index === currentImageIndex ? 'bg-gray-900 w-8' : 'bg-white/60'
                         }`}
@@ -126,7 +129,10 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                   {product.collection}
                 </span>
                 <h2 className="text-3xl font-light text-gray-900 mb-2">{product.name}</h2>
-                <p className="text-4xl font-light text-gray-900">{product.price.toFixed(0)}€</p>
+                <p className="text-4xl font-light text-gray-900 mb-3">{product.price.toFixed(0)}€</p>
+                {product.briefDescription && (
+                  <p className="text-gray-600 text-sm leading-relaxed">{product.briefDescription}</p>
+                )}
               </div>
               <div className="space-y-4">
                 <div>

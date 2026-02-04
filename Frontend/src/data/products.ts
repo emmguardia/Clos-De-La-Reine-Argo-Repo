@@ -12,6 +12,7 @@ export interface Product {
   sizes: string[];
   stock?: number;
   isNew?: boolean;
+  briefDescription?: string;
 }
 
 import { safeJsonResponse } from '../utils/security';
@@ -36,7 +37,8 @@ export async function fetchProducts(): Promise<Product[]> {
       collection: p.collection as string,
       color: p.color as string | string[],
       sizes: (p.sizes as string[]) || [],
-      isNew: (p.isNew as boolean) || false
+      isNew: (p.isNew as boolean) || false,
+      briefDescription: (p.briefDescription as string) || undefined
     }));
   } catch {
     console.error('Erreur lors du chargement des produits:', error);

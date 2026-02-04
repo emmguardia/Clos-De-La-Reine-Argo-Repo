@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useProducts } from '../hooks/useProducts';
 import type { Product } from '../data/products';
 import ImageUpload from '../components/ImageUpload';
-import { sanitizeInput, safeJsonResponse } from '../utils/security';
+import { sanitizeInput, sanitizeText, safeJsonResponse } from '../utils/security';
 
 interface GalleryItem {
   id: string;
@@ -32,7 +32,8 @@ export default function AdminPanelPage() {
     sizes: '',
     image: '',
     secondImage: '',
-    isNew: false
+    isNew: false,
+    briefDescription: ''
   });
   const [additionalImages, setAdditionalImages] = useState<string[]>([]);
   const [formError, setFormError] = useState('');
@@ -203,7 +204,7 @@ export default function AdminPanelPage() {
     }
   };
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const value = e.target.value;
     let sanitizedValue = value;
     
@@ -213,6 +214,8 @@ export default function AdminPanelPage() {
       sanitizedValue = value.replace(/[^0-9.]/g, '').slice(0, 10);
     } else if (e.target.name === 'color' || e.target.name === 'sizes') {
       sanitizedValue = sanitizeInput(value).slice(0, 500);
+    } else if (e.target.name === 'briefDescription') {
+      sanitizedValue = sanitizeText(value, 500);
     } else if (e.target.name === 'image' || e.target.name === 'secondImage') {
       sanitizedValue = value.slice(0, 1000);
     }
@@ -232,7 +235,8 @@ export default function AdminPanelPage() {
       sizes: '',
       image: '',
       secondImage: '',
-      isNew: false
+      isNew: false,
+      briefDescription: ''
     });
     setAdditionalImages([]);
     setFormError('');
@@ -301,7 +305,8 @@ export default function AdminPanelPage() {
           image: formData.image,
           secondImage: formData.secondImage || undefined,
           additionalImages: additionalImages,
-          isNew: formData.isNew
+          isNew: formData.isNew,
+          briefDescription: formData.briefDescription || undefined
         }),
       });
 
@@ -441,7 +446,7 @@ export default function AdminPanelPage() {
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <ImageIcon className="w-8 h-8 text-gray-600" />
-              <span className="text-2xl font-light text-gray-900">-</span>
+              <span className="text-2xl font-light text-gray-900">{galleryLoading ? '...' : galleryItems.length}</span>
             </div>
             <p className="text-sm text-gray-600">Photos galerie</p>
           </div>
@@ -565,6 +570,18 @@ export default function AdminPanelPage() {
                         onChange={handleFormChange}
                         placeholder="Ex: 1m, 1m20"
                         className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Brève description (optionnel)</label>
+                      <textarea
+                        name="briefDescription"
+                        value={formData.briefDescription}
+                        onChange={handleFormChange}
+                        placeholder="Courte description du produit pour la fiche"
+                        rows={3}
+                        maxLength={500}
+                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 resize-none"
                       />
                     </div>
                     <div>

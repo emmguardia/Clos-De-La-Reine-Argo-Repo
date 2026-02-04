@@ -44,6 +44,14 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const contactLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Trop de messages envoyés. Veuillez réessayer dans quelques minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const adminLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 3,
@@ -145,6 +153,43 @@ async function authenticateAdmin(req, res, next) {
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'closdelareine@gmail.com';
+const SUBJECT_LABELS = {
+  commande: 'Question sur une commande',
+  produit: 'Question sur un produit',
+  retour: 'Retour / Échange',
+  partenariat: 'Partenariat',
+  autre: 'Autre'
+};
+
+app.post('/api/contact', contactLimiter, async (req, res) => {
+  try {
+    const { name, email, subject, message } = req.body;
+    if (!name || !email || !message) {
+      return res.status(400).json({ error: 'Nom, email et message sont requis' });
+    }
+    if (!validateEmail(email)) {
+      return res.status(400).json({ error: 'Format email invalide' });
+    }
+    const contactData = {
+      from_name: String(name).trim().slice(0, 200),
+      email: email.toLowerCase().trim(),
+      subject: SUBJECT_LABELS[subject] || subject || 'Contact',
+      message: String(message).trim().slice(0, 2000)
+    };
+    const adminResult = await sendNewContactNotificationEmail(ADMIN_EMAIL, contactData);
+    if (!adminResult.success) {
+      console.error('Contact email to admin failed:', adminResult.error);
+      return res.status(500).json({ error: 'Erreur lors de l\'envoi du message. Réessayez plus tard.' });
+    }
+    await sendContactConfirmationEmail(contactData.email, { from_name: contactData.from_name });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erreur contact:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
 });
 
 app.post('/api/auth/register', authLimiter, async (req, res) => {
@@ -471,7 +516,8 @@ app.get('/api/products', async (req, res) => {
       collection: product.collection,
       color: product.color,
       sizes: product.sizes,
-      isNew: product.isNew || false
+      isNew: product.isNew || false,
+      briefDescription: product.briefDescription || undefined
     }));
     res.json(formattedProducts);
   } catch (error) {
@@ -495,7 +541,7 @@ app.get('/api/products/:id', async (req, res) => {
 
 app.post('/api/products', authenticateAdmin, async (req, res) => {
   try {
-    const { name, price, image, secondImage, additionalImages, category, collection, color, sizes, isNew } = req.body;
+    const { name, price, image, secondImage, additionalImages, category, collection, color, sizes, isNew, briefDescription } = req.body;
 
     if (!name || !price || !image || !category || !collection) {
       return res.status(400).json({ error: 'Champs requis manquants' });
@@ -518,6 +564,7 @@ app.post('/api/products', authenticateAdmin, async (req, res) => {
       color: Array.isArray(color) ? color : (color ? color.split(',').map(c => c.trim()) : []),
       sizes: Array.isArray(sizes) ? sizes : (sizes ? sizes.split(',').map(s => s.trim()) : []),
       isNew: isNew || false,
+      briefDescription: briefDescription ? String(briefDescription).trim().slice(0, 500) : '',
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -533,7 +580,7 @@ app.post('/api/products', authenticateAdmin, async (req, res) => {
 app.put('/api/products/:id', authenticateAdmin, async (req, res) => {
   try {
     const productId = parseInt(req.params.id);
-    const { name, price, image, secondImage, additionalImages, category, collection, color, sizes, isNew } = req.body;
+    const { name, price, image, secondImage, additionalImages, category, collection, color, sizes, isNew, briefDescription } = req.body;
 
     const updateData = {
       updatedAt: new Date()
@@ -553,6 +600,9 @@ app.put('/api/products/:id', authenticateAdmin, async (req, res) => {
     }
     if (sizes !== undefined) {
       updateData.sizes = Array.isArray(sizes) ? sizes : (sizes ? sizes.split(',').map(s => s.trim()) : []);
+    }
+    if (briefDescription !== undefined) {
+      updateData.briefDescription = briefDescription ? String(briefDescription).trim().slice(0, 500) : '';
     }
     if (isNew !== undefined) {
       updateData.isNew = Boolean(isNew);

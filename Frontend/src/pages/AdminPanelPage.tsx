@@ -59,6 +59,7 @@ export default function AdminPanelPage() {
       return;
     }
     verifyAdminToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const verifyAdminToken = async () => {

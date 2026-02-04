@@ -58,6 +58,7 @@ export default function OrdersAdminPage() {
       return;
     }
     verifyAdminToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const verifyAdminToken = async () => {

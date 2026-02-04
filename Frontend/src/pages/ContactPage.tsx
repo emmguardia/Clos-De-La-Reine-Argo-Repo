@@ -110,7 +110,32 @@ export default function ContactPage() {
             </div>
           </div>
           <div>
+            {success ? (
+              <div className="rounded-2xl border border-[#e5f2eb] bg-gradient-to-br from-[#f8f4ef] via-[#f2dedd]/30 to-[#e5f2eb]/50 p-10 text-center shadow-lg">
+                <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[#e5f2eb]">
+                  <svg className="h-8 w-8 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h2 className="font-light text-2xl text-gray-900 mb-2">Message envoyé</h2>
+                <p className="text-gray-600 mb-8 max-w-md mx-auto">
+                  Merci pour votre message. Nous vous répondrons dans les plus brefs délais.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSuccess(false)}
+                  className="rounded-full border border-gray-300 bg-white px-6 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Envoyer un autre message
+                </button>
+              </div>
+            ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  {error}
+                </div>
+              )}
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-900 mb-2">
                   Nom complet

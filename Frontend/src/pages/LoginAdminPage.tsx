@@ -17,6 +17,7 @@ export default function LoginAdminPage() {
     if (adminToken) {
       verifyAdminToken();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const verifyAdminToken = async () => {

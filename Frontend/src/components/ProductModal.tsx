@@ -117,80 +117,84 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
       />
 
       <div
-        className="relative z-10 bg-white rounded-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden shadow-2xl flex flex-col"
+        className="relative z-10 bg-white rounded-2xl max-w-6xl w-full max-h-[94vh] overflow-hidden shadow-2xl flex flex-col border border-gray-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Bouton fermer */}
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 z-[60] p-2.5 rounded-full bg-white/95 hover:bg-white border border-gray-200 shadow-md transition-colors"
+          className="absolute top-5 right-5 z-[60] p-2.5 rounded-full bg-white/98 hover:bg-white border border-gray-200 shadow-lg transition-colors"
           aria-label="Fermer"
         >
           <X className="w-5 h-5 text-gray-700" />
         </button>
 
-        <div className="grid md:grid-cols-2 gap-0 flex-1 min-h-0">
-          {/* Colonne images */}
-          <div className="relative flex flex-col min-h-[320px] md:min-h-0 bg-gray-50">
-            {/* Image principale */}
-            <div className="relative flex-1 flex items-center justify-center p-6 min-h-[280px] md:min-h-[360px]">
-              {images[currentIndex] ? (
-                <img
-                  key={`${product.id}-${currentIndex}`}
-                  src={images[currentIndex]}
-                  alt={`${product.name} - Image ${currentIndex + 1} sur ${images.length}`}
-                  className="max-w-full max-h-full w-auto h-auto object-contain select-none"
-                  style={{ maxHeight: 'min(55vh, 420px)' }}
-                  draggable={false}
-                />
-              ) : (
-                <div className="w-full h-48 bg-gray-200 rounded-xl flex items-center justify-center text-gray-500">
-                  Image non disponible
-                </div>
+        <div className="grid md:grid-cols-[1.1fr,1fr] gap-0 flex-1 min-h-0">
+          {/* Colonne images — structure: [ flèche gauche | zone image | flèche droite ] */}
+          <div className="relative flex flex-col min-h-[340px] md:min-h-0 bg-[#fafaf9]">
+            <div className="relative flex-1 flex items-stretch min-h-[320px] md:min-h-[65vh]">
+              {/* Flèche gauche — collée au bord gauche, verticalement centrée */}
+              {hasMultipleImages && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    goPrev();
+                  }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-14 h-14 rounded-full bg-white/95 hover:bg-white border border-gray-200 shadow-xl flex items-center justify-center text-gray-800 transition-all hover:scale-110 active:scale-95 flex-shrink-0"
+                  aria-label="Image précédente"
+                >
+                  <ChevronLeft className="w-7 h-7 ml-0.5" />
+                </button>
               )}
 
-              {/* Flèches prev/next sur l'image (si plusieurs images) */}
+              {/* Zone image agrandie — occupe tout l'espace entre les flèches */}
+              <div className="flex-1 flex items-center justify-center px-4 md:px-16 py-8 min-h-[280px]">
+                {images[currentIndex] ? (
+                  <img
+                    key={`${product.id}-${currentIndex}`}
+                    src={images[currentIndex]}
+                    alt={`${product.name} - Image ${currentIndex + 1} sur ${images.length}`}
+                    className="max-w-full max-h-full w-auto h-auto object-contain select-none drop-shadow-sm"
+                    style={{ maxHeight: 'min(72vh, 620px)' }}
+                    draggable={false}
+                  />
+                ) : (
+                  <div className="w-full h-56 bg-gray-200 rounded-2xl flex items-center justify-center text-gray-500">
+                    Image non disponible
+                  </div>
+                )}
+              </div>
+
+              {/* Flèche droite — collée au bord droit */}
               {hasMultipleImages && (
-                <>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      goPrev();
-                    }}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/95 hover:bg-white border border-gray-200 shadow-lg flex items-center justify-center text-gray-800 transition-all hover:scale-105"
-                    aria-label="Image précédente"
-                  >
-                    <ChevronLeft className="w-6 h-6" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      goNext();
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/95 hover:bg-white border border-gray-200 shadow-lg flex items-center justify-center text-gray-800 transition-all hover:scale-105"
-                    aria-label="Image suivante"
-                  >
-                    <ChevronRight className="w-6 h-6" />
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    goNext();
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-14 h-14 rounded-full bg-white/95 hover:bg-white border border-gray-200 shadow-xl flex items-center justify-center text-gray-800 transition-all hover:scale-110 active:scale-95 flex-shrink-0"
+                  aria-label="Image suivante"
+                >
+                  <ChevronRight className="w-7 h-7 mr-0.5" />
+                </button>
               )}
             </div>
 
-            {/* Galerie miniatures — toujours visible quand il y a au moins une image */}
-            <div className="flex-shrink-0 border-t border-gray-200 bg-white px-4 py-3">
-              <div className="flex items-center justify-center gap-2 flex-wrap">
+            {/* Galerie miniatures */}
+            <div className="flex-shrink-0 border-t border-gray-200/80 bg-white/90 px-4 py-4">
+              <div className="flex items-center justify-center gap-3 flex-wrap">
                 {images.map((img, index) => (
                   <button
                     type="button"
                     key={`thumb-${index}`}
                     onClick={() => setIndex(index)}
-                    className={`flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-900 ${
+                    className={`flex-shrink-0 w-14 h-14 md:w-16 md:h-16 rounded-xl overflow-hidden border-2 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 ${
                       index === currentIndex
-                        ? 'border-gray-900 ring-2 ring-gray-400 ring-offset-2 scale-105'
-                        : 'border-gray-200 hover:border-gray-400'
+                        ? 'border-gray-900 ring-2 ring-gray-400 ring-offset-2 scale-105 shadow-md'
+                        : 'border-gray-200 hover:border-gray-400 opacity-90 hover:opacity-100'
                     }`}
                     aria-label={`Voir image ${index + 1}`}
                     aria-current={index === currentIndex ? 'true' : undefined}
@@ -205,29 +209,35 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                 ))}
               </div>
               {hasMultipleImages && (
-                <p className="text-center text-xs text-gray-500 mt-2">
-                  Image {currentIndex + 1} / {images.length}
+                <p className="text-center text-xs text-gray-500 mt-2 font-medium">
+                  {currentIndex + 1} / {images.length}
                 </p>
               )}
             </div>
           </div>
 
           {/* Colonne infos */}
-          <div className="p-6 md:p-8 overflow-y-auto flex flex-col">
-            <div className="space-y-4">
-              <span className="inline-block text-xs font-medium uppercase tracking-wider px-3 py-1 rounded-full bg-[#f2dedd] text-gray-800">
+          <div className="p-6 md:p-10 overflow-y-auto flex flex-col bg-white">
+            <div className="space-y-3">
+              <span className="inline-block text-[11px] font-semibold uppercase tracking-[0.2em] px-3 py-1.5 rounded-full bg-[#f2dedd]/80 text-gray-700">
                 {product.collection}
               </span>
-              <h2 className="text-2xl md:text-3xl font-light text-gray-900">{product.name}</h2>
-              <p className="text-3xl font-light text-gray-900">{product.price.toFixed(0)} €</p>
+              <h2 className="text-2xl md:text-3xl font-light text-gray-900 tracking-tight leading-tight">
+                {product.name}
+              </h2>
+              <p className="text-3xl md:text-4xl font-light text-gray-900">
+                {product.price.toFixed(0)} €
+              </p>
               {product.briefDescription && (
-                <p className="text-gray-600 text-sm leading-relaxed">{product.briefDescription}</p>
+                <p className="text-gray-600 text-sm leading-relaxed pt-1">
+                  {product.briefDescription}
+                </p>
               )}
             </div>
 
-            <div className="space-y-4 mt-6">
+            <div className="space-y-5 mt-8">
               <div>
-                <h3 className="text-sm font-medium text-gray-900 mb-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
                   {Array.isArray(product.color) && product.color.length > 1 ? 'Couleurs' : 'Couleur'}
                 </h3>
                 {Array.isArray(product.color) ? (
@@ -235,23 +245,25 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                     {product.color.map((color, index) => (
                       <span
                         key={index}
-                        className="px-3 py-1 rounded-full bg-[#e5f2eb] text-sm text-gray-800"
+                        className="px-3 py-1.5 rounded-full bg-[#e5f2eb] text-sm text-gray-800"
                       >
                         {color}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-600">{product.color}</p>
+                  <p className="text-gray-700">{product.color}</p>
                 )}
               </div>
               <div>
-                <h3 className="text-sm font-medium text-gray-900 mb-2">Tailles disponibles</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+                  Tailles disponibles
+                </h3>
                 <div className="flex flex-wrap gap-2">
                   {product.sizes.map((size) => (
                     <span
                       key={size}
-                      className="px-4 py-2 rounded-full border border-gray-300 text-sm text-gray-700"
+                      className="px-4 py-2 rounded-full border border-gray-300 text-sm text-gray-700 bg-gray-50/80"
                     >
                       {size}
                     </span>
@@ -260,21 +272,21 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
               </div>
             </div>
 
-            <div className="mt-8 pt-6 border-t border-gray-100 space-y-3">
+            <div className="mt-10 pt-8 border-t border-gray-100 space-y-3">
               <button
                 type="button"
                 onClick={() => {
                   addToCart(product.id, 1);
                   onClose();
                 }}
-                className="w-full bg-gray-900 text-white py-4 rounded-xl hover:bg-gray-800 transition-colors font-medium"
+                className="w-full bg-gray-900 text-white py-4 rounded-xl hover:bg-gray-800 transition-colors font-medium text-base"
               >
                 Ajouter au panier
               </button>
               <button
                 type="button"
                 onClick={handleFavoriteClick}
-                className={`w-full border-2 py-4 rounded-xl transition-colors flex items-center justify-center gap-2 font-medium ${
+                className={`w-full border-2 py-4 rounded-xl transition-colors flex items-center justify-center gap-2 font-medium text-base ${
                   favorite
                     ? 'border-red-400 bg-red-50 text-red-600 hover:bg-red-100'
                     : 'border-gray-300 text-gray-800 hover:border-gray-900'

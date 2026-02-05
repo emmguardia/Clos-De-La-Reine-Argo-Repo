@@ -1,5 +1,5 @@
 import { X, ChevronLeft, ChevronRight, Heart } from 'lucide-react';
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { Product } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
 import { useCart } from '../hooks/useCart';
@@ -25,46 +25,42 @@ function getImages(product: Product | null): string[] {
 }
 
 export default function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [scrollIndex, setScrollIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const { isFavorite, addFavorite, removeFavorite } = useFavorites();
   const { addToCart } = useCart();
   const [favorite, setFavorite] = useState(false);
 
   const images = useMemo(() => getImages(product), [product]);
 
-  const goToSlide = useCallback((index: number) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const w = el.clientWidth;
-    el.scrollTo({ left: index * w, behavior: 'smooth' });
-    setScrollIndex(index);
-  }, []);
-
-  const goPrev = useCallback(() => {
-    const next = scrollIndex <= 0 ? Math.max(0, images.length - 1) : scrollIndex - 1;
-    goToSlide(next);
-  }, [scrollIndex, images.length, goToSlide]);
-
-  const goNext = useCallback(() => {
-    const next = scrollIndex >= images.length - 1 ? 0 : scrollIndex + 1;
-    goToSlide(next);
-  }, [scrollIndex, images.length, goToSlide]);
-
-  const onScroll = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el || images.length === 0) return;
-    const w = el.clientWidth;
-    const index = Math.round(el.scrollLeft / w);
-    setScrollIndex(Math.min(index, images.length - 1));
-  }, [images.length]);
+  const goPrev = () => {
+    setCurrentIndex((i) => (i <= 0 ? images.length - 1 : i - 1));
+  };
+  const goNext = () => {
+    setCurrentIndex((i) => (i >= images.length - 1 ? 0 : i + 1));
+  };
 
   useEffect(() => {
     if (!product) return;
-    scrollRef.current?.scrollTo(0, 0);
+    queueMicrotask(() => setCurrentIndex(0));
     const fav = isFavorite(product.id);
     queueMicrotask(() => setFavorite(fav));
   }, [product, isFavorite]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setCurrentIndex((i) => (i <= 0 ? Math.max(0, images.length - 1) : i - 1));
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setCurrentIndex((i) => (i >= images.length - 1 ? 0 : i + 1));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, images.length]);
 
   useEffect(() => {
     if (isOpen) {
@@ -113,58 +109,53 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
         </button>
 
         <div className="grid md:grid-cols-2 gap-0">
-          {/* Zone images : scroll horizontal natif */}
-          <div className="relative bg-gray-100">
-            <div
-              ref={scrollRef}
-              onScroll={onScroll}
-              className="flex overflow-x-auto overflow-y-hidden h-[60vh] md:h-[80vh] snap-x snap-mandatory scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-              style={{ WebkitOverflowScrolling: 'touch' }}
-            >
+          {/* Zone image : une seule visible (opacité), pas de scroll */}
+          <div className="relative bg-gray-100 flex flex-col">
+            <div className="relative w-full h-[50vh] md:h-[75vh] flex-shrink-0 overflow-hidden">
               {images.map((img, index) => (
                 <div
                   key={index}
-                  className="flex-shrink-0 w-full h-full snap-start snap-always"
+                  className="absolute inset-0 w-full h-full transition-opacity duration-300"
+                  style={{
+                    opacity: index === currentIndex ? 1 : 0,
+                    pointerEvents: index === currentIndex ? 'auto' : 'none',
+                  }}
                 >
                   <img
                     src={img}
                     alt={`${product.name} - Image ${index + 1}`}
-                    className="w-full h-full object-cover select-none"
+                    className="w-full h-full object-contain bg-gray-100"
                     draggable={false}
                   />
                 </div>
               ))}
             </div>
 
-            {/* Contrôles : flèches + miniatures cliquables */}
+            {/* Contrôles : flèches et miniatures */}
             {images.length > 1 && (
-              <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between gap-2 p-3 bg-gradient-to-t from-black/40 to-transparent">
-                <span
-                  role="button"
-                  tabIndex={0}
+              <div className="flex items-center justify-between gap-3 p-3 border-t border-gray-200 bg-white">
+                <button
+                  type="button"
                   onClick={goPrev}
-                  onKeyDown={(e) => e.key === 'Enter' && goPrev()}
-                  className="flex-shrink-0 w-10 h-10 rounded-full bg-white/95 shadow flex items-center justify-center cursor-pointer hover:bg-white"
+                  className="flex-shrink-0 w-12 h-12 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center cursor-pointer transition-colors"
                   aria-label="Image précédente"
                 >
                   <ChevronLeft className="w-6 h-6 text-gray-900" />
-                </span>
+                </button>
 
-                <div className="flex gap-1.5 flex-1 justify-center min-w-0 overflow-x-auto py-1">
+                <div className="flex gap-2 flex-1 justify-center min-w-0 overflow-x-auto py-2">
                   {images.map((img, index) => (
-                    <span
+                    <button
+                      type="button"
                       key={index}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => goToSlide(index)}
-                      onKeyDown={(e) => e.key === 'Enter' && goToSlide(index)}
-                      className={`flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden border-2 cursor-pointer ${
-                        index === scrollIndex
-                          ? 'border-gray-900 ring-2 ring-gray-900 ring-offset-1'
-                          : 'border-transparent opacity-80 hover:opacity-100'
+                      onClick={() => setCurrentIndex(index)}
+                      className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${
+                        index === currentIndex
+                          ? 'border-gray-900 ring-2 ring-gray-400 ring-offset-1'
+                          : 'border-gray-200 hover:border-gray-400'
                       }`}
-                      aria-label={`Image ${index + 1}`}
-                      aria-current={index === scrollIndex ? 'true' : undefined}
+                      aria-label={`Voir image ${index + 1}`}
+                      aria-current={index === currentIndex ? 'true' : undefined}
                     >
                       <img
                         src={img}
@@ -172,20 +163,18 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                         className="w-full h-full object-cover"
                         draggable={false}
                       />
-                    </span>
+                    </button>
                   ))}
                 </div>
 
-                <span
-                  role="button"
-                  tabIndex={0}
+                <button
+                  type="button"
                   onClick={goNext}
-                  onKeyDown={(e) => e.key === 'Enter' && goNext()}
-                  className="flex-shrink-0 w-10 h-10 rounded-full bg-white/95 shadow flex items-center justify-center cursor-pointer hover:bg-white"
+                  className="flex-shrink-0 w-12 h-12 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center cursor-pointer transition-colors"
                   aria-label="Image suivante"
                 >
                   <ChevronRight className="w-6 h-6 text-gray-900" />
-                </span>
+                </button>
               </div>
             )}
           </div>

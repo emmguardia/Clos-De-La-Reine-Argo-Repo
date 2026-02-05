@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useProducts } from '../hooks/useProducts';
 import type { Product } from '../data/products';
 import ImageUpload from '../components/ImageUpload';
-import { sanitizeInput, sanitizeText, sanitizeDescription, safeJsonResponse } from '../utils/security';
+import { sanitizeInput, sanitizeDescription, safeJsonResponse } from '../utils/security';
 
 interface GalleryItem {
   id: string;

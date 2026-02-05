@@ -10,6 +10,13 @@ on:
 env:
   REGISTRY: ghcr.io
 
+# Droits nécessaires pour push des images vers GHCR (packages)
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+
 concurrency:
   group: build-and-push
   cancel-in-progress: true

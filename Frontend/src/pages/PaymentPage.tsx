@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Lock, MapPin, CreditCard, ArrowRight, ArrowLeft, Package, CheckCircle, Truck } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
@@ -207,15 +207,18 @@ export default function PaymentPage() {
 
   const paymentIntentId = searchParams.get('payment_intent');
   const redirectStatus = searchParams.get('redirect_status');
+  const paymentConfirmationDone = useRef(false);
   useEffect(() => {
     if (!orderId || !paymentIntentId || redirectStatus !== 'succeeded') return;
+    if (paymentConfirmationDone.current) return;
+    paymentConfirmationDone.current = true;
     const token = getTokenFromStorage();
     if (!token) return;
-    let ship = shippingAddress;
+    let ship: Record<string, string> = {};
     try {
       const saved = sessionStorage.getItem(`payment_address_${orderId}`);
       if (saved) {
-        ship = JSON.parse(saved);
+        ship = JSON.parse(saved) as Record<string, string>;
         sessionStorage.removeItem(`payment_address_${orderId}`);
       }
     } catch {
@@ -231,12 +234,15 @@ export default function PaymentPage() {
         if (res.ok) {
           setSearchParams({});
           navigate('/profil?tab=commandes');
+        } else {
+          const data = await safeJsonResponse(res, { error: '' });
+          setError(data.error || 'Erreur lors de la confirmation du paiement.');
         }
       } catch {
         setError('Erreur lors de la confirmation du paiement.');
       }
     })();
-  }, [orderId, paymentIntentId, redirectStatus, navigate, setSearchParams, shippingAddress]);
+  }, [orderId, paymentIntentId, redirectStatus, navigate, setSearchParams]);
 
   useEffect(() => {
     if (step !== 2 || !orderId || !effectiveStripeKey || !order) return;
@@ -353,10 +359,20 @@ export default function PaymentPage() {
     [effectiveStripeKey]
   );
 
+  const isReturnFromStripe = Boolean(paymentIntentId && redirectStatus === 'succeeded');
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#f8f4ef]">
         <p className="text-gray-600">Chargement...</p>
+      </div>
+    );
+  }
+
+  if (isReturnFromStripe && !error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f8f4ef]">
+        <p className="text-gray-600">Confirmation du paiement en cours...</p>
       </div>
     );
   }

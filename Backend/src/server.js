@@ -2223,6 +2223,9 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
     if (order.userId !== req.user.userId) {
       return res.status(403).json({ error: 'Non autorisé' });
     }
+    if (order.status === 'paid') {
+      return res.json({ message: 'Paiement déjà enregistré', status: 'paid' });
+    }
     if (order.status !== 'validated') {
       return res.status(400).json({ error: 'La commande doit être validée avant le paiement' });
     }

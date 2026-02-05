@@ -1,5 +1,5 @@
 import { X, ChevronLeft, ChevronRight, Heart } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Product } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
 import { useCart } from '../hooks/useCart';
@@ -17,7 +17,7 @@ function getImages(product: Product | null): string[] {
   if (valid(product.image)) out.push(product.image);
   if (product.secondImage && valid(product.secondImage)) out.push(product.secondImage);
   if (product.additionalImages?.length) {
-    const extra = product.additionalImages.filter(valid).slice(0, Math.max(0, 6 - out.length));
+    const extra = product.additionalImages.filter(valid).slice(0, Math.max(0, 10 - out.length));
     out.push(...extra);
   }
   if (out.length === 0 && product.image) out.push(product.image);
@@ -32,44 +32,58 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
 
   const images = useMemo(() => getImages(product), [product]);
 
-  const goPrev = () => {
-    setCurrentIndex((i) => (i <= 0 ? images.length - 1 : i - 1));
-  };
-  const goNext = () => {
-    setCurrentIndex((i) => (i >= images.length - 1 ? 0 : i + 1));
-  };
+  // Réinitialiser l'index à l'ouverture ou au changement de produit
+  useEffect(() => {
+    if (isOpen && product) {
+      setCurrentIndex(0);
+    }
+  }, [isOpen, product?.id]);
 
   useEffect(() => {
     if (!product) return;
-    queueMicrotask(() => setCurrentIndex(0));
-    const fav = isFavorite(product.id);
-    queueMicrotask(() => setFavorite(fav));
+    setFavorite(isFavorite(product.id));
   }, [product, isFavorite]);
+
+  const goPrev = useCallback(() => {
+    setCurrentIndex((i) => (i <= 0 ? images.length - 1 : i - 1));
+  }, [images.length]);
+
+  const goNext = useCallback(() => {
+    setCurrentIndex((i) => (i >= images.length - 1 ? 0 : i + 1));
+  }, [images.length]);
+
+  const setIndex = useCallback((index: number) => {
+    setCurrentIndex(Math.max(0, Math.min(index, images.length - 1)));
+  }, [images.length]);
 
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        setCurrentIndex((i) => (i <= 0 ? Math.max(0, images.length - 1) : i - 1));
+        goPrev();
       }
       if (e.key === 'ArrowRight') {
         e.preventDefault();
-        setCurrentIndex((i) => (i >= images.length - 1 ? 0 : i + 1));
+        goNext();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, images.length]);
+  }, [isOpen, goPrev, goNext, onClose]);
 
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = '';
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = '';
     };
   }, [isOpen]);
 
@@ -86,6 +100,8 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
 
   if (!isOpen || !product) return null;
 
+  const hasMultipleImages = images.length > 1;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -93,176 +109,180 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
       aria-modal="true"
       aria-label="Détail du produit"
     >
+      {/* Fond cliquable pour fermer */}
       <div
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
         onClick={onClose}
         aria-hidden
       />
+
       <div
-        className="relative z-10 bg-white rounded-3xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-2xl"
+        className="relative z-10 bg-white rounded-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden shadow-2xl flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Bouton fermer */}
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 z-[60] p-2 rounded-full bg-white/90 hover:bg-white border border-gray-200"
+          className="absolute top-4 right-4 z-[60] p-2.5 rounded-full bg-white/95 hover:bg-white border border-gray-200 shadow-md transition-colors"
           aria-label="Fermer"
         >
-          <X className="w-6 h-6 text-gray-900" />
+          <X className="w-5 h-5 text-gray-700" />
         </button>
 
-        <div className="grid md:grid-cols-2 gap-0">
-          {/* Une seule image centrée */}
-          <div className="relative bg-gray-100 flex flex-col min-h-0">
-            <div className="flex flex-1 min-h-[45vh] md:min-h-[60vh] items-center justify-center p-4" style={{ minHeight: '280px' }}>
-              {images[currentIndex] && (
+        <div className="grid md:grid-cols-2 gap-0 flex-1 min-h-0">
+          {/* Colonne images */}
+          <div className="relative flex flex-col min-h-[320px] md:min-h-0 bg-gray-50">
+            {/* Image principale */}
+            <div className="relative flex-1 flex items-center justify-center p-6 min-h-[280px] md:min-h-[360px]">
+              {images[currentIndex] ? (
                 <img
-                  key={currentIndex}
+                  key={`${product.id}-${currentIndex}`}
                   src={images[currentIndex]}
-                  alt={`${product.name} - Image ${currentIndex + 1}`}
-                  className="max-w-full max-h-[45vh] md:max-h-[60vh] w-auto h-auto object-contain"
-                  style={{ maxHeight: 'min(60vh, 480px)' }}
+                  alt={`${product.name} - Image ${currentIndex + 1} sur ${images.length}`}
+                  className="max-w-full max-h-full w-auto h-auto object-contain select-none"
+                  style={{ maxHeight: 'min(55vh, 420px)' }}
                   draggable={false}
                 />
+              ) : (
+                <div className="w-full h-48 bg-gray-200 rounded-xl flex items-center justify-center text-gray-500">
+                  Image non disponible
+                </div>
+              )}
+
+              {/* Flèches prev/next sur l'image (si plusieurs images) */}
+              {hasMultipleImages && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      goPrev();
+                    }}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/95 hover:bg-white border border-gray-200 shadow-lg flex items-center justify-center text-gray-800 transition-all hover:scale-105"
+                    aria-label="Image précédente"
+                  >
+                    <ChevronLeft className="w-6 h-6" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      goNext();
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/95 hover:bg-white border border-gray-200 shadow-lg flex items-center justify-center text-gray-800 transition-all hover:scale-105"
+                    aria-label="Image suivante"
+                  >
+                    <ChevronRight className="w-6 h-6" />
+                  </button>
+                </>
               )}
             </div>
 
-            {/* Contrôles : liens (meilleure prise en charge clic) + miniatures */}
-            {images.length > 1 && (
-              <div
-                className="relative z-20 flex items-center justify-between gap-3 p-3 border-t border-gray-200 bg-white flex-shrink-0"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <a
-                  href="#prev"
-                  role="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    goPrev();
-                  }}
-                  className="flex-shrink-0 w-14 h-14 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center cursor-pointer transition-colors no-underline text-gray-900 select-none"
-                  aria-label="Image précédente"
-                >
-                  <ChevronLeft className="w-7 h-7" />
-                </a>
-
-                <div className="flex gap-2 flex-1 justify-center min-w-0 overflow-x-auto py-2">
-                  {images.map((img, index) => (
-                    <a
-                      href={`#img-${index}`}
-                      key={index}
-                      role="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setCurrentIndex(index);
-                      }}
-                      className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 block transition-all select-none ${
-                        index === currentIndex
-                          ? 'border-gray-900 ring-2 ring-gray-400 ring-offset-1'
-                          : 'border-gray-200 hover:border-gray-400'
-                      }`}
-                      aria-label={`Voir image ${index + 1}`}
-                      aria-current={index === currentIndex ? 'true' : undefined}
-                    >
-                      <img
-                        src={img}
-                        alt=""
-                        className="w-full h-full object-cover pointer-events-none"
-                        draggable={false}
-                      />
-                    </a>
-                  ))}
-                </div>
-
-                <a
-                  href="#next"
-                  role="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    goNext();
-                  }}
-                  className="flex-shrink-0 w-14 h-14 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center cursor-pointer transition-colors no-underline text-gray-900 select-none"
-                  aria-label="Image suivante"
-                >
-                  <ChevronRight className="w-7 h-7" />
-                </a>
+            {/* Galerie miniatures — toujours visible quand il y a au moins une image */}
+            <div className="flex-shrink-0 border-t border-gray-200 bg-white px-4 py-3">
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                {images.map((img, index) => (
+                  <button
+                    type="button"
+                    key={`thumb-${index}`}
+                    onClick={() => setIndex(index)}
+                    className={`flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-900 ${
+                      index === currentIndex
+                        ? 'border-gray-900 ring-2 ring-gray-400 ring-offset-2 scale-105'
+                        : 'border-gray-200 hover:border-gray-400'
+                    }`}
+                    aria-label={`Voir image ${index + 1}`}
+                    aria-current={index === currentIndex ? 'true' : undefined}
+                  >
+                    <img
+                      src={img}
+                      alt=""
+                      className="w-full h-full object-cover pointer-events-none"
+                      draggable={false}
+                    />
+                  </button>
+                ))}
               </div>
-            )}
+              {hasMultipleImages && (
+                <p className="text-center text-xs text-gray-500 mt-2">
+                  Image {currentIndex + 1} / {images.length}
+                </p>
+              )}
+            </div>
           </div>
 
-          <div className="p-8 md:p-12 overflow-y-auto max-h-[90vh]">
-            <div className="space-y-6">
+          {/* Colonne infos */}
+          <div className="p-6 md:p-8 overflow-y-auto flex flex-col">
+            <div className="space-y-4">
+              <span className="inline-block text-xs font-medium uppercase tracking-wider px-3 py-1 rounded-full bg-[#f2dedd] text-gray-800">
+                {product.collection}
+              </span>
+              <h2 className="text-2xl md:text-3xl font-light text-gray-900">{product.name}</h2>
+              <p className="text-3xl font-light text-gray-900">{product.price.toFixed(0)} €</p>
+              {product.briefDescription && (
+                <p className="text-gray-600 text-sm leading-relaxed">{product.briefDescription}</p>
+              )}
+            </div>
+
+            <div className="space-y-4 mt-6">
               <div>
-                <span className="text-xs px-3 py-1 rounded-full bg-[#f2dedd] text-gray-900 inline-block mb-3">
-                  {product.collection}
-                </span>
-                <h2 className="text-3xl font-light text-gray-900 mb-2">{product.name}</h2>
-                <p className="text-4xl font-light text-gray-900 mb-3">{product.price.toFixed(0)}€</p>
-                {product.briefDescription && (
-                  <p className="text-gray-600 text-sm leading-relaxed">{product.briefDescription}</p>
-                )}
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">
-                    {Array.isArray(product.color) && product.color.length > 1 ? 'Couleurs' : 'Couleur'}
-                  </h3>
-                  {Array.isArray(product.color) ? (
-                    <div className="flex flex-wrap gap-2">
-                      {product.color.map((color, index) => (
-                        <span
-                          key={index}
-                          className="px-3 py-1 rounded-full bg-[#e5f2eb] text-sm text-gray-900"
-                        >
-                          {color}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-600">{product.color}</p>
-                  )}
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">Tailles disponibles</h3>
-                  <div className="flex gap-2">
-                    {product.sizes.map((size) => (
+                <h3 className="text-sm font-medium text-gray-900 mb-2">
+                  {Array.isArray(product.color) && product.color.length > 1 ? 'Couleurs' : 'Couleur'}
+                </h3>
+                {Array.isArray(product.color) ? (
+                  <div className="flex flex-wrap gap-2">
+                    {product.color.map((color, index) => (
                       <span
-                        key={size}
-                        className="px-4 py-2 rounded-full border border-gray-300 text-sm text-gray-700"
+                        key={index}
+                        className="px-3 py-1 rounded-full bg-[#e5f2eb] text-sm text-gray-800"
                       >
-                        {size}
+                        {color}
                       </span>
                     ))}
                   </div>
+                ) : (
+                  <p className="text-gray-600">{product.color}</p>
+                )}
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-900 mb-2">Tailles disponibles</h3>
+                <div className="flex flex-wrap gap-2">
+                  {product.sizes.map((size) => (
+                    <span
+                      key={size}
+                      className="px-4 py-2 rounded-full border border-gray-300 text-sm text-gray-700"
+                    >
+                      {size}
+                    </span>
+                  ))}
                 </div>
               </div>
-              <div className="pt-4 space-y-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    addToCart(product.id, 1);
-                    onClose();
-                  }}
-                  className="w-full bg-gray-900 text-white py-4 rounded-full hover:bg-gray-800 transition-colors"
-                >
-                  Ajouter au panier
-                </button>
-                <button
-                  type="button"
-                  onClick={handleFavoriteClick}
-                  className={`w-full border py-4 rounded-full transition-colors flex items-center justify-center gap-2 ${
-                    favorite
-                      ? 'border-red-500 bg-red-50 text-red-600 hover:bg-red-100'
-                      : 'border-gray-300 text-gray-900 hover:border-gray-900'
-                  }`}
-                >
-                  <Heart className={`w-5 h-5 ${favorite ? 'fill-current' : ''}`} />
-                  {favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                </button>
-              </div>
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-gray-100 space-y-3">
+              <button
+                type="button"
+                onClick={() => {
+                  addToCart(product.id, 1);
+                  onClose();
+                }}
+                className="w-full bg-gray-900 text-white py-4 rounded-xl hover:bg-gray-800 transition-colors font-medium"
+              >
+                Ajouter au panier
+              </button>
+              <button
+                type="button"
+                onClick={handleFavoriteClick}
+                className={`w-full border-2 py-4 rounded-xl transition-colors flex items-center justify-center gap-2 font-medium ${
+                  favorite
+                    ? 'border-red-400 bg-red-50 text-red-600 hover:bg-red-100'
+                    : 'border-gray-300 text-gray-800 hover:border-gray-900'
+                }`}
+              >
+                <Heart className={`w-5 h-5 ${favorite ? 'fill-current' : ''}`} />
+                {favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+              </button>
             </div>
           </div>
         </div>

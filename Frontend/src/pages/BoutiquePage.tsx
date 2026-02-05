@@ -75,7 +75,7 @@ export default function BoutiquePage() {
           />
           <div className="absolute inset-0 bg-gradient-to-r from-white via-white/85 to-white/60" />
         </div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-18">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-18 grid lg:grid-cols-[1fr_minmax(240px,280px)] gap-8 items-start">
           <div className="space-y-4">
             <p className="uppercase tracking-[0.28em] text-xs text-gray-500">Boutique</p>
             <h1 className="text-4xl sm:text-5xl font-light text-gray-900 leading-tight">Notre boutique</h1>
@@ -83,49 +83,7 @@ export default function BoutiquePage() {
               Découvrez notre sélection de colliers, harnais et laisses. <br /> Matières premium, finitions sellier, élégance épurée.
             </p>
           </div>
-        </div>
-      </div>
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(240px,280px)] gap-8 items-start">
-          <div className="space-y-10 min-w-0">
-        {loading ? (
-          <div className="text-center py-16" role="status" aria-live="polite">
-            <p className="text-gray-500 text-lg font-light">Chargement des produits...</p>
-          </div>
-        ) : filtered.length > 0 ? (
-          <section className="space-y-6">
-            <header className="flex items-center justify-between">
-              <h2 className="text-2xl font-light text-gray-900">
-                {selectedCategory === 'all' 
-                  ? 'Tous les produits' 
-                  : selectedCategory === 'colliers' 
-                    ? 'Tous les colliers'
-                    : selectedCategory === 'harnais'
-                      ? 'Tous les harnais'
-                      : 'Toutes les laisses'}
-              </h2>
-              <div className="h-px w-16 bg-gray-900" aria-hidden="true" />
-            </header>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filtered.map((product) => (
-                <ProductCard 
-                  key={product.id} 
-                  product={product} 
-                  onProductClick={(product) => {
-                    setSelectedProduct(product);
-                    setIsModalOpen(true);
-                  }}
-                />
-              ))}
-            </div>
-          </section>
-        ) : (
-          <div className="text-center py-16" role="status" aria-live="polite">
-            <p className="text-gray-500 text-lg font-light">Aucun produit pour ces filtres.</p>
-          </div>
-        )}
-          </div>
-          <aside className="bg-white/80 border border-black/5 rounded-3xl p-6 shadow-sm space-y-3 lg:sticky lg:top-8">
+          <aside className="bg-white/80 border border-black/5 rounded-3xl p-6 shadow-sm space-y-3">
             <h2 className="text-sm text-gray-600 font-medium">Catégories</h2>
             <nav className="flex flex-wrap gap-2" aria-label="Filtres par catégorie">
               {categories.map((cat) => (
@@ -193,6 +151,44 @@ export default function BoutiquePage() {
             </button>
           </aside>
         </div>
+      </div>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 space-y-10">
+        {loading ? (
+          <div className="text-center py-16" role="status" aria-live="polite">
+            <p className="text-gray-500 text-lg font-light">Chargement des produits...</p>
+          </div>
+        ) : filtered.length > 0 ? (
+          <section className="space-y-6">
+            <header className="flex items-center justify-between">
+              <h2 className="text-2xl font-light text-gray-900">
+                {selectedCategory === 'all' 
+                  ? 'Tous les produits' 
+                  : selectedCategory === 'colliers' 
+                    ? 'Tous les colliers'
+                    : selectedCategory === 'harnais'
+                      ? 'Tous les harnais'
+                      : 'Toutes les laisses'}
+              </h2>
+              <div className="h-px w-16 bg-gray-900" aria-hidden="true" />
+            </header>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filtered.map((product) => (
+                <ProductCard 
+                  key={product.id} 
+                  product={product} 
+                  onProductClick={(product) => {
+                    setSelectedProduct(product);
+                    setIsModalOpen(true);
+                  }}
+                />
+              ))}
+            </div>
+          </section>
+        ) : (
+          <div className="text-center py-16" role="status" aria-live="polite">
+            <p className="text-gray-500 text-lg font-light">Aucun produit pour ces filtres.</p>
+          </div>
+        )}
       </main>
       <ProductModal 
         product={selectedProduct} 

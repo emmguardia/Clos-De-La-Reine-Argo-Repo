@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Lock, MapPin, CreditCard, ArrowRight, ArrowLeft, Check } from 'lucide-react';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useProducts } from '../hooks/useProducts';
 import { sanitizeInput, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJsonResponse } from '../utils/security';
 
@@ -8,6 +10,7 @@ const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 const ADRESSE_API = 'https://api-adresse.data.gouv.fr/search';
 const SHIPPING_LA_POSTE = 5.9;
 const FRAIS_TAUX = 0.019;
+const STRIPE_PUBLISHABLE_KEY_ENV = import.meta.env?.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined;
 
 interface OrderItem { productId: number; quantity: number; price: number }
 interface PaymentOrder {
@@ -27,8 +30,81 @@ interface AdresseSuggestion {
   housenumber?: string;
 }
 
+function StripePaymentForm({
+  orderId,
+  clientSecret,
+  shippingAddress,
+  total,
+  onSuccess,
+  onError
+}: {
+  orderId: string;
+  clientSecret: string;
+  shippingAddress: Record<string, string>;
+  total: number;
+  onSuccess: () => void;
+  onError: (msg: string) => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+    setSubmitting(true);
+    onError('');
+    try {
+      try {
+        sessionStorage.setItem(`payment_address_${orderId}`, JSON.stringify(shippingAddress));
+      } catch {
+        /* ignore */
+      }
+      const { error } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/commande/${orderId}/paiement`,
+          receipt_email: shippingAddress.email || undefined
+        }
+      });
+      if (error) {
+        onError(error.message || 'Paiement refusé');
+      }
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Erreur paiement');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <PaymentElement options={{ layout: 'tabs' }} />
+      <div className="flex gap-4">
+        <button
+          type="button"
+          onClick={() => window.history.back()}
+          className="flex-1 py-4 rounded-2xl border border-gray-200 font-medium flex items-center justify-center gap-2 hover:bg-gray-50"
+        >
+          <ArrowLeft className="w-5 h-5" />
+          Retour
+        </button>
+        <button
+          type="submit"
+          disabled={submitting || !stripe}
+          className="flex-1 py-4 rounded-2xl bg-gray-900 text-white font-medium flex items-center justify-center gap-2 hover:bg-gray-800 disabled:opacity-50"
+        >
+          <Lock className="w-5 h-5" />
+          {submitting ? 'Traitement...' : `Payer ${total.toFixed(2)} €`}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function PaymentPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { orderId } = useParams();
   const { products } = useProducts();
   const [order, setOrder] = useState<PaymentOrder | null>(null);
@@ -36,6 +112,7 @@ export default function PaymentPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [step, setStep] = useState<1 | 2>(1);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [addressQuery, setAddressQuery] = useState('');
   const [addressSuggestions, setAddressSuggestions] = useState<AdresseSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -49,6 +126,8 @@ export default function PaymentPage() {
     postalCode: '',
     country: 'France'
   });
+  const [stripePublishableKey, setStripePublishableKey] = useState<string | null>(null);
+  const effectiveStripeKey = (stripePublishableKey !== null ? stripePublishableKey : STRIPE_PUBLISHABLE_KEY_ENV) || undefined;
 
   const progressPercent = step === 1 ? 50 : 100;
   const canGoToStep2 =
@@ -112,6 +191,74 @@ export default function PaymentPage() {
   }, [fetchOrder]);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/config`);
+        if (!res.ok || cancelled) return;
+        const data = await safeJsonResponse(res, { stripePublishableKey: '' });
+        if (!cancelled) setStripePublishableKey(typeof data.stripePublishableKey === 'string' ? data.stripePublishableKey : '');
+      } catch {
+        if (!cancelled) setStripePublishableKey('');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const paymentIntentId = searchParams.get('payment_intent');
+  const redirectStatus = searchParams.get('redirect_status');
+  useEffect(() => {
+    if (!orderId || !paymentIntentId || redirectStatus !== 'succeeded') return;
+    const token = getTokenFromStorage();
+    if (!token) return;
+    let ship = shippingAddress;
+    try {
+      const saved = sessionStorage.getItem(`payment_address_${orderId}`);
+      if (saved) {
+        ship = JSON.parse(saved);
+        sessionStorage.removeItem(`payment_address_${orderId}`);
+      }
+    } catch {
+      /* ignore */
+    }
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/orders/${orderId}/payment`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ paymentIntentId, shippingAddress: ship })
+        });
+        if (res.ok) {
+          setSearchParams({});
+          navigate('/profil?tab=commandes');
+        }
+      } catch {
+        setError('Erreur lors de la confirmation du paiement.');
+      }
+    })();
+  }, [orderId, paymentIntentId, redirectStatus, navigate, setSearchParams]);
+
+  useEffect(() => {
+    if (step !== 2 || !orderId || !effectiveStripeKey || !order) return;
+    const token = getTokenFromStorage();
+    if (!token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/orders/${orderId}/create-payment-intent`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok || cancelled) return;
+        const data = await safeJsonResponse(res, {});
+        if (data.clientSecret) setClientSecret(data.clientSecret);
+      } catch {
+        if (!cancelled) setError('Impossible de préparer le paiement.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [step, orderId, order, effectiveStripeKey]);
+
+  useEffect(() => {
     if (!addressQuery.trim() || addressQuery.length < 3) {
       setAddressSuggestions([]);
       return;
@@ -162,6 +309,7 @@ export default function PaymentPage() {
       setStep(2);
       return;
     }
+    if (!effectiveStripeKey || clientSecret) return;
     setError('');
     setSubmitting(true);
     try {
@@ -208,6 +356,11 @@ export default function PaymentPage() {
   }
 
   if (!order) return null;
+
+  const stripePromise = useMemo(
+    () => (effectiveStripeKey ? loadStripe(effectiveStripeKey) : null),
+    [effectiveStripeKey]
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb] py-10 px-4">
@@ -420,35 +573,59 @@ export default function PaymentPage() {
                       <h2 className="text-xl font-light text-gray-900">Paiement sécurisé (Stripe)</h2>
                     </div>
 
-                    {/* Placeholder Stripe — à connecter avec vos clés (VITE_STRIPE_PUBLISHABLE_KEY) */}
-                    <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50/50 p-8 text-center">
-                      <Lock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-700 font-medium mb-2">Paiement par carte (Stripe)</p>
-                      <p className="text-sm text-gray-500 mb-6">
-                        Configurez <code className="bg-gray-200 px-1 rounded">VITE_STRIPE_PUBLISHABLE_KEY</code> dans votre projet et connectez le backend Stripe pour activer le paiement. Le formulaire carte Stripe s&apos;affichera ici.
-                      </p>
-                      <p className="text-lg font-light text-gray-900">Total à payer : <strong>{order.total.toFixed(2)} €</strong></p>
-                    </div>
+                    {effectiveStripeKey && clientSecret ? (
+                      <Elements
+                        stripe={stripePromise}
+                        options={{ clientSecret, appearance: { theme: 'stripe', variables: { borderRadius: '12px' } } }}
+                      >
+                        <StripePaymentForm
+                          orderId={orderId!}
+                          clientSecret={clientSecret}
+                          shippingAddress={shippingAddress}
+                          total={order.total}
+                          onSuccess={() => navigate('/profil?tab=commandes')}
+                          onError={setError}
+                        />
+                      </Elements>
+                    ) : effectiveStripeKey && step === 2 ? (
+                      <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-8 text-center">
+                        <p className="text-gray-600">Préparation du paiement...</p>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50/50 p-8 text-center">
+                        <Lock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-700 font-medium mb-2">Paiement par carte (Stripe)</p>
+                        <p className="text-sm text-gray-500 mb-4">
+                          En dev : <code className="bg-gray-200 px-1 rounded">Frontend/.env</code> avec <strong>VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...</strong>. En prod : le backend expose la clé via <strong>GET /api/config</strong> (ConfigMap/Secret K8s).
+                        </p>
+                        <p className="text-xs text-gray-500 mb-4">Voir <strong>STRIPE.md</strong> à la racine du projet pour les emplacements des clés.</p>
+                        <p className="text-lg font-light text-gray-900">Total à payer : <strong>{order.total.toFixed(2)} €</strong></p>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="flex gap-4">
-                    <button
-                      type="button"
-                      onClick={() => setStep(1)}
-                      className="flex-1 py-4 rounded-2xl border border-gray-200 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
-                    >
-                      <ArrowLeft className="w-5 h-5" />
-                      Retour
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="flex-1 py-4 rounded-2xl bg-gray-900 text-white font-medium flex items-center justify-center gap-2 hover:bg-gray-800 disabled:opacity-50 transition-colors"
-                    >
-                      <Lock className="w-5 h-5" />
-                      {submitting ? 'Traitement...' : `Payer ${order.total.toFixed(2)} €`}
-                    </button>
-                  </div>
+                  {!(effectiveStripeKey && clientSecret) && (
+                    <div className="flex gap-4 mt-6">
+                      <button
+                        type="button"
+                        onClick={() => setStep(1)}
+                        className="flex-1 py-4 rounded-2xl border border-gray-200 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
+                      >
+                        <ArrowLeft className="w-5 h-5" />
+                        Retour
+                      </button>
+                      {!effectiveStripeKey && (
+                        <button
+                          type="submit"
+                          disabled={submitting}
+                          className="flex-1 py-4 rounded-2xl bg-gray-900 text-white font-medium flex items-center justify-center gap-2 hover:bg-gray-800 disabled:opacity-50 transition-colors"
+                        >
+                          <Lock className="w-5 h-5" />
+                          {submitting ? 'Traitement...' : `Payer ${order.total.toFixed(2)} €`}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </form>

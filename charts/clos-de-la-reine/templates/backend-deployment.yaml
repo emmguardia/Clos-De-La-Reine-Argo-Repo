@@ -83,6 +83,18 @@ spec:
             secretKeyRef:
               name: {{ .Values.backend.secretName }}
               key: admin-email
+        - name: STRIPE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.backend.secretName }}
+              key: stripe-secret-key
+              optional: true
+        - name: STRIPE_PUBLISHABLE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.backend.secretName }}
+              key: stripe-publishable-key
+              optional: true
         resources:
           {{- toYaml .Values.backend.resources | nindent 10 }}
         volumeMounts:

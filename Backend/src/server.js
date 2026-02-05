@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import { sendNewContactNotificationEmail, sendContactConfirmationEmail } from './utils/email.js';
+import Stripe from 'stripe';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,6 +15,11 @@ const MONGODB_PASSWORD = process.env.MONGODB_PASSWORD;
 const MONGODB_DB = process.env.MONGODB_DB || 'clos_de_la_reine_db';
 const MONGODB_HOST = process.env.MONGODB_HOST;
 const JWT_SECRET = process.env.JWT_SECRET || 'changez-moi-en-production-avec-une-cle-secrete-tres-longue-et-aleatoire';
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY || '';
+const stripe = STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.startsWith('sk_')
+  ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-11-20.acacia' })
+  : null;
 
 app.set('trust proxy', 1);
 app.use(cors({
@@ -154,6 +160,10 @@ async function authenticateAdmin(req, res, next) {
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.get('/api/config', (req, res) => {
+  res.json({ stripePublishableKey: STRIPE_PUBLISHABLE_KEY || '' });
 });
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'closdelareine@gmail.com';
@@ -2179,9 +2189,33 @@ app.post('/api/promo-codes/validate', authenticateToken, async (req, res) => {
   }
 });
 
+app.post('/api/orders/:id/create-payment-intent', authenticateToken, async (req, res) => {
+  if (!stripe) {
+    return res.status(503).json({ error: 'Stripe non configuré. Ajoutez STRIPE_SECRET_KEY dans Backend/.env (voir STRIPE.md).' });
+  }
+  try {
+    const order = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+    if (!order) return res.status(404).json({ error: 'Commande non trouvée' });
+    if (order.userId !== req.user.userId) return res.status(403).json({ error: 'Non autorisé' });
+    if (order.status !== 'validated') return res.status(400).json({ error: 'La commande doit être validée avant le paiement' });
+    const amountCents = Math.round(Number(order.total) * 100);
+    if (amountCents < 50) return res.status(400).json({ error: 'Montant minimum 0,50 €' });
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountCents,
+      currency: 'eur',
+      metadata: { orderId: String(order._id) },
+      automatic_payment_methods: { enabled: true }
+    });
+    res.json({ clientSecret: paymentIntent.client_secret });
+  } catch (err) {
+    console.error('Erreur create-payment-intent:', err);
+    res.status(500).json({ error: err.message || 'Erreur Stripe' });
+  }
+});
+
 app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
   try {
-    const { paymentMethod, cardNumber, expiryDate, cvv, cardholderName, shippingAddress, promoCode } = req.body;
+    const { paymentMethod, cardNumber, expiryDate, cvv, cardholderName, shippingAddress, promoCode, paymentIntentId } = req.body;
     const order = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
     if (!order) {
       return res.status(404).json({ error: 'Commande non trouvée' });
@@ -2192,7 +2226,27 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
     if (order.status !== 'validated') {
       return res.status(400).json({ error: 'La commande doit être validée avant le paiement' });
     }
-    
+
+    if (paymentIntentId && stripe) {
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      if (paymentIntent.status !== 'succeeded') {
+        return res.status(400).json({ error: 'Paiement non confirmé. Réessayez.' });
+      }
+      const updateData = {
+        status: 'paid',
+        paymentInfo: { method: 'stripe', paymentIntentId, paidAt: new Date() },
+        updatedAt: new Date()
+      };
+      if (shippingAddress) updateData.shippingAddress = shippingAddress;
+      await db.collection('orders').updateOne(
+        { _id: new ObjectId(req.params.id) },
+        { $set: updateData }
+      );
+      const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+      await updateStats(updatedOrder);
+      return res.json({ message: 'Paiement enregistré', status: 'paid' });
+    }
+
     let finalTotal = order.total;
     let appliedPromoCode = null;
     

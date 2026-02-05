@@ -170,6 +170,7 @@ export default function CheckoutPage() {
         throw new Error(data.error || 'Erreur lors de la création de la commande');
       }
 
+      window.dispatchEvent(new Event('cartUpdated'));
       navigate('/profil?tab=commandes');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la création de la commande');

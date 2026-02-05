@@ -6,6 +6,8 @@ import { sanitizeInput, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJ
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 const ADRESSE_API = 'https://api-adresse.data.gouv.fr/search';
+const SHIPPING_LA_POSTE = 5.9;
+const FRAIS_TAUX = 0.019;
 
 interface OrderItem { productId: number; quantity: number; price: number }
 interface PaymentOrder {
@@ -463,24 +465,33 @@ export default function PaymentPage() {
                   </div>
                 ))}
               </div>
-              {typeof order.shippingAmount === 'number' && order.shippingAmount > 0 && (
-                <div className="space-y-2 mb-4 text-sm text-gray-600">
-                  <div className="flex justify-between">
-                    <span>Sous-total</span>
-                    <span>{(order.items.reduce((s, i) => s + i.price * i.quantity, 0)).toFixed(2)} €</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Livraison (La Poste)</span>
-                    <span>{order.shippingAmount.toFixed(2)} €</span>
-                  </div>
-                  {typeof order.feesAmount === 'number' && order.feesAmount > 0 && (
+              {/* Toujours afficher le détail des frais (livraison + TVA/frais) */}
+              {(() => {
+                const subtotal = order.items.reduce((s, i) => s + i.price * i.quantity, 0);
+                const shipping = typeof order.shippingAmount === 'number' && order.shippingAmount >= 0
+                  ? order.shippingAmount
+                  : SHIPPING_LA_POSTE;
+                const beforeFees = subtotal + shipping;
+                const fees = typeof order.feesAmount === 'number' && order.feesAmount >= 0
+                  ? order.feesAmount
+                  : Math.round(beforeFees * FRAIS_TAUX * 100) / 100;
+                return (
+                  <div className="space-y-2 mb-4 text-sm text-gray-600 border-t border-gray-200 pt-4">
+                    <div className="flex justify-between">
+                      <span>Sous-total</span>
+                      <span>{subtotal.toFixed(2)} €</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Livraison (La Poste)</span>
+                      <span>{shipping.toFixed(2)} €</span>
+                    </div>
                     <div className="flex justify-between">
                       <span>TVA et frais applicables (1,9 %)</span>
-                      <span>{order.feesAmount.toFixed(2)} €</span>
+                      <span>{fees.toFixed(2)} €</span>
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                );
+              })()}
               {step === 2 && shippingAddress.address && (
                 <div className="border-t border-gray-200 pt-4 mb-4">
                   <h3 className="text-sm font-medium text-gray-900 mb-2">Livraison</h3>

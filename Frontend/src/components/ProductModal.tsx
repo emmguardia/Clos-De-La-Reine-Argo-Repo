@@ -97,83 +97,67 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
         aria-hidden
       />
 
-      {/* Carte produit — fond blanc */}
+      {/* Carte produit — même taille d’image que l’autre Clos de la Reine (60vh / 80vh) */}
       <div
-        className="relative z-10 w-full max-w-4xl rounded-3xl overflow-hidden bg-white shadow-[var(--shadow)] animate-slideDown"
+        className="relative z-10 w-full max-w-6xl rounded-3xl overflow-hidden bg-white shadow-[var(--shadow)] animate-slideDown max-h-[90vh]"
         style={{ boxShadow: 'var(--shadow)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-col md:flex-row md:min-h-0">
-          {/* Gauche : [flèche] image [flèche] + dots */}
-          <div className="relative w-full md:w-[48%] md:min-h-[420px] flex flex-col bg-white">
-            <div className="relative flex-1 flex items-center min-h-[320px] md:min-h-[420px]">
-              {/* Flèche gauche — en bord gauche de la colonne */}
-              {hasMultipleImages && (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); goPrev(); }}
-                  className="flex-shrink-0 w-12 h-12 rounded-full bg-white border border-gray-200 shadow-md flex items-center justify-center transition-all hover:scale-105 hover:bg-gray-50 active:scale-95 z-10"
-                  aria-label="Image précédente"
-                >
-                  <ChevronLeft className="w-6 h-6 text-gray-800" />
-                </button>
-              )}
-
-              {/* Zone image centrale — grande taille */}
-              <div className="flex-1 flex items-center justify-center px-4 py-6 min-h-[320px] md:min-h-[420px]">
-                <div className="relative w-full h-full min-h-[280px] md:min-h-[380px] flex items-center justify-center rounded-2xl bg-gray-50/80 p-6 shadow-inner border border-gray-100">
-                  {images[currentIndex] ? (
-                    <img
-                      key={`${product.id}-${currentIndex}`}
-                      src={images[currentIndex]}
-                      alt={`${product.name} - Image ${currentIndex + 1}`}
-                      className="max-w-full max-h-full w-auto h-auto object-contain select-none rounded-lg"
-                      style={{ maxHeight: 'min(70vh, 520px)' }}
-                      draggable={false}
-                    />
-                  ) : (
-                    <div className="w-full h-56 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 text-sm">
-                      Image non disponible
-                    </div>
-                  )}
+        <div className="flex flex-col md:flex-row md:min-h-0 max-h-[90vh]">
+          {/* Gauche : image en pleine hauteur comme l’autre projet */}
+          <div className="relative w-full md:w-1/2 bg-gray-100 flex flex-col">
+            <div className="relative h-[55vh] md:h-[80vh] overflow-hidden">
+              {images[currentIndex] ? (
+                <img
+                  key={`${product.id}-${currentIndex}`}
+                  src={images[currentIndex]}
+                  alt={`${product.name} - Image ${currentIndex + 1}`}
+                  className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+                  draggable={false}
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-200 text-gray-500">
+                  Image non disponible
                 </div>
-              </div>
-
-              {/* Flèche droite — en bord droit de la colonne */}
+              )}
               {hasMultipleImages && (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); goNext(); }}
-                  className="flex-shrink-0 w-12 h-12 rounded-full bg-white border border-gray-200 shadow-md flex items-center justify-center transition-all hover:scale-105 hover:bg-gray-50 active:scale-95 z-10"
-                  aria-label="Image suivante"
-                >
-                  <ChevronRight className="w-6 h-6 text-gray-800" />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); goPrev(); }}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/90 backdrop-blur-md border border-gray-200 shadow-lg flex items-center justify-center transition-all hover:scale-105 z-10"
+                    aria-label="Image précédente"
+                  >
+                    <ChevronLeft className="w-6 h-6 text-gray-800" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); goNext(); }}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/90 backdrop-blur-md border border-gray-200 shadow-lg flex items-center justify-center transition-all hover:scale-105 z-10"
+                    aria-label="Image suivante"
+                  >
+                    <ChevronRight className="w-6 h-6 text-gray-800" />
+                  </button>
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                    {images.map((_, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => setIndex(index)}
+                        className={`h-2 rounded-full transition-all duration-200 ${
+                          index === currentIndex ? 'w-8 bg-gray-900' : 'w-2 bg-white/70 hover:bg-white'
+                        }`}
+                        aria-label={`Image ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
-
-            {/* Dots galerie */}
-            {images.length > 0 && (
-              <div className="flex justify-center items-center gap-2.5 pb-6">
-                {images.map((_, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => setIndex(index)}
-                    className={`rounded-full transition-all duration-200 ${
-                      index === currentIndex
-                        ? 'w-7 h-2.5 bg-gray-900'
-                        : 'w-2.5 h-2.5 bg-gray-300 hover:bg-gray-400'
-                    }`}
-                    aria-label={`Image ${index + 1}`}
-                  />
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Droite : infos */}
-          <div className="w-full md:w-[52%] p-6 md:p-8 flex flex-col justify-between overflow-y-auto bg-white">
+          <div className="w-full md:w-1/2 p-6 md:p-10 flex flex-col justify-between overflow-y-auto bg-white max-h-[90vh]">
             <button
               type="button"
               onClick={onClose}

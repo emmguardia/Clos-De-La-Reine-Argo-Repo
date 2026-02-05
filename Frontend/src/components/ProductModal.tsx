@@ -1,5 +1,5 @@
 import { X, ChevronLeft, ChevronRight, Heart } from 'lucide-react';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { Product } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
 import { useCart } from '../hooks/useCart';
@@ -10,6 +10,20 @@ interface ProductModalProps {
   onClose: () => void;
 }
 
+function getImages(product: Product | null): string[] {
+  if (!product) return [];
+  const valid = (url: string) => typeof url === 'string' && url.trim().length > 0;
+  const out: string[] = [];
+  if (valid(product.image)) out.push(product.image);
+  if (product.secondImage && valid(product.secondImage)) out.push(product.secondImage);
+  if (product.additionalImages?.length) {
+    const extra = product.additionalImages.filter(valid).slice(0, Math.max(0, 6 - out.length));
+    out.push(...extra);
+  }
+  if (out.length === 0 && product.image) out.push(product.image);
+  return out;
+}
+
 export default function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollIndex, setScrollIndex] = useState(0);
@@ -17,11 +31,39 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
   const { addToCart } = useCart();
   const [favorite, setFavorite] = useState(false);
 
+  const images = useMemo(() => getImages(product), [product]);
+
+  const goToSlide = useCallback((index: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const w = el.clientWidth;
+    el.scrollTo({ left: index * w, behavior: 'smooth' });
+    setScrollIndex(index);
+  }, []);
+
+  const goPrev = useCallback(() => {
+    const next = scrollIndex <= 0 ? Math.max(0, images.length - 1) : scrollIndex - 1;
+    goToSlide(next);
+  }, [scrollIndex, images.length, goToSlide]);
+
+  const goNext = useCallback(() => {
+    const next = scrollIndex >= images.length - 1 ? 0 : scrollIndex + 1;
+    goToSlide(next);
+  }, [scrollIndex, images.length, goToSlide]);
+
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || images.length === 0) return;
+    const w = el.clientWidth;
+    const index = Math.round(el.scrollLeft / w);
+    setScrollIndex(Math.min(index, images.length - 1));
+  }, [images.length]);
+
   useEffect(() => {
-    if (product) {
-      setScrollIndex(0);
-      setFavorite(isFavorite(product.id));
-    }
+    if (!product) return;
+    scrollRef.current?.scrollTo(0, 0);
+    const fav = isFavorite(product.id);
+    queueMicrotask(() => setFavorite(fav));
   }, [product, isFavorite]);
 
   useEffect(() => {
@@ -47,42 +89,6 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
   };
 
   if (!isOpen || !product) return null;
-
-  const valid = (url: string) => typeof url === 'string' && url.trim().length > 0;
-  const images: string[] = [];
-  if (valid(product.image)) images.push(product.image);
-  if (product.secondImage && valid(product.secondImage)) images.push(product.secondImage);
-  if (product.additionalImages?.length) {
-    const extra = product.additionalImages.filter(valid).slice(0, Math.max(0, 6 - images.length));
-    images.push(...extra);
-  }
-  if (images.length === 0) images.push(product.image || '');
-
-  const goToSlide = useCallback((index: number) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const w = el.clientWidth;
-    el.scrollTo({ left: index * w, behavior: 'smooth' });
-    setScrollIndex(index);
-  }, []);
-
-  const goPrev = useCallback(() => {
-    const prev = scrollIndex <= 0 ? images.length - 1 : scrollIndex - 1;
-    goToSlide(prev);
-  }, [scrollIndex, images.length, goToSlide]);
-
-  const goNext = useCallback(() => {
-    const next = scrollIndex >= images.length - 1 ? 0 : scrollIndex + 1;
-    goToSlide(next);
-  }, [scrollIndex, images.length, goToSlide]);
-
-  const onScroll = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el || images.length === 0) return;
-    const w = el.clientWidth;
-    const index = Math.round(el.scrollLeft / w);
-    setScrollIndex(Math.min(index, images.length - 1));
-  }, [images.length]);
 
   return (
     <div

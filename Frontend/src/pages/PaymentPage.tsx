@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Lock, MapPin, CreditCard, ArrowRight, ArrowLeft, Check } from 'lucide-react';
+import { Lock, MapPin, CreditCard, ArrowRight, ArrowLeft } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useProducts } from '../hooks/useProducts';
@@ -377,52 +377,24 @@ export default function PaymentPage() {
         <h1 className="text-3xl font-light text-gray-900 mb-8">Paiement sécurisé</h1>
 
         {/* Parcours utilisateur — barre d’étapes */}
-        <div className="mb-12">
-          <div className="flex items-center justify-between max-w-xl mx-auto">
-            <div className="flex flex-col items-center flex-1">
-              <div
-                className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-medium transition-all duration-300 ${
-                  step >= 1 ? 'bg-gray-900 text-white' : 'bg-gray-200 text-gray-500'
-                }`}
-              >
-                {step > 1 ? <Check className="w-6 h-6" /> : '1'}
-              </div>
-              <span className={`mt-2 text-sm font-medium ${step >= 1 ? 'text-gray-900' : 'text-gray-400'}`}>
-                Adresse
-              </span>
-            </div>
-            <div className="flex-1 h-1 mx-2 rounded-full bg-gray-200 overflow-hidden" style={{ maxWidth: '120px' }}>
-              <div
-                className="h-full bg-gray-900 rounded-full transition-all duration-500 ease-out"
-                style={{ width: step >= 2 ? '100%' : '0%' }}
-              />
-            </div>
-            <div className="flex flex-col items-center flex-1">
-              <div
-                className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-medium transition-all duration-300 ${
-                  step >= 2 ? 'bg-gray-900 text-white' : 'bg-gray-200 text-gray-500'
-                }`}
-              >
-                {step >= 2 ? '2' : ''}
-              </div>
-              <span className={`mt-2 text-sm font-medium ${step >= 2 ? 'text-gray-900' : 'text-gray-400'}`}>
-                Paiement
-              </span>
-            </div>
+        <div className="mb-12 bg-white/90 backdrop-blur-lg rounded-3xl shadow-xl shadow-black/10 p-8 border border-black/5">
+          <h2 className="text-xl font-light text-gray-900 mb-6 text-center">Adresse puis paiement</h2>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-700">
+              {step === 1 ? 'Adresse de livraison' : 'Paiement par carte'}
+            </span>
+            <span className="text-sm text-gray-500">Étape {step} sur 2 · {progressPercent} %</span>
           </div>
-          <div className="mt-4 text-center">
-            <span className="text-sm text-gray-500">Étape {step} sur 2</span>
-            <div className="mt-2 h-1.5 w-full max-w-xs mx-auto bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-[#f2dedd] to-[#e5f2eb] rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
+          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+            <div
+              className="bg-gradient-to-r from-[#f2dedd] to-[#e5f2eb] h-full rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
-          <div className="md:col-span-2">
+        <div className="grid md:grid-cols-[1fr_minmax(320px,400px)] gap-8">
+          <div>
             <form onSubmit={handleSubmit} className="space-y-6">
               {error && (
                 <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-sm">
@@ -663,8 +635,8 @@ export default function PaymentPage() {
                       <span>Livraison (La Poste)</span>
                       <span>{shipping.toFixed(2)} €</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span>TVA et frais applicables (1,9 %)</span>
+                    <div className="flex justify-between gap-4 whitespace-nowrap">
+                      <span className="min-w-0 truncate">TVA et frais applicables (1,9 %)</span>
                       <span>{fees.toFixed(2)} €</span>
                     </div>
                   </div>

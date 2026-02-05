@@ -1,4 +1,4 @@
-import { X, ChevronLeft, ChevronRight, Heart } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Heart, ShoppingCart } from 'lucide-react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Product } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
@@ -32,11 +32,8 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
 
   const images = useMemo(() => getImages(product), [product]);
 
-  // Réinitialiser l'index à l'ouverture ou au changement de produit
   useEffect(() => {
-    if (isOpen && product) {
-      setCurrentIndex(0);
-    }
+    if (isOpen && product) setCurrentIndex(0);
   }, [isOpen, product?.id]);
 
   useEffect(() => {
@@ -59,32 +56,17 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        goPrev();
-      }
-      if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        goNext();
-      }
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); goNext(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [isOpen, goPrev, goNext, onClose]);
 
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
+    document.body.style.overflow = isOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
 
   const handleFavoriteClick = async () => {
@@ -104,166 +86,145 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn"
       role="dialog"
       aria-modal="true"
       aria-label="Détail du produit"
     >
-      {/* Fond cliquable pour fermer */}
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
+        className="absolute inset-0 bg-[var(--ink)]/60 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden
       />
 
+      {/* Carte produit — style Clos de la Reine */}
       <div
-        className="relative z-10 bg-white rounded-2xl max-w-6xl w-full max-h-[94vh] overflow-hidden shadow-2xl flex flex-col border border-gray-100"
+        className="relative z-10 w-full max-w-4xl rounded-3xl overflow-hidden shadow-[var(--shadow)] animate-slideDown"
+        style={{ background: 'var(--cream)', boxShadow: 'var(--shadow)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Bouton fermer */}
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-5 right-5 z-[60] p-2.5 rounded-full bg-white/98 hover:bg-white border border-gray-200 shadow-lg transition-colors"
-          aria-label="Fermer"
-        >
-          <X className="w-5 h-5 text-gray-700" />
-        </button>
-
-        <div className="grid md:grid-cols-[1.1fr,1fr] gap-0 flex-1 min-h-0">
-          {/* Colonne images — structure: [ flèche gauche | zone image | flèche droite ] */}
-          <div className="relative flex flex-col min-h-[340px] md:min-h-0 bg-[#fafaf9]">
-            <div className="relative flex-1 flex items-stretch min-h-[320px] md:min-h-[65vh]">
-              {/* Flèche gauche — collée au bord gauche, verticalement centrée */}
-              {hasMultipleImages && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    goPrev();
-                  }}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-14 h-14 rounded-full bg-white/95 hover:bg-white border border-gray-200 shadow-xl flex items-center justify-center text-gray-800 transition-all hover:scale-110 active:scale-95 flex-shrink-0"
-                  aria-label="Image précédente"
-                >
-                  <ChevronLeft className="w-7 h-7 ml-0.5" />
-                </button>
+        <div className="flex flex-col md:flex-row md:min-h-0">
+          {/* Gauche : image (mini carte) */}
+          <div
+            className="relative w-full md:w-[48%] md:min-h-[420px] flex flex-col"
+            style={{ background: 'var(--cream)' }}
+          >
+            <div className="relative flex-1 flex items-center justify-center p-6 md:p-8 min-h-[280px] md:min-h-[340px]">
+              {images[currentIndex] ? (
+                <img
+                  key={`${product.id}-${currentIndex}`}
+                  src={images[currentIndex]}
+                  alt={`${product.name} - Image ${currentIndex + 1}`}
+                  className="max-w-full max-h-full w-auto h-auto object-contain select-none"
+                  style={{ maxHeight: 'min(50vh, 380px)' }}
+                  draggable={false}
+                />
+              ) : (
+                <div className="w-full h-48 rounded-2xl flex items-center justify-center text-gray-500" style={{ background: 'var(--blush)' }}>
+                  Image non disponible
+                </div>
               )}
 
-              {/* Zone image agrandie — occupe tout l'espace entre les flèches */}
-              <div className="flex-1 flex items-center justify-center px-4 md:px-16 py-8 min-h-[280px]">
-                {images[currentIndex] ? (
-                  <img
-                    key={`${product.id}-${currentIndex}`}
-                    src={images[currentIndex]}
-                    alt={`${product.name} - Image ${currentIndex + 1} sur ${images.length}`}
-                    className="max-w-full max-h-full w-auto h-auto object-contain select-none drop-shadow-sm"
-                    style={{ maxHeight: 'min(72vh, 620px)' }}
-                    draggable={false}
-                  />
-                ) : (
-                  <div className="w-full h-56 bg-gray-200 rounded-2xl flex items-center justify-center text-gray-500">
-                    Image non disponible
-                  </div>
-                )}
-              </div>
-
-              {/* Flèche droite — collée au bord droit */}
               {hasMultipleImages && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    goNext();
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-14 h-14 rounded-full bg-white/95 hover:bg-white border border-gray-200 shadow-xl flex items-center justify-center text-gray-800 transition-all hover:scale-110 active:scale-95 flex-shrink-0"
-                  aria-label="Image suivante"
-                >
-                  <ChevronRight className="w-7 h-7 mr-0.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Galerie miniatures */}
-            <div className="flex-shrink-0 border-t border-gray-200/80 bg-white/90 px-4 py-4">
-              <div className="flex items-center justify-center gap-3 flex-wrap">
-                {images.map((img, index) => (
+                <>
                   <button
                     type="button"
-                    key={`thumb-${index}`}
-                    onClick={() => setIndex(index)}
-                    className={`flex-shrink-0 w-14 h-14 md:w-16 md:h-16 rounded-xl overflow-hidden border-2 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 ${
-                      index === currentIndex
-                        ? 'border-gray-900 ring-2 ring-gray-400 ring-offset-2 scale-105 shadow-md'
-                        : 'border-gray-200 hover:border-gray-400 opacity-90 hover:opacity-100'
-                    }`}
-                    aria-label={`Voir image ${index + 1}`}
-                    aria-current={index === currentIndex ? 'true' : undefined}
+                    onClick={(e) => { e.stopPropagation(); goPrev(); }}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+                    style={{ background: 'var(--cream)', boxShadow: '0 2px 12px rgba(31,31,31,0.12)' }}
+                    aria-label="Image précédente"
                   >
-                    <img
-                      src={img}
-                      alt=""
-                      className="w-full h-full object-cover pointer-events-none"
-                      draggable={false}
-                    />
+                    <ChevronLeft className="w-6 h-6 text-[var(--ink)]" />
                   </button>
-                ))}
-              </div>
-              {hasMultipleImages && (
-                <p className="text-center text-xs text-gray-500 mt-2 font-medium">
-                  {currentIndex + 1} / {images.length}
-                </p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); goNext(); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+                    style={{ background: 'var(--cream)', boxShadow: '0 2px 12px rgba(31,31,31,0.12)' }}
+                    aria-label="Image suivante"
+                  >
+                    <ChevronRight className="w-6 h-6 text-[var(--ink)]" />
+                  </button>
+                </>
               )}
             </div>
+
+            {/* Dots galerie */}
+            {images.length > 0 && (
+              <div className="flex justify-center gap-2 pb-5">
+                {images.map((_, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => setIndex(index)}
+                    className={`h-2 rounded-full transition-all duration-200 ${
+                      index === currentIndex ? 'w-6 bg-[var(--ink)]' : 'w-2 bg-[var(--ink)]/25 hover:bg-[var(--ink)]/40'
+                    }`}
+                    aria-label={`Image ${index + 1}`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Colonne infos */}
-          <div className="p-6 md:p-10 overflow-y-auto flex flex-col bg-white">
-            <div className="space-y-3">
-              <span className="inline-block text-[11px] font-semibold uppercase tracking-[0.2em] px-3 py-1.5 rounded-full bg-[#f2dedd]/80 text-gray-700">
+          {/* Droite : infos */}
+          <div className="w-full md:w-[52%] p-6 md:p-8 flex flex-col justify-between overflow-y-auto">
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute top-4 right-4 z-20 p-2 rounded-full transition-colors hover:scale-105"
+              style={{ background: 'var(--cream)', color: 'var(--ink)' }}
+              aria-label="Fermer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="space-y-4 pr-10">
+              <span
+                className="inline-block text-xs font-medium uppercase tracking-[0.2em] px-3 py-1.5 rounded-full"
+                style={{ background: 'var(--blush)', color: 'var(--ink)' }}
+              >
                 {product.collection}
               </span>
-              <h2 className="text-2xl md:text-3xl font-light text-gray-900 tracking-tight leading-tight">
+              <h2 className="text-2xl md:text-3xl font-light leading-tight" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--ink)' }}>
                 {product.name}
               </h2>
-              <p className="text-3xl md:text-4xl font-light text-gray-900">
+              <p className="text-3xl font-light" style={{ color: 'var(--ink)' }}>
                 {product.price.toFixed(0)} €
               </p>
               {product.briefDescription && (
-                <p className="text-gray-600 text-sm leading-relaxed pt-1">
+                <p className="text-sm leading-relaxed opacity-85" style={{ color: 'var(--ink)' }}>
                   {product.briefDescription}
                 </p>
               )}
-            </div>
 
-            <div className="space-y-5 mt-8">
-              <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+              <div className="space-y-3 pt-2">
+                <p className="text-xs font-semibold uppercase tracking-wider opacity-70" style={{ color: 'var(--ink)' }}>
                   {Array.isArray(product.color) && product.color.length > 1 ? 'Couleurs' : 'Couleur'}
-                </h3>
+                </p>
                 {Array.isArray(product.color) ? (
                   <div className="flex flex-wrap gap-2">
-                    {product.color.map((color, index) => (
-                      <span
-                        key={index}
-                        className="px-3 py-1.5 rounded-full bg-[#e5f2eb] text-sm text-gray-800"
-                      >
-                        {color}
+                    {product.color.map((c, i) => (
+                      <span key={i} className="px-3 py-1 rounded-full text-sm" style={{ background: 'var(--mint)', color: 'var(--ink)' }}>
+                        {c}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-700">{product.color}</p>
+                  <p className="text-sm" style={{ color: 'var(--ink)' }}>{product.color}</p>
                 )}
               </div>
-              <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
-                  Tailles disponibles
-                </h3>
+
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider opacity-70" style={{ color: 'var(--ink)' }}>
+                  Tailles
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {product.sizes.map((size) => (
                     <span
                       key={size}
-                      className="px-4 py-2 rounded-full border border-gray-300 text-sm text-gray-700 bg-gray-50/80"
+                      className="px-3 py-1.5 rounded-full text-sm border"
+                      style={{ borderColor: 'var(--ink)', color: 'var(--ink)', borderWidth: '1px' }}
                     >
                       {size}
                     </span>
@@ -272,25 +233,23 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
               </div>
             </div>
 
-            <div className="mt-10 pt-8 border-t border-gray-100 space-y-3">
+            <div className="mt-6 pt-6 space-y-3 border-t border-[var(--ink)]/10">
               <button
                 type="button"
-                onClick={() => {
-                  addToCart(product.id, 1);
-                  onClose();
-                }}
-                className="w-full bg-gray-900 text-white py-4 rounded-xl hover:bg-gray-800 transition-colors font-medium text-base"
+                onClick={() => { addToCart(product.id, 1); onClose(); }}
+                className="w-full py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                style={{ background: 'var(--ink)', color: 'var(--cream)' }}
               >
+                <ShoppingCart className="w-5 h-5" />
                 Ajouter au panier
               </button>
               <button
                 type="button"
                 onClick={handleFavoriteClick}
-                className={`w-full border-2 py-4 rounded-xl transition-colors flex items-center justify-center gap-2 font-medium text-base ${
-                  favorite
-                    ? 'border-red-400 bg-red-50 text-red-600 hover:bg-red-100'
-                    : 'border-gray-300 text-gray-800 hover:border-gray-900'
+                className={`w-full py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 border-2 ${
+                  favorite ? 'border-red-400 text-red-600' : 'border-[var(--ink)]/20'
                 }`}
+                style={{ color: favorite ? undefined : 'var(--ink)', background: favorite ? 'rgb(254 226 226)' : 'transparent' }}
               >
                 <Heart className={`w-5 h-5 ${favorite ? 'fill-current' : ''}`} />
                 {favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}

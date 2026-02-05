@@ -246,6 +246,7 @@ export default function PaymentPage() {
     (async () => {
       try {
         const res = await fetch(`${API_URL}/api/orders/${orderId}/create-payment-intent`, {
+          method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok || cancelled) return;

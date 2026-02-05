@@ -61,23 +61,47 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
   const prevImage = () => {
     setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
   };
+  const handlePrev = (e: React.MouseEvent | React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    prevImage();
+  };
+  const handleNext = (e: React.MouseEvent | React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    nextImage();
+  };
+  const handleDot = (index: number) => (e: React.MouseEvent | React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCurrentImageIndex(index);
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fadeIn"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Détail du produit"
     >
       <div
         className="relative bg-white rounded-3xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/90 backdrop-blur-md hover:bg-white transition-all duration-200 transform hover:scale-110"
+          className="absolute top-4 right-4 z-[60] p-2 rounded-full bg-white/90 backdrop-blur-md hover:bg-white transition-all duration-200 transform hover:scale-110"
+          aria-label="Fermer"
         >
           <X className="w-6 h-6 text-gray-900" />
         </button>
-        <div className="grid md:grid-cols-2 gap-0" onClick={(e) => e.stopPropagation()}>
-          <div className="relative bg-gray-100" onClick={(e) => e.stopPropagation()}>
+        <div className="grid md:grid-cols-2 gap-0">
+          <div
+            className="relative bg-gray-100"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="relative h-[60vh] md:h-[80vh] overflow-hidden select-none">
               {images.map((img, index) => (
                 <img
@@ -90,40 +114,46 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                   draggable={false}
                 />
               ))}
-              {images.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    aria-label="Image précédente"
-                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); prevImage(); }}
-                    className="z-40 absolute left-2 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/95 shadow-lg border border-gray-200 hover:bg-white hover:scale-105 transition-all duration-200 min-w-[48px] min-h-[48px] flex items-center justify-center cursor-pointer"
-                  >
-                    <ChevronLeft className="w-7 h-7 text-gray-900" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Image suivante"
-                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); nextImage(); }}
-                    className="z-40 absolute right-2 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/95 shadow-lg border border-gray-200 hover:bg-white hover:scale-105 transition-all duration-200 min-w-[48px] min-h-[48px] flex items-center justify-center cursor-pointer"
-                  >
-                    <ChevronRight className="w-7 h-7 text-gray-900" />
-                  </button>
-                  <div className="z-40 absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-                    {images.map((_, index) => (
-                      <button
-                        type="button"
-                        key={index}
-                        aria-label={`Image ${index + 1}`}
-                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); setCurrentImageIndex(index); }}
-                        className={`cursor-pointer rounded-full transition-all duration-200 flex-shrink-0 border-2 border-gray-300 hover:border-gray-900 ${
-                          index === currentImageIndex ? 'bg-gray-900 w-8 h-2' : 'bg-white/90 w-2 h-2'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
             </div>
+            {images.length > 1 && (
+              <div
+                className="absolute inset-0 z-[50] pointer-events-none"
+                aria-hidden
+              >
+                <button
+                  type="button"
+                  aria-label="Image précédente"
+                  onClick={handlePrev}
+                  style={{ touchAction: 'manipulation' }}
+                  className="pointer-events-auto absolute left-2 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/95 shadow-lg border border-gray-200 hover:bg-white hover:scale-105 transition-all duration-200 min-w-[48px] min-h-[48px] flex items-center justify-center cursor-pointer"
+                >
+                  <ChevronLeft className="w-7 h-7 text-gray-900" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Image suivante"
+                  onClick={handleNext}
+                  style={{ touchAction: 'manipulation' }}
+                  className="pointer-events-auto absolute right-2 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/95 shadow-lg border border-gray-200 hover:bg-white hover:scale-105 transition-all duration-200 min-w-[48px] min-h-[48px] flex items-center justify-center cursor-pointer"
+                >
+                  <ChevronRight className="w-7 h-7 text-gray-900" />
+                </button>
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 pointer-events-none">
+                  {images.map((_, index) => (
+                    <button
+                      type="button"
+                      key={index}
+                      aria-label={`Image ${index + 1}`}
+                      onClick={handleDot(index)}
+                      style={{ touchAction: 'manipulation' }}
+                      className={`pointer-events-auto cursor-pointer rounded-full transition-all duration-200 flex-shrink-0 border-2 border-gray-300 hover:border-gray-900 ${
+                        index === currentImageIndex ? 'bg-gray-900 w-8 h-2' : 'bg-white/90 w-2 h-2'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="p-8 md:p-12 overflow-y-auto max-h-[90vh]">
             <div className="space-y-6">

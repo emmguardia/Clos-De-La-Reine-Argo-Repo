@@ -1070,7 +1070,7 @@ app.delete('/api/favorites/:productId', authenticateToken, async (req, res) => {
 
 app.post('/api/orders', authenticateToken, async (req, res) => {
   try {
-    const { items, shippingAddress, total, dogInfo, notes, promoCode } = req.body;
+    const { items, shippingAddress, total, dogInfo, notes, promoCode, shippingAmount, feesAmount } = req.body;
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Items requis' });
     }
@@ -1081,15 +1081,6 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Informations sur le chien requises (race et âge)' });
     }
     
-    const pendingOrdersCount = await db.collection('orders').countDocuments({
-      userId: req.user.userId,
-      status: { $in: ['pending_validation', 'pending_counter_proposal', 'validated'] },
-      paymentInfo: null
-    });
-    
-    if (pendingOrdersCount >= 3) {
-      return res.status(400).json({ error: 'Vous ne pouvez pas avoir plus de 3 bons de commande en attente. Veuillez finaliser ou annuler un bon de commande existant avant d\'en créer un nouveau. Une fois payée, votre commande ne compte plus dans cette limite.' });
-    }
     let validatedPromoCode = null;
     if (promoCode && typeof promoCode === 'string' && promoCode.trim() !== '') {
       const promo = await db.collection('promo_codes').findOne({ 
@@ -1124,6 +1115,8 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
       total: parseFloat(total),
       originalTotal: validatedPromoCode ? parseFloat(total) : null,
       promoCode: validatedPromoCode,
+      shippingAmount: shippingAmount != null ? parseFloat(shippingAmount) : null,
+      feesAmount: feesAmount != null ? parseFloat(feesAmount) : null,
       status: 'pending_validation',
       counterProposal: null,
       paymentInfo: null,
@@ -1181,6 +1174,8 @@ app.get('/api/orders', authenticateToken, async (req, res) => {
       total: order.total,
       originalTotal: order.originalTotal || null,
       promoCode: order.promoCode || null,
+      shippingAmount: order.shippingAmount ?? null,
+      feesAmount: order.feesAmount ?? null,
       status: order.status,
       counterProposal: order.counterProposal,
       paymentInfo: order.paymentInfo,

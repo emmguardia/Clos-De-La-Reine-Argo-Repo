@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Lock, MapPin, CreditCard, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Lock, MapPin, CreditCard, ArrowRight, ArrowLeft, Check } from 'lucide-react';
 import { useProducts } from '../hooks/useProducts';
 import { sanitizeInput, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJsonResponse } from '../utils/security';
 
@@ -13,6 +13,8 @@ interface PaymentOrder {
   total: number;
   items: OrderItem[];
   shippingAddress?: Record<string, unknown>;
+  shippingAmount?: number;
+  feesAmount?: number;
 }
 
 interface AdresseSuggestion {
@@ -216,24 +218,50 @@ export default function PaymentPage() {
           Retour aux commandes
         </button>
 
-        <h1 className="text-3xl font-light text-gray-900 mb-2">Paiement</h1>
-        <p className="text-gray-600 mb-8">Étape {step} sur 2</p>
+        <h1 className="text-3xl font-light text-gray-900 mb-8">Paiement sécurisé</h1>
 
-        {/* Barre de progression */}
-        <div className="mb-10">
-          <div className="flex justify-between text-sm text-gray-600 mb-2">
-            <span>Progression</span>
-            <span>{progressPercent} %</span>
+        {/* Parcours utilisateur — barre d’étapes */}
+        <div className="mb-12">
+          <div className="flex items-center justify-between max-w-xl mx-auto">
+            <div className="flex flex-col items-center flex-1">
+              <div
+                className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-medium transition-all duration-300 ${
+                  step >= 1 ? 'bg-gray-900 text-white' : 'bg-gray-200 text-gray-500'
+                }`}
+              >
+                {step > 1 ? <Check className="w-6 h-6" /> : '1'}
+              </div>
+              <span className={`mt-2 text-sm font-medium ${step >= 1 ? 'text-gray-900' : 'text-gray-400'}`}>
+                Adresse
+              </span>
+            </div>
+            <div className="flex-1 h-1 mx-2 rounded-full bg-gray-200 overflow-hidden" style={{ maxWidth: '120px' }}>
+              <div
+                className="h-full bg-gray-900 rounded-full transition-all duration-500 ease-out"
+                style={{ width: step >= 2 ? '100%' : '0%' }}
+              />
+            </div>
+            <div className="flex flex-col items-center flex-1">
+              <div
+                className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-medium transition-all duration-300 ${
+                  step >= 2 ? 'bg-gray-900 text-white' : 'bg-gray-200 text-gray-500'
+                }`}
+              >
+                {step >= 2 ? '2' : ''}
+              </div>
+              <span className={`mt-2 text-sm font-medium ${step >= 2 ? 'text-gray-900' : 'text-gray-400'}`}>
+                Paiement
+              </span>
+            </div>
           </div>
-          <div className="h-2.5 w-full bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-[#f2dedd] to-[#e5f2eb] rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <div className="flex justify-between mt-2 text-xs text-gray-500">
-            <span className={step >= 1 ? 'text-gray-900 font-medium' : ''}>1. Adresse</span>
-            <span className={step >= 2 ? 'text-gray-900 font-medium' : ''}>2. Paiement</span>
+          <div className="mt-4 text-center">
+            <span className="text-sm text-gray-500">Étape {step} sur 2</span>
+            <div className="mt-2 h-1.5 w-full max-w-xs mx-auto bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[#f2dedd] to-[#e5f2eb] rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
           </div>
         </div>
 
@@ -305,7 +333,7 @@ export default function PaymentPage() {
                     </div>
 
                     <div className="mt-4 relative">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Adresse (autocomplétion France) *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Adresse *</label>
                       <input
                         type="text"
                         required
@@ -427,7 +455,7 @@ export default function PaymentPage() {
           <div>
             <div className="bg-white rounded-3xl shadow-lg border border-black/5 p-6 sticky top-8">
               <h2 className="text-xl font-light text-gray-900 mb-4">Récapitulatif</h2>
-              <div className="space-y-3 mb-6">
+              <div className="space-y-3 mb-4">
                 {order.items.map((item: OrderItem, idx: number) => (
                   <div key={idx} className="flex justify-between text-sm">
                     <span>{getProductName(item.productId)} x{item.quantity}</span>
@@ -435,6 +463,24 @@ export default function PaymentPage() {
                   </div>
                 ))}
               </div>
+              {typeof order.shippingAmount === 'number' && order.shippingAmount > 0 && (
+                <div className="space-y-2 mb-4 text-sm text-gray-600">
+                  <div className="flex justify-between">
+                    <span>Sous-total</span>
+                    <span>{(order.items.reduce((s, i) => s + i.price * i.quantity, 0)).toFixed(2)} €</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Livraison (La Poste)</span>
+                    <span>{order.shippingAmount.toFixed(2)} €</span>
+                  </div>
+                  {typeof order.feesAmount === 'number' && order.feesAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span>TVA et frais applicables (1,9 %)</span>
+                      <span>{order.feesAmount.toFixed(2)} €</span>
+                    </div>
+                  )}
+                </div>
+              )}
               {step === 2 && shippingAddress.address && (
                 <div className="border-t border-gray-200 pt-4 mb-4">
                   <h3 className="text-sm font-medium text-gray-900 mb-2">Livraison</h3>

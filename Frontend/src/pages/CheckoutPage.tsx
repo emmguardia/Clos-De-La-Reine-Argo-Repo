@@ -7,6 +7,8 @@ import { dogBreeds } from '../data/dogBreeds';
 import { sanitizeInput, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJsonParse, safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
+const SHIPPING_LA_POSTE = 5.9;
+const FRAIS_TAUX = 0.019;
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -115,7 +117,11 @@ export default function CheckoutPage() {
     return product ? { ...product, quantity: item.quantity } : null;
   }).filter(Boolean) as Array<{ id: number; name: string; price: number; image: string; quantity: number }>;
 
-  const total = cartProducts.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const subtotal = cartProducts.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const shippingAmount = SHIPPING_LA_POSTE;
+  const beforeFees = subtotal + shippingAmount;
+  const feesAmount = Math.round(beforeFees * FRAIS_TAUX * 100) / 100;
+  const total = Math.round((beforeFees + feesAmount) * 100) / 100;
 
   const canProceedToStep2 = formData.firstName && formData.lastName && formData.email && formData.phone;
 
@@ -153,19 +159,15 @@ export default function CheckoutPage() {
           shippingAddress: formData,
           dogInfo,
           notes: additionalInfo,
-          total
+          total,
+          shippingAmount,
+          feesAmount
         })
       });
 
       if (!response.ok) {
         const data = await safeJsonResponse(response, { error: 'Erreur lors de la création de la commande' });
-        const errorMessage = data.error || 'Erreur lors de la création de la commande';
-        if (errorMessage.includes('3 commandes')) {
-          setError(errorMessage);
-        } else {
-          throw new Error(errorMessage);
-        }
-        return;
+        throw new Error(data.error || 'Erreur lors de la création de la commande');
       }
 
       navigate('/profil?tab=commandes');
@@ -499,10 +501,22 @@ export default function CheckoutPage() {
                   </div>
                 ))}
               </div>
-              <div className="border-t border-gray-200 pt-4">
-                <div className="flex justify-between text-xl font-light text-gray-900">
+              <div className="border-t border-gray-200 pt-4 space-y-2">
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Sous-total</span>
+                  <span>{subtotal.toFixed(2)} €</span>
+                </div>
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Livraison (La Poste)</span>
+                  <span>{shippingAmount.toFixed(2)} €</span>
+                </div>
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>TVA et frais applicables (1,9 %)</span>
+                  <span>{feesAmount.toFixed(2)} €</span>
+                </div>
+                <div className="flex justify-between text-xl font-light text-gray-900 pt-2">
                   <span>Total</span>
-                  <span>{total.toFixed(2)}€</span>
+                  <span>{total.toFixed(2)} €</span>
                 </div>
               </div>
             </div>

@@ -106,7 +106,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
         <div className="flex flex-col md:flex-row md:min-h-0">
           {/* Gauche : [flèche] image [flèche] + dots */}
           <div className="relative w-full md:w-[48%] md:min-h-[420px] flex flex-col bg-white">
-            <div className="relative flex-1 flex items-center min-h-[280px] md:min-h-[340px]">
+            <div className="relative flex-1 flex items-center min-h-[320px] md:min-h-[420px]">
               {/* Flèche gauche — en bord gauche de la colonne */}
               {hasMultipleImages && (
                 <button
@@ -119,20 +119,20 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                 </button>
               )}
 
-              {/* Zone image centrale — cadre soigné */}
-              <div className="flex-1 flex items-center justify-center px-6 py-8 min-h-[280px] md:min-h-[340px]">
-                <div className="relative w-full max-w-md aspect-square flex items-center justify-center rounded-2xl bg-gray-50/80 p-6 shadow-inner border border-gray-100">
+              {/* Zone image centrale — grande taille */}
+              <div className="flex-1 flex items-center justify-center px-4 py-6 min-h-[320px] md:min-h-[420px]">
+                <div className="relative w-full h-full min-h-[280px] md:min-h-[380px] flex items-center justify-center rounded-2xl bg-gray-50/80 p-6 shadow-inner border border-gray-100">
                   {images[currentIndex] ? (
                     <img
                       key={`${product.id}-${currentIndex}`}
                       src={images[currentIndex]}
                       alt={`${product.name} - Image ${currentIndex + 1}`}
                       className="max-w-full max-h-full w-auto h-auto object-contain select-none rounded-lg"
-                      style={{ maxHeight: 'min(45vh, 320px)' }}
+                      style={{ maxHeight: 'min(70vh, 520px)' }}
                       draggable={false}
                     />
                   ) : (
-                    <div className="w-full h-48 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 text-sm">
+                    <div className="w-full h-56 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 text-sm">
                       Image non disponible
                     </div>
                   )}

@@ -32,10 +32,10 @@ interface AdresseSuggestion {
 
 function StripePaymentForm({
   orderId,
-  clientSecret,
+  clientSecret: _clientSecret,
   shippingAddress,
   total,
-  onSuccess,
+  onSuccess: _onSuccess,
   onError
 }: {
   orderId: string;
@@ -236,7 +236,7 @@ export default function PaymentPage() {
         setError('Erreur lors de la confirmation du paiement.');
       }
     })();
-  }, [orderId, paymentIntentId, redirectStatus, navigate, setSearchParams]);
+  }, [orderId, paymentIntentId, redirectStatus, navigate, setSearchParams, shippingAddress]);
 
   useEffect(() => {
     if (step !== 2 || !orderId || !effectiveStripeKey || !order) return;
@@ -347,6 +347,11 @@ export default function PaymentPage() {
     return product ? product.name : `Produit #${productId}`;
   };
 
+  const stripePromise = useMemo(
+    () => (effectiveStripeKey ? loadStripe(effectiveStripeKey) : null),
+    [effectiveStripeKey]
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#f8f4ef]">
@@ -356,11 +361,6 @@ export default function PaymentPage() {
   }
 
   if (!order) return null;
-
-  const stripePromise = useMemo(
-    () => (effectiveStripeKey ? loadStripe(effectiveStripeKey) : null),
-    [effectiveStripeKey]
-  );
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb] py-10 px-4">

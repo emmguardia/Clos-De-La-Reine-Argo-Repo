@@ -24,37 +24,33 @@ function getImages(product: Product | null): string[] {
   return out;
 }
 
-export default function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
+function ProductModalBody({
+  product,
+  images,
+  onClose,
+  favorite,
+  onFavoriteClick,
+  addToCart
+}: {
+  product: Product;
+  images: string[];
+  onClose: () => void;
+  favorite: boolean;
+  onFavoriteClick: () => void;
+  addToCart: (id: number, qty: number) => void;
+}) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const { isFavorite, addFavorite, removeFavorite } = useFavorites();
-  const { addToCart } = useCart();
-  const [favorite, setFavorite] = useState(false);
-
-  const images = useMemo(() => getImages(product), [product]);
-
-  useEffect(() => {
-    if (isOpen && product) setCurrentIndex(0);
-  }, [isOpen, product?.id]);
-
-  useEffect(() => {
-    if (!product) return;
-    setFavorite(isFavorite(product.id));
-  }, [product, isFavorite]);
-
   const goPrev = useCallback(() => {
     setCurrentIndex((i) => (i <= 0 ? images.length - 1 : i - 1));
   }, [images.length]);
-
   const goNext = useCallback(() => {
     setCurrentIndex((i) => (i >= images.length - 1 ? 0 : i + 1));
   }, [images.length]);
-
   const setIndex = useCallback((index: number) => {
     setCurrentIndex(Math.max(0, Math.min(index, images.length - 1)));
   }, [images.length]);
 
   useEffect(() => {
-    if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { onClose(); return; }
       if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); }
@@ -62,28 +58,14 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, goPrev, goNext, onClose]);
+  }, [goPrev, goNext, onClose]);
 
   useEffect(() => {
-    document.body.style.overflow = isOpen ? 'hidden' : '';
+    document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
-  }, [isOpen]);
-
-  const handleFavoriteClick = async () => {
-    if (!product) return;
-    if (favorite) {
-      await removeFavorite(product.id);
-      setFavorite(false);
-    } else {
-      await addFavorite(product.id);
-      setFavorite(true);
-    }
-  };
-
-  if (!isOpen || !product) return null;
+  }, []);
 
   const hasMultipleImages = images.length > 1;
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn"
@@ -233,7 +215,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
               </button>
               <button
                 type="button"
-                onClick={handleFavoriteClick}
+                onClick={onFavoriteClick}
                 className={`w-full py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 border-2 ${
                   favorite ? 'border-red-400 text-red-600' : 'border-[var(--ink)]/20'
                 }`}
@@ -247,5 +229,29 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
+  const { isFavorite, addFavorite, removeFavorite } = useFavorites();
+  const { addToCart } = useCart();
+  const images = useMemo(() => getImages(product), [product]);
+  const favorite = product ? isFavorite(product.id) : false;
+  const handleFavoriteClick = async () => {
+    if (!product) return;
+    if (favorite) await removeFavorite(product.id);
+    else await addFavorite(product.id);
+  };
+  if (!isOpen || !product) return null;
+  return (
+    <ProductModalBody
+      key={product.id}
+      product={product}
+      images={images}
+      onClose={onClose}
+      favorite={favorite}
+      onFavoriteClick={handleFavoriteClick}
+      addToCart={addToCart}
+    />
   );
 }

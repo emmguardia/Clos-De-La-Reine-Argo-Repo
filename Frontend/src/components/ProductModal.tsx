@@ -1,5 +1,5 @@
 import { X, ChevronLeft, ChevronRight, Heart } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Product } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
 import { useCart } from '../hooks/useCart';
@@ -11,19 +11,29 @@ interface ProductModalProps {
 }
 
 export default function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollIndex, setScrollIndex] = useState(0);
   const { isFavorite, addFavorite, removeFavorite } = useFavorites();
   const { addToCart } = useCart();
   const [favorite, setFavorite] = useState(false);
 
   useEffect(() => {
     if (product) {
-      queueMicrotask(() => {
-        setCurrentImageIndex(0);
-        setFavorite(isFavorite(product.id));
-      });
+      setScrollIndex(0);
+      setFavorite(isFavorite(product.id));
     }
   }, [product, isFavorite]);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
 
   const handleFavoriteClick = async () => {
     if (!product) return;
@@ -35,17 +45,9 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
       setFavorite(true);
     }
   };
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen]);
+
   if (!isOpen || !product) return null;
+
   const valid = (url: string) => typeof url === 'string' && url.trim().length > 0;
   const images: string[] = [];
   if (valid(product.image)) images.push(product.image);
@@ -55,27 +57,32 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
     images.push(...extra);
   }
   if (images.length === 0) images.push(product.image || '');
-  const nextImage = () => {
-    setCurrentImageIndex((prev) => (prev + 1) % images.length);
-  };
-  const prevImage = () => {
-    setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
-  };
-  const handlePrev = (e: React.MouseEvent | React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    prevImage();
-  };
-  const handleNext = (e: React.MouseEvent | React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    nextImage();
-  };
-  const handleDot = (index: number) => (e: React.MouseEvent | React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setCurrentImageIndex(index);
-  };
+
+  const goToSlide = useCallback((index: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const w = el.clientWidth;
+    el.scrollTo({ left: index * w, behavior: 'smooth' });
+    setScrollIndex(index);
+  }, []);
+
+  const goPrev = useCallback(() => {
+    const prev = scrollIndex <= 0 ? images.length - 1 : scrollIndex - 1;
+    goToSlide(prev);
+  }, [scrollIndex, images.length, goToSlide]);
+
+  const goNext = useCallback(() => {
+    const next = scrollIndex >= images.length - 1 ? 0 : scrollIndex + 1;
+    goToSlide(next);
+  }, [scrollIndex, images.length, goToSlide]);
+
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || images.length === 0) return;
+    const w = el.clientWidth;
+    const index = Math.round(el.scrollLeft / w);
+    setScrollIndex(Math.min(index, images.length - 1));
+  }, [images.length]);
 
   return (
     <div
@@ -85,74 +92,98 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
       aria-label="Détail du produit"
     >
       <div
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-fadeIn"
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden
       />
-      <div
-        className="relative z-10 bg-white rounded-3xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="relative z-10 bg-white rounded-3xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 z-[60] p-2 rounded-full bg-white/90 backdrop-blur-md hover:bg-white transition-all duration-200 transform hover:scale-110"
+          className="absolute top-4 right-4 z-[60] p-2 rounded-full bg-white/90 hover:bg-white border border-gray-200"
           aria-label="Fermer"
         >
           <X className="w-6 h-6 text-gray-900" />
         </button>
+
         <div className="grid md:grid-cols-2 gap-0">
+          {/* Zone images : scroll horizontal natif */}
           <div className="relative bg-gray-100">
-            <div className="relative h-[60vh] md:h-[80vh] overflow-hidden select-none">
+            <div
+              ref={scrollRef}
+              onScroll={onScroll}
+              className="flex overflow-x-auto overflow-y-hidden h-[60vh] md:h-[80vh] snap-x snap-mandatory scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              style={{ WebkitOverflowScrolling: 'touch' }}
+            >
               {images.map((img, index) => (
-                <img
+                <div
                   key={index}
-                  src={img}
-                  alt={`${product.name} - Image ${index + 1}`}
-                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
-                    index === currentImageIndex ? 'opacity-100 z-0' : 'opacity-0 z-0'
-                  }`}
-                  draggable={false}
-                />
+                  className="flex-shrink-0 w-full h-full snap-start snap-always"
+                >
+                  <img
+                    src={img}
+                    alt={`${product.name} - Image ${index + 1}`}
+                    className="w-full h-full object-cover select-none"
+                    draggable={false}
+                  />
+                </div>
               ))}
             </div>
+
+            {/* Contrôles : flèches + miniatures cliquables */}
             {images.length > 1 && (
-              <>
-                <button
-                  type="button"
+              <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between gap-2 p-3 bg-gradient-to-t from-black/40 to-transparent">
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={goPrev}
+                  onKeyDown={(e) => e.key === 'Enter' && goPrev()}
+                  className="flex-shrink-0 w-10 h-10 rounded-full bg-white/95 shadow flex items-center justify-center cursor-pointer hover:bg-white"
                   aria-label="Image précédente"
-                  onClick={handlePrev}
-                  style={{ touchAction: 'manipulation' }}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 z-[50] p-4 rounded-full bg-white/95 shadow-lg border border-gray-200 hover:bg-white hover:scale-105 transition-all duration-200 min-w-[48px] min-h-[48px] flex items-center justify-center cursor-pointer"
                 >
-                  <ChevronLeft className="w-7 h-7 text-gray-900" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Image suivante"
-                  onClick={handleNext}
-                  style={{ touchAction: 'manipulation' }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 z-[50] p-4 rounded-full bg-white/95 shadow-lg border border-gray-200 hover:bg-white hover:scale-105 transition-all duration-200 min-w-[48px] min-h-[48px] flex items-center justify-center cursor-pointer"
-                >
-                  <ChevronRight className="w-7 h-7 text-gray-900" />
-                </button>
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[50] flex gap-2">
-                  {images.map((_, index) => (
-                    <button
-                      type="button"
+                  <ChevronLeft className="w-6 h-6 text-gray-900" />
+                </span>
+
+                <div className="flex gap-1.5 flex-1 justify-center min-w-0 overflow-x-auto py-1">
+                  {images.map((img, index) => (
+                    <span
                       key={index}
-                      aria-label={`Image ${index + 1}`}
-                      onClick={handleDot(index)}
-                      style={{ touchAction: 'manipulation' }}
-                      className={`cursor-pointer rounded-full transition-all duration-200 flex-shrink-0 border-2 border-gray-300 hover:border-gray-900 ${
-                        index === currentImageIndex ? 'bg-gray-900 w-8 h-2' : 'bg-white/90 w-2 h-2'
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => goToSlide(index)}
+                      onKeyDown={(e) => e.key === 'Enter' && goToSlide(index)}
+                      className={`flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden border-2 cursor-pointer ${
+                        index === scrollIndex
+                          ? 'border-gray-900 ring-2 ring-gray-900 ring-offset-1'
+                          : 'border-transparent opacity-80 hover:opacity-100'
                       }`}
-                    />
+                      aria-label={`Image ${index + 1}`}
+                      aria-current={index === scrollIndex ? 'true' : undefined}
+                    >
+                      <img
+                        src={img}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        draggable={false}
+                      />
+                    </span>
                   ))}
                 </div>
-              </>
+
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={goNext}
+                  onKeyDown={(e) => e.key === 'Enter' && goNext()}
+                  className="flex-shrink-0 w-10 h-10 rounded-full bg-white/95 shadow flex items-center justify-center cursor-pointer hover:bg-white"
+                  aria-label="Image suivante"
+                >
+                  <ChevronRight className="w-6 h-6 text-gray-900" />
+                </span>
+              </div>
             )}
           </div>
+
           <div className="p-8 md:p-12 overflow-y-auto max-h-[90vh]">
             <div className="space-y-6">
               <div>
@@ -200,22 +231,22 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                 </div>
               </div>
               <div className="pt-4 space-y-3">
-                <button 
+                <button
+                  type="button"
                   onClick={() => {
-                    if (product) {
-                      addToCart(product.id, 1);
-                      onClose();
-                    }
+                    addToCart(product.id, 1);
+                    onClose();
                   }}
-                  className="w-full bg-gray-900 text-white py-4 rounded-full hover:bg-gray-800 transition-all duration-300 transform hover:scale-105"
+                  className="w-full bg-gray-900 text-white py-4 rounded-full hover:bg-gray-800 transition-colors"
                 >
                   Ajouter au panier
                 </button>
-                <button 
+                <button
+                  type="button"
                   onClick={handleFavoriteClick}
-                  className={`w-full border py-4 rounded-full transition-all duration-300 flex items-center justify-center gap-2 ${
-                    favorite 
-                      ? 'border-red-500 bg-red-50 text-red-600 hover:bg-red-100' 
+                  className={`w-full border py-4 rounded-full transition-colors flex items-center justify-center gap-2 ${
+                    favorite
+                      ? 'border-red-500 bg-red-50 text-red-600 hover:bg-red-100'
                       : 'border-gray-300 text-gray-900 hover:border-gray-900'
                   }`}
                 >

@@ -91,7 +91,7 @@ export default function BoutiquePage() {
                   key={cat.value}
                   type="button"
                   onClick={() => handleCategoryChange(cat.value as ProductCategory | 'all')}
-                  className={`px-3 py-2 rounded-full text-sm transition-colors ${
+                  className={`px-3 py-2 rounded-full text-sm transition-colors cursor-pointer ${
                     selectedCategory === cat.value 
                       ? 'bg-gray-900 text-white' 
                       : 'bg-[#f2dedd] text-gray-800 hover:bg-[#e8d0cf]'
@@ -109,7 +109,7 @@ export default function BoutiquePage() {
                   key={col}
                   type="button"
                   onClick={() => setSelectedCollection(col)}
-                  className={`px-3 py-2 rounded-full text-sm transition-colors ${
+                  className={`px-3 py-2 rounded-full text-sm transition-colors cursor-pointer ${
                     selectedCollection === col 
                       ? 'bg-gray-900 text-white' 
                       : 'bg-[#f8f4ef] text-gray-800 hover:bg-[#f0e8df]'
@@ -127,7 +127,7 @@ export default function BoutiquePage() {
                   key={color}
                   type="button"
                   onClick={() => setSelectedColor(color)}
-                  className={`px-3 py-2 rounded-full text-sm transition-colors ${
+                  className={`px-3 py-2 rounded-full text-sm transition-colors cursor-pointer ${
                     selectedColor === color 
                       ? 'bg-gray-900 text-white' 
                       : 'bg-[#e5f2eb] text-gray-800 hover:bg-[#d4e8dc]'
@@ -145,7 +145,7 @@ export default function BoutiquePage() {
                 setSelectedCollection('all');
                 setSelectedColor('all');
               }}
-              className="mt-4 px-4 py-2 rounded-full bg-gray-900 text-white text-sm hover:bg-gray-800 transition-colors w-fit"
+              className="mt-4 px-4 py-2 rounded-full bg-gray-900 text-white text-sm hover:bg-gray-800 transition-colors w-fit cursor-pointer"
             >
               Réinitialiser
             </button>

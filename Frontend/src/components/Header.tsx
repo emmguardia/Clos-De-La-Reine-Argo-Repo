@@ -183,7 +183,7 @@ export default function Header() {
             <Link to="/panier" className="relative p-2 hover:bg-gray-50 rounded-full transition-all duration-200 transform hover:scale-110">
               <ShoppingCart className="w-5 h-5 text-gray-600" />
               {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                   {cartCount}
                 </span>
               )}

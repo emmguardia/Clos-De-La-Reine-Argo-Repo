@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Lock, MapPin, CreditCard, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Lock, MapPin, CreditCard, ArrowRight, ArrowLeft, Package, CheckCircle, Truck } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useProducts } from '../hooks/useProducts';
@@ -364,53 +364,84 @@ export default function PaymentPage() {
   if (!order) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb] py-10 px-4">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb] py-12 px-4">
+      <div className="max-w-6xl mx-auto">
         <button
           onClick={() => navigate('/profil?tab=commandes')}
-          className="mb-6 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+          className="mb-8 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Retour aux commandes
         </button>
 
-        <h1 className="text-3xl font-light text-gray-900 mb-8">Paiement sécurisé</h1>
 
-        {/* Parcours utilisateur — barre d’étapes */}
         <div className="mb-12 bg-white/90 backdrop-blur-lg rounded-3xl shadow-xl shadow-black/10 p-8 border border-black/5">
-          <h2 className="text-xl font-light text-gray-900 mb-6 text-center">Adresse puis paiement</h2>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">
-              {step === 1 ? 'Adresse de livraison' : 'Paiement par carte'}
-            </span>
-            <span className="text-sm text-gray-500">Étape {step} sur 2 · {progressPercent} %</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-            <div
-              className="bg-gradient-to-r from-[#f2dedd] to-[#e5f2eb] h-full rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${progressPercent}%` }}
-            />
+          <h1 className="text-3xl font-light text-gray-900 mb-6 text-center">Comment se déroule votre commande ?</h1>
+          <div className="grid md:grid-cols-4 gap-6">
+            <div className="text-center">
+              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                <Package className="w-8 h-8 text-yellow-700" />
+              </div>
+              <h3 className="font-medium text-gray-900 mb-2">1. Envoi du bon de commande</h3>
+              <p className="text-sm text-gray-600">Vous envoyez votre commande avec vos informations</p>
+            </div>
+            <div className="text-center">
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-blue-700" />
+              </div>
+              <h3 className="font-medium text-gray-900 mb-2">2. Validation par Joanne</h3>
+              <p className="text-sm text-gray-600">Joanne vérifie qu'elle peut fabriquer votre commande</p>
+            </div>
+            <div className="text-center">
+              <div className="bg-purple-50 border-2 border-purple-200 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                <CreditCard className="w-8 h-8 text-purple-700" />
+              </div>
+              <h3 className="font-medium text-gray-900 mb-2">3. Paiement</h3>
+              <p className="text-sm text-gray-600">Une fois validée, vous procédez au paiement</p>
+            </div>
+            <div className="text-center">
+              <div className="bg-green-50 border-2 border-green-200 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                <Truck className="w-8 h-8 text-green-700" />
+              </div>
+              <h3 className="font-medium text-gray-900 mb-2">4. Fabrication & Envoi</h3>
+              <p className="text-sm text-gray-600">Votre produit est fabriqué puis expédié</p>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-[1fr_minmax(280px,380px)] gap-6">
-          <div className="min-w-0">
-            <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="grid md:grid-cols-3 gap-8">
+          <div className="md:col-span-2">
+            <div className="bg-white/90 backdrop-blur-lg rounded-3xl shadow-xl shadow-black/10 p-8 border border-black/5">
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-sm font-medium text-gray-700">Étape {step} sur 2</span>
+                  <span className="text-sm text-gray-500">{progressPercent}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-[#f2dedd] to-[#e5f2eb] h-full rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+              </div>
+
               {error && (
-                <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-sm">
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-sm">
                   {error}
                 </div>
               )}
 
+              <form onSubmit={handleSubmit} className="space-y-6">
               {step === 1 ? (
                 <>
-                  <div className="bg-white rounded-3xl shadow-lg border border-black/5 p-6 md:p-8">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center">
-                        <MapPin className="w-5 h-5 text-white" />
-                      </div>
-                      <h2 className="text-xl font-light text-gray-900">Adresse de livraison (France)</h2>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="bg-gray-900 rounded-full w-10 h-10 flex items-center justify-center">
+                      <MapPin className="w-5 h-5 text-white" />
                     </div>
+                    <h2 className="text-2xl font-light text-gray-900">Adresse de livraison (France)</h2>
+                  </div>
+
+                  <div className="space-y-4">
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -538,15 +569,14 @@ export default function PaymentPage() {
                 </>
               ) : (
                 <>
-                  <div className="bg-white rounded-3xl shadow-lg border border-black/5 p-6 md:p-8">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center">
-                        <CreditCard className="w-5 h-5 text-white" />
-                      </div>
-                      <h2 className="text-xl font-light text-gray-900">Paiement sécurisé (Stripe)</h2>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center">
+                      <CreditCard className="w-5 h-5 text-white" />
                     </div>
+                    <h2 className="text-2xl font-light text-gray-900">Paiement sécurisé (Stripe)</h2>
+                  </div>
 
-                    {effectiveStripeKey && clientSecret ? (
+                  {effectiveStripeKey && clientSecret ? (
                       <Elements
                         stripe={stripePromise}
                         options={{ clientSecret, appearance: { theme: 'stripe', variables: { borderRadius: '12px' } } }}
@@ -575,7 +605,6 @@ export default function PaymentPage() {
                         <p className="text-lg font-light text-gray-900">Total à payer : <strong>{order.total.toFixed(2)} €</strong></p>
                       </div>
                     )}
-                  </div>
 
                   {!(effectiveStripeKey && clientSecret) && (
                     <div className="flex gap-4 mt-6">
@@ -602,10 +631,11 @@ export default function PaymentPage() {
                 </>
               )}
             </form>
+            </div>
           </div>
 
-          <div>
-            <div className="bg-white rounded-3xl shadow-lg border border-black/5 p-6 sticky top-8">
+          <div className="flex-shrink-0 w-[320px]">
+            <div className="bg-white/90 backdrop-blur-lg rounded-3xl shadow-xl shadow-black/10 p-6 border border-black/5 sticky top-8">
               <h2 className="text-xl font-light text-gray-900 mb-4">Récapitulatif</h2>
               <div className="space-y-3 mb-4">
                 {order.items.map((item: OrderItem, idx: number) => (

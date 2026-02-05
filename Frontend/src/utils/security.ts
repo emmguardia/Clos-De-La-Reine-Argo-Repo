@@ -34,6 +34,16 @@ export function sanitizeText(text: string, maxLength: number = 1000): string {
     .slice(0, maxLength);
 }
 
+/** Pour champs description / texte libre : garde les espaces pendant la saisie (pas de trim à chaque frappe). */
+export function sanitizeDescription(text: string, maxLength: number = 1000): string {
+  if (typeof text !== 'string') {
+    return '';
+  }
+  return text
+    .replace(/[<>]/g, '')
+    .slice(0, maxLength);
+}
+
 export function validateToken(token: string | null): boolean {
   if (!token || typeof token !== 'string') {
     return false;

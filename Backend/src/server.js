@@ -4,6 +4,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
+import { sendNewContactNotificationEmail, sendContactConfirmationEmail } from './utils/email.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -184,7 +185,9 @@ app.post('/api/contact', contactLimiter, async (req, res) => {
       console.error('Contact email to admin failed:', adminResult.error);
       return res.status(500).json({ error: 'Erreur lors de l\'envoi du message. Réessayez plus tard.' });
     }
-    await sendContactConfirmationEmail(contactData.email, { from_name: contactData.from_name });
+    sendContactConfirmationEmail(contactData.email, { from_name: contactData.from_name }).catch((err) => {
+      console.error('Contact confirmation email failed (non-blocking):', err.message);
+    });
     res.json({ success: true });
   } catch (error) {
     console.error('Erreur contact:', error);

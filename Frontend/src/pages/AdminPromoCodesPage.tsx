@@ -280,13 +280,15 @@ export default function AdminPromoCodesPage() {
     <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb] py-12 px-4">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <Link
-            to="/admin"
-            className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-full hover:bg-gray-800 transition-colors mb-4"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Retour au panel
-          </Link>
+          <div className="w-fit">
+            <Link
+              to="/admin"
+              className="inline-flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-full hover:bg-gray-800 transition-colors mb-4"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Retour au panel
+            </Link>
+          </div>
           <h1 className="text-4xl font-light text-gray-900 mb-2">Gestion des codes promo</h1>
           <p className="text-gray-600">Créez et gérez vos codes de réduction</p>
         </div>

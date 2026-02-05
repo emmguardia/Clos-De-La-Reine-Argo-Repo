@@ -79,46 +79,50 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
         </button>
         <div className="grid md:grid-cols-2 gap-0">
           <div className="relative bg-gray-100">
-            <div className="relative h-[60vh] md:h-[80vh] overflow-hidden">
+            <div className="relative h-[60vh] md:h-[80vh] overflow-hidden select-none">
               {images.map((img, index) => (
                 <img
                   key={index}
                   src={img}
                   alt={`${product.name} - Image ${index + 1}`}
-                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
+                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 pointer-events-none ${
                     index === currentImageIndex ? 'opacity-100' : 'opacity-0'
                   }`}
+                  draggable={false}
                 />
               ))}
               {images.length > 1 && (
-                <>
+                <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-between">
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); prevImage(); }}
-                    className="absolute left-4 top-1/2 z-10 -translate-y-1/2 p-2 rounded-full bg-white/90 backdrop-blur-md hover:bg-white transition-all duration-200 transform hover:scale-110"
+                    aria-label="Image précédente"
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); prevImage(); }}
+                    className="pointer-events-auto cursor-pointer absolute left-2 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/95 shadow-lg border border-gray-200 hover:bg-white hover:scale-105 transition-all duration-200 min-w-[48px] min-h-[48px] flex items-center justify-center"
                   >
-                    <ChevronLeft className="w-6 h-6 text-gray-900" />
+                    <ChevronLeft className="w-7 h-7 text-gray-900" />
                   </button>
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); nextImage(); }}
-                    className="absolute right-4 top-1/2 z-10 -translate-y-1/2 p-2 rounded-full bg-white/90 backdrop-blur-md hover:bg-white transition-all duration-200 transform hover:scale-110"
+                    aria-label="Image suivante"
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); nextImage(); }}
+                    className="pointer-events-auto cursor-pointer absolute right-2 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/95 shadow-lg border border-gray-200 hover:bg-white hover:scale-105 transition-all duration-200 min-w-[48px] min-h-[48px] flex items-center justify-center"
                   >
-                    <ChevronRight className="w-6 h-6 text-gray-900" />
+                    <ChevronRight className="w-7 h-7 text-gray-900" />
                   </button>
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 pointer-events-auto">
                     {images.map((_, index) => (
-                        <button
+                      <button
                         type="button"
                         key={index}
-                        onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(index); }}
-                        className={`w-2 h-2 rounded-full transition-all duration-200 ${
-                          index === currentImageIndex ? 'bg-gray-900 w-8' : 'bg-white/60'
+                        aria-label={`Image ${index + 1}`}
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); setCurrentImageIndex(index); }}
+                        className={`cursor-pointer rounded-full transition-all duration-200 flex-shrink-0 border-2 border-gray-300 hover:border-gray-900 ${
+                          index === currentImageIndex ? 'bg-gray-900 w-8 h-2' : 'bg-white/90 w-2 h-2'
                         }`}
                       />
                     ))}
                   </div>
-                </>
+                </div>
               )}
             </div>
           </div>

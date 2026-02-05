@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useProducts } from '../hooks/useProducts';
 import type { Product } from '../data/products';
 import ImageUpload from '../components/ImageUpload';
-import { sanitizeInput, sanitizeText, safeJsonResponse } from '../utils/security';
+import { sanitizeInput, sanitizeText, sanitizeDescription, safeJsonResponse } from '../utils/security';
 
 interface GalleryItem {
   id: string;
@@ -216,7 +216,7 @@ export default function AdminPanelPage() {
     } else if (e.target.name === 'color' || e.target.name === 'sizes') {
       sanitizedValue = sanitizeInput(value).slice(0, 500);
     } else if (e.target.name === 'briefDescription') {
-      sanitizedValue = sanitizeText(value, 500);
+      sanitizedValue = sanitizeDescription(value, 500);
     } else if (e.target.name === 'image' || e.target.name === 'secondImage') {
       sanitizedValue = value.slice(0, 1000);
     }
@@ -257,7 +257,8 @@ export default function AdminPanelPage() {
       sizes: Array.isArray(product.sizes) ? product.sizes.join(', ') : (typeof product.sizes === 'string' ? product.sizes : ''),
       image: product.image,
       secondImage: product.secondImage || '',
-      isNew: product.isNew || false
+      isNew: product.isNew || false,
+      briefDescription: product.briefDescription || ''
     });
     setAdditionalImages(product.additionalImages || []);
     setShowAddForm(true);

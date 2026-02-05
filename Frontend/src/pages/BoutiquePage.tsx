@@ -75,7 +75,7 @@ export default function BoutiquePage() {
           />
           <div className="absolute inset-0 bg-gradient-to-r from-white via-white/85 to-white/60" />
         </div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-18 grid lg:grid-cols-[1fr_minmax(240px,280px)] gap-8 items-start">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-18 grid grid-cols-[1fr_minmax(200px,260px)] gap-6 items-start">
           <div className="space-y-4">
             <p className="uppercase tracking-[0.28em] text-xs text-gray-500">Boutique</p>
             <h1 className="text-4xl sm:text-5xl font-light text-gray-900 leading-tight">Notre boutique</h1>

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../hooks/useCart';
 import { useProducts } from '../hooks/useProducts';
-import { ArrowLeft, CheckCircle, Package, CreditCard, Truck, User, Heart, ArrowRight, Tag, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Package, CreditCard, Truck, User, Heart, ArrowRight } from 'lucide-react';
 import { dogBreeds } from '../data/dogBreeds';
 import { sanitizeInput, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJsonParse, safeJsonResponse } from '../utils/security';
 
@@ -34,18 +34,6 @@ export default function CheckoutPage() {
   });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [promoCode, setPromoCode] = useState('');
-  const [promoCodeError, setPromoCodeError] = useState('');
-  const [promoCodeSuccess, setPromoCodeSuccess] = useState('');
-  const [validatedPromoCode, setValidatedPromoCode] = useState<{
-    code: string;
-    name: string | null;
-    discountType: 'percentage' | 'fixed';
-    discountValue: number;
-    discountAmount: number;
-    finalTotal: number;
-  } | null>(null);
-  const [validatingPromoCode, setValidatingPromoCode] = useState(false);
 
   useEffect(() => {
     const token = getTokenFromStorage();
@@ -127,8 +115,7 @@ export default function CheckoutPage() {
     return product ? { ...product, quantity: item.quantity } : null;
   }).filter(Boolean) as Array<{ id: number; name: string; price: number; image: string; quantity: number }>;
 
-  const baseTotal = cartProducts.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const total = validatedPromoCode ? validatedPromoCode.finalTotal : baseTotal;
+  const total = cartProducts.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
   const canProceedToStep2 = formData.firstName && formData.lastName && formData.email && formData.phone;
 
@@ -136,60 +123,6 @@ export default function CheckoutPage() {
     if (canProceedToStep2) {
       setCurrentStep(2);
     }
-  };
-
-  const handleValidatePromoCode = async () => {
-    if (!promoCode.trim()) {
-      setPromoCodeError('Veuillez entrer un code promo');
-      return;
-    }
-
-    setValidatingPromoCode(true);
-    setPromoCodeError('');
-    setPromoCodeSuccess('');
-
-    try {
-      const token = getTokenFromStorage();
-      if (!token) {
-        setPromoCodeError('Session expirée');
-        return;
-      }
-
-      const response = await fetch(`${API_URL}/api/promo-codes/validate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          code: promoCode.trim().toUpperCase(),
-          total: baseTotal
-        })
-      });
-
-      const data = await safeJsonResponse(response, { error: 'Erreur' });
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Code promo invalide');
-      }
-
-      setValidatedPromoCode(data);
-      setPromoCodeSuccess(`Code promo appliqué : ${data.discountValue}${data.discountType === 'percentage' ? '%' : '€'} de réduction`);
-      setPromoCodeError('');
-    } catch (error) {
-      setPromoCodeError(error instanceof Error ? error.message : 'Erreur lors de la validation');
-      setValidatedPromoCode(null);
-      setPromoCodeSuccess('');
-    } finally {
-      setValidatingPromoCode(false);
-    }
-  };
-
-  const handleRemovePromoCode = () => {
-    setPromoCode('');
-    setValidatedPromoCode(null);
-    setPromoCodeError('');
-    setPromoCodeSuccess('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -220,8 +153,7 @@ export default function CheckoutPage() {
           shippingAddress: formData,
           dogInfo,
           notes: additionalInfo,
-          total,
-          promoCode: validatedPromoCode ? validatedPromoCode.code : null
+          total
         })
       });
 
@@ -528,57 +460,6 @@ export default function CheckoutPage() {
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Code promo (optionnel)</label>
-                        {validatedPromoCode ? (
-                          <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-2xl">
-                            <Tag className="w-5 h-5 text-green-700" />
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-green-900">
-                                {validatedPromoCode.name || validatedPromoCode.code}
-                              </p>
-                              <p className="text-xs text-green-700">
-                                Réduction de {validatedPromoCode.discountAmount.toFixed(2)}€
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={handleRemovePromoCode}
-                              className="p-1 hover:bg-green-100 rounded-lg transition-colors"
-                            >
-                              <X className="w-4 h-4 text-green-700" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                value={promoCode}
-                                onChange={(e) => setPromoCode(e.target.value.toUpperCase().trim())}
-                                placeholder="Entrez votre code promo"
-                                maxLength={50}
-                                className="flex-1 px-4 py-3 border border-gray-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent uppercase"
-                                style={{ textTransform: 'uppercase' }}
-                              />
-                              <button
-                                type="button"
-                                onClick={handleValidatePromoCode}
-                                disabled={validatingPromoCode || !promoCode.trim()}
-                                className="px-6 py-3 bg-gray-900 text-white rounded-2xl hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              >
-                                {validatingPromoCode ? '...' : 'Valider'}
-                              </button>
-                            </div>
-                            {promoCodeError && (
-                              <p className="text-sm text-red-600">{promoCodeError}</p>
-                            )}
-                            {promoCodeSuccess && (
-                              <p className="text-sm text-green-600">{promoCodeSuccess}</p>
-                            )}
-                          </div>
-                        )}
-                      </div>
                     </div>
 
                     <div className="flex gap-4 pt-6">
@@ -618,18 +499,6 @@ export default function CheckoutPage() {
                   </div>
                 ))}
               </div>
-              {validatedPromoCode && (
-                <div className="border-t border-gray-200 pt-4 space-y-2">
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>Sous-total</span>
-                    <span>{baseTotal.toFixed(2)}€</span>
-                  </div>
-                  <div className="flex justify-between text-sm text-green-600">
-                    <span>Réduction ({validatedPromoCode.code})</span>
-                    <span>-{validatedPromoCode.discountAmount.toFixed(2)}€</span>
-                  </div>
-                </div>
-              )}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex justify-between text-xl font-light text-gray-900">
                   <span>Total</span>

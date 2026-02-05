@@ -119,22 +119,24 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                 </button>
               )}
 
-              {/* Zone image centrale */}
-              <div className="flex-1 flex items-center justify-center px-4 py-6 min-h-[280px] md:min-h-[340px]">
-                {images[currentIndex] ? (
-                  <img
-                    key={`${product.id}-${currentIndex}`}
-                    src={images[currentIndex]}
-                    alt={`${product.name} - Image ${currentIndex + 1}`}
-                    className="max-w-full max-h-full w-auto h-auto object-contain select-none"
-                    style={{ maxHeight: 'min(50vh, 380px)' }}
-                    draggable={false}
-                  />
-                ) : (
-                  <div className="w-full h-48 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-500">
-                    Image non disponible
-                  </div>
-                )}
+              {/* Zone image centrale — cadre soigné */}
+              <div className="flex-1 flex items-center justify-center px-6 py-8 min-h-[280px] md:min-h-[340px]">
+                <div className="relative w-full max-w-md aspect-square flex items-center justify-center rounded-2xl bg-gray-50/80 p-6 shadow-inner border border-gray-100">
+                  {images[currentIndex] ? (
+                    <img
+                      key={`${product.id}-${currentIndex}`}
+                      src={images[currentIndex]}
+                      alt={`${product.name} - Image ${currentIndex + 1}`}
+                      className="max-w-full max-h-full w-auto h-auto object-contain select-none rounded-lg"
+                      style={{ maxHeight: 'min(45vh, 320px)' }}
+                      draggable={false}
+                    />
+                  ) : (
+                    <div className="w-full h-48 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 text-sm">
+                      Image non disponible
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Flèche droite — en bord droit de la colonne */}
@@ -152,14 +154,16 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
 
             {/* Dots galerie */}
             {images.length > 0 && (
-              <div className="flex justify-center gap-2 pb-5">
+              <div className="flex justify-center items-center gap-2.5 pb-6">
                 {images.map((_, index) => (
                   <button
                     key={index}
                     type="button"
                     onClick={() => setIndex(index)}
-                    className={`h-2 rounded-full transition-all duration-200 ${
-                      index === currentIndex ? 'w-6 bg-gray-900' : 'w-2 bg-gray-300 hover:bg-gray-400'
+                    className={`rounded-full transition-all duration-200 ${
+                      index === currentIndex
+                        ? 'w-7 h-2.5 bg-gray-900'
+                        : 'w-2.5 h-2.5 bg-gray-300 hover:bg-gray-400'
                     }`}
                     aria-label={`Image ${index + 1}`}
                   />

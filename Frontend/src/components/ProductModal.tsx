@@ -1,5 +1,5 @@
 import { X, ChevronLeft, ChevronRight, Heart } from 'lucide-react';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { Product } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
 import { useCart } from '../hooks/useCart';
@@ -26,7 +26,6 @@ function getImages(product: Product | null): string[] {
 
 export default function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const navTimeRef = useRef(0);
   const { isFavorite, addFavorite, removeFavorite } = useFavorites();
   const { addToCart } = useCart();
   const [favorite, setFavorite] = useState(false);
@@ -34,22 +33,10 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
   const images = useMemo(() => getImages(product), [product]);
 
   const goPrev = () => {
-    const now = Date.now();
-    if (now - navTimeRef.current < 300) return;
-    navTimeRef.current = now;
     setCurrentIndex((i) => (i <= 0 ? images.length - 1 : i - 1));
   };
   const goNext = () => {
-    const now = Date.now();
-    if (now - navTimeRef.current < 300) return;
-    navTimeRef.current = now;
     setCurrentIndex((i) => (i >= images.length - 1 ? 0 : i + 1));
-  };
-  const goTo = (index: number) => {
-    const now = Date.now();
-    if (now - navTimeRef.current < 300) return;
-    navTimeRef.current = now;
-    setCurrentIndex(index);
   };
 
   useEffect(() => {
@@ -149,11 +136,6 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                 <a
                   href="#prev"
                   role="button"
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    goPrev();
-                  }}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -171,15 +153,10 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                       href={`#img-${index}`}
                       key={index}
                       role="button"
-                      onPointerDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        goTo(index);
-                      }}
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        goTo(index);
+                        setCurrentIndex(index);
                       }}
                       className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 block transition-all select-none ${
                         index === currentIndex
@@ -202,11 +179,6 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                 <a
                   href="#next"
                   role="button"
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    goNext();
-                  }}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();

@@ -145,7 +145,7 @@ export default function BoutiquePage() {
                 setSelectedCollection('all');
                 setSelectedColor('all');
               }}
-              className="mt-4 w-full px-3 py-2 rounded-full bg-gray-200 text-gray-800 text-sm hover:bg-gray-300 transition-colors"
+              className="mt-4 px-4 py-2 rounded-full bg-gray-200 text-gray-800 text-sm hover:bg-gray-300 transition-colors w-fit"
             >
               Réinitialiser
             </button>

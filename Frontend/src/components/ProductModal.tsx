@@ -1,5 +1,5 @@
 import { X, ChevronLeft, ChevronRight, Heart } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import type { Product } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
 import { useCart } from '../hooks/useCart';
@@ -26,6 +26,7 @@ function getImages(product: Product | null): string[] {
 
 export default function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const navTimeRef = useRef(0);
   const { isFavorite, addFavorite, removeFavorite } = useFavorites();
   const { addToCart } = useCart();
   const [favorite, setFavorite] = useState(false);
@@ -33,10 +34,22 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
   const images = useMemo(() => getImages(product), [product]);
 
   const goPrev = () => {
+    const now = Date.now();
+    if (now - navTimeRef.current < 300) return;
+    navTimeRef.current = now;
     setCurrentIndex((i) => (i <= 0 ? images.length - 1 : i - 1));
   };
   const goNext = () => {
+    const now = Date.now();
+    if (now - navTimeRef.current < 300) return;
+    navTimeRef.current = now;
     setCurrentIndex((i) => (i >= images.length - 1 ? 0 : i + 1));
+  };
+  const goTo = (index: number) => {
+    const now = Date.now();
+    if (now - navTimeRef.current < 300) return;
+    navTimeRef.current = now;
+    setCurrentIndex(index);
   };
 
   useEffect(() => {
@@ -98,7 +111,10 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
         onClick={onClose}
         aria-hidden
       />
-      <div className="relative z-10 bg-white rounded-3xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
+      <div
+        className="relative z-10 bg-white rounded-3xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           type="button"
           onClick={onClose}
@@ -109,47 +125,63 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
         </button>
 
         <div className="grid md:grid-cols-2 gap-0">
-          {/* Zone image : une seule visible (opacité), pas de scroll */}
-          <div className="relative bg-gray-100 flex flex-col">
-            <div className="relative w-full h-[50vh] md:h-[75vh] flex-shrink-0 overflow-hidden">
-              {images.map((img, index) => (
-                <div
-                  key={index}
-                  className="absolute inset-0 w-full h-full transition-opacity duration-300"
-                  style={{
-                    opacity: index === currentIndex ? 1 : 0,
-                    pointerEvents: index === currentIndex ? 'auto' : 'none',
-                  }}
-                >
-                  <img
-                    src={img}
-                    alt={`${product.name} - Image ${index + 1}`}
-                    className="w-full h-full object-contain bg-gray-100"
-                    draggable={false}
-                  />
-                </div>
-              ))}
+          {/* Une seule image centrée */}
+          <div className="relative bg-gray-100 flex flex-col min-h-0">
+            <div className="flex flex-1 min-h-[45vh] md:min-h-[60vh] items-center justify-center p-4" style={{ minHeight: '280px' }}>
+              {images[currentIndex] && (
+                <img
+                  key={currentIndex}
+                  src={images[currentIndex]}
+                  alt={`${product.name} - Image ${currentIndex + 1}`}
+                  className="max-w-full max-h-[45vh] md:max-h-[60vh] w-auto h-auto object-contain"
+                  style={{ maxHeight: 'min(60vh, 480px)' }}
+                  draggable={false}
+                />
+              )}
             </div>
 
-            {/* Contrôles : flèches et miniatures */}
+            {/* Contrôles : liens (meilleure prise en charge clic) + miniatures */}
             {images.length > 1 && (
-              <div className="flex items-center justify-between gap-3 p-3 border-t border-gray-200 bg-white">
-                <button
-                  type="button"
-                  onClick={goPrev}
-                  className="flex-shrink-0 w-12 h-12 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center cursor-pointer transition-colors"
+              <div
+                className="relative z-20 flex items-center justify-between gap-3 p-3 border-t border-gray-200 bg-white flex-shrink-0"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <a
+                  href="#prev"
+                  role="button"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    goPrev();
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    goPrev();
+                  }}
+                  className="flex-shrink-0 w-14 h-14 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center cursor-pointer transition-colors no-underline text-gray-900 select-none"
                   aria-label="Image précédente"
                 >
-                  <ChevronLeft className="w-6 h-6 text-gray-900" />
-                </button>
+                  <ChevronLeft className="w-7 h-7" />
+                </a>
 
                 <div className="flex gap-2 flex-1 justify-center min-w-0 overflow-x-auto py-2">
                   {images.map((img, index) => (
-                    <button
-                      type="button"
+                    <a
+                      href={`#img-${index}`}
                       key={index}
-                      onClick={() => setCurrentIndex(index)}
-                      className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${
+                      role="button"
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        goTo(index);
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        goTo(index);
+                      }}
+                      className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 block transition-all select-none ${
                         index === currentIndex
                           ? 'border-gray-900 ring-2 ring-gray-400 ring-offset-1'
                           : 'border-gray-200 hover:border-gray-400'
@@ -160,21 +192,31 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                       <img
                         src={img}
                         alt=""
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover pointer-events-none"
                         draggable={false}
                       />
-                    </button>
+                    </a>
                   ))}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={goNext}
-                  className="flex-shrink-0 w-12 h-12 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center cursor-pointer transition-colors"
+                <a
+                  href="#next"
+                  role="button"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    goNext();
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    goNext();
+                  }}
+                  className="flex-shrink-0 w-14 h-14 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center cursor-pointer transition-colors no-underline text-gray-900 select-none"
                   aria-label="Image suivante"
                 >
-                  <ChevronRight className="w-6 h-6 text-gray-900" />
-                </button>
+                  <ChevronRight className="w-7 h-7" />
+                </a>
               </div>
             )}
           </div>

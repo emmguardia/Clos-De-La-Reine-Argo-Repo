@@ -393,7 +393,7 @@ export default function PaymentPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_minmax(320px,400px)] gap-8">
+        <div className="grid grid-cols-[1fr_minmax(280px,380px)] gap-6">
           <div className="min-w-0">
             <form onSubmit={handleSubmit} className="space-y-6">
               {error && (

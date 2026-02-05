@@ -97,55 +97,56 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
         aria-hidden
       />
 
-      {/* Carte produit — style Clos de la Reine */}
+      {/* Carte produit — fond blanc */}
       <div
-        className="relative z-10 w-full max-w-4xl rounded-3xl overflow-hidden shadow-[var(--shadow)] animate-slideDown"
-        style={{ background: 'var(--cream)', boxShadow: 'var(--shadow)' }}
+        className="relative z-10 w-full max-w-4xl rounded-3xl overflow-hidden bg-white shadow-[var(--shadow)] animate-slideDown"
+        style={{ boxShadow: 'var(--shadow)' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-col md:flex-row md:min-h-0">
-          {/* Gauche : image (mini carte) */}
-          <div
-            className="relative w-full md:w-[48%] md:min-h-[420px] flex flex-col"
-            style={{ background: 'var(--cream)' }}
-          >
-            <div className="relative flex-1 flex items-center justify-center p-6 md:p-8 min-h-[280px] md:min-h-[340px]">
-              {images[currentIndex] ? (
-                <img
-                  key={`${product.id}-${currentIndex}`}
-                  src={images[currentIndex]}
-                  alt={`${product.name} - Image ${currentIndex + 1}`}
-                  className="max-w-full max-h-full w-auto h-auto object-contain select-none"
-                  style={{ maxHeight: 'min(50vh, 380px)' }}
-                  draggable={false}
-                />
-              ) : (
-                <div className="w-full h-48 rounded-2xl flex items-center justify-center text-gray-500" style={{ background: 'var(--blush)' }}>
-                  Image non disponible
-                </div>
+          {/* Gauche : [flèche] image [flèche] + dots */}
+          <div className="relative w-full md:w-[48%] md:min-h-[420px] flex flex-col bg-white">
+            <div className="relative flex-1 flex items-center min-h-[280px] md:min-h-[340px]">
+              {/* Flèche gauche — en bord gauche de la colonne */}
+              {hasMultipleImages && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); goPrev(); }}
+                  className="flex-shrink-0 w-12 h-12 rounded-full bg-white border border-gray-200 shadow-md flex items-center justify-center transition-all hover:scale-105 hover:bg-gray-50 active:scale-95 z-10"
+                  aria-label="Image précédente"
+                >
+                  <ChevronLeft className="w-6 h-6 text-gray-800" />
+                </button>
               )}
 
+              {/* Zone image centrale */}
+              <div className="flex-1 flex items-center justify-center px-4 py-6 min-h-[280px] md:min-h-[340px]">
+                {images[currentIndex] ? (
+                  <img
+                    key={`${product.id}-${currentIndex}`}
+                    src={images[currentIndex]}
+                    alt={`${product.name} - Image ${currentIndex + 1}`}
+                    className="max-w-full max-h-full w-auto h-auto object-contain select-none"
+                    style={{ maxHeight: 'min(50vh, 380px)' }}
+                    draggable={false}
+                  />
+                ) : (
+                  <div className="w-full h-48 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-500">
+                    Image non disponible
+                  </div>
+                )}
+              </div>
+
+              {/* Flèche droite — en bord droit de la colonne */}
               {hasMultipleImages && (
-                <>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); goPrev(); }}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-                    style={{ background: 'var(--cream)', boxShadow: '0 2px 12px rgba(31,31,31,0.12)' }}
-                    aria-label="Image précédente"
-                  >
-                    <ChevronLeft className="w-6 h-6 text-[var(--ink)]" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); goNext(); }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-                    style={{ background: 'var(--cream)', boxShadow: '0 2px 12px rgba(31,31,31,0.12)' }}
-                    aria-label="Image suivante"
-                  >
-                    <ChevronRight className="w-6 h-6 text-[var(--ink)]" />
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); goNext(); }}
+                  className="flex-shrink-0 w-12 h-12 rounded-full bg-white border border-gray-200 shadow-md flex items-center justify-center transition-all hover:scale-105 hover:bg-gray-50 active:scale-95 z-10"
+                  aria-label="Image suivante"
+                >
+                  <ChevronRight className="w-6 h-6 text-gray-800" />
+                </button>
               )}
             </div>
 
@@ -158,7 +159,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                     type="button"
                     onClick={() => setIndex(index)}
                     className={`h-2 rounded-full transition-all duration-200 ${
-                      index === currentIndex ? 'w-6 bg-[var(--ink)]' : 'w-2 bg-[var(--ink)]/25 hover:bg-[var(--ink)]/40'
+                      index === currentIndex ? 'w-6 bg-gray-900' : 'w-2 bg-gray-300 hover:bg-gray-400'
                     }`}
                     aria-label={`Image ${index + 1}`}
                   />
@@ -168,12 +169,11 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
           </div>
 
           {/* Droite : infos */}
-          <div className="w-full md:w-[52%] p-6 md:p-8 flex flex-col justify-between overflow-y-auto">
+          <div className="w-full md:w-[52%] p-6 md:p-8 flex flex-col justify-between overflow-y-auto bg-white">
             <button
               type="button"
               onClick={onClose}
-              className="absolute top-4 right-4 z-20 p-2 rounded-full transition-colors hover:scale-105"
-              style={{ background: 'var(--cream)', color: 'var(--ink)' }}
+              className="absolute top-4 right-4 z-20 p-2 rounded-full bg-white border border-gray-200 shadow-sm transition-colors hover:scale-105 text-gray-800"
               aria-label="Fermer"
             >
               <X className="w-5 h-5" />
@@ -233,7 +233,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
               </div>
             </div>
 
-            <div className="mt-6 pt-6 space-y-3 border-t border-[var(--ink)]/10">
+            <div className="mt-6 pt-6 space-y-3 border-t border-gray-200">
               <button
                 type="button"
                 onClick={() => { addToCart(product.id, 1); onClose(); }}

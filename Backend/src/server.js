@@ -591,10 +591,11 @@ app.put('/api/products/:id', authenticateAdmin, async (req, res) => {
 
     if (name) updateData.name = name;
     if (price !== undefined) updateData.price = parseFloat(price);
-    if (image) updateData.image = image;
+    if (image !== undefined) updateData.image = image;
     if (secondImage !== undefined) updateData.secondImage = secondImage;
     if (additionalImages !== undefined) {
-      updateData.additionalImages = Array.isArray(additionalImages) ? additionalImages : [];
+      const list = Array.isArray(additionalImages) ? additionalImages : [];
+      updateData.additionalImages = list.filter((u) => typeof u === 'string' && u.trim().length > 0);
     }
     if (category) updateData.category = category;
     if (collection) updateData.collection = collection;

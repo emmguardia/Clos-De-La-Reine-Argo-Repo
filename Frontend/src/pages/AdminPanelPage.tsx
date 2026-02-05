@@ -101,8 +101,8 @@ export default function AdminPanelPage() {
           }
         }
       }
-    } catch {
-      console.error('Erreur:', error);
+    } catch (err) {
+      console.error('Erreur:', err);
     }
   };
 
@@ -119,8 +119,8 @@ export default function AdminPanelPage() {
           setGalleryItems(data);
         }
       }
-    } catch {
-      console.error('Erreur:', error);
+    } catch (err) {
+      console.error('Erreur:', err);
     } finally {
       setGalleryLoading(false);
     }
@@ -306,7 +306,7 @@ export default function AdminPanelPage() {
           sizes: formData.sizes,
           image: formData.image,
           secondImage: formData.secondImage || undefined,
-          additionalImages: additionalImages,
+          additionalImages: additionalImages.filter((url) => typeof url === 'string' && url.trim().length > 0),
           isNew: formData.isNew,
           briefDescription: formData.briefDescription || undefined
         }),

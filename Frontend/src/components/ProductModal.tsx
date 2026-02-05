@@ -46,16 +46,15 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
     };
   }, [isOpen]);
   if (!isOpen || !product) return null;
-  const images: string[] = [product.image];
-  if (product.secondImage) {
-    images.push(product.secondImage);
+  const valid = (url: string) => typeof url === 'string' && url.trim().length > 0;
+  const images: string[] = [];
+  if (valid(product.image)) images.push(product.image);
+  if (product.secondImage && valid(product.secondImage)) images.push(product.secondImage);
+  if (product.additionalImages?.length) {
+    const extra = product.additionalImages.filter(valid).slice(0, Math.max(0, 6 - images.length));
+    images.push(...extra);
   }
-  if (product.additionalImages) {
-    const remainingSlots = 4 - images.length;
-    if (remainingSlots > 0) {
-      images.push(...product.additionalImages.slice(0, remainingSlots));
-    }
-  }
+  if (images.length === 0) images.push(product.image || '');
   const nextImage = () => {
     setCurrentImageIndex((prev) => (prev + 1) % images.length);
   };
@@ -77,27 +76,27 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
         >
           <X className="w-6 h-6 text-gray-900" />
         </button>
-        <div className="grid md:grid-cols-2 gap-0">
-          <div className="relative bg-gray-100">
+        <div className="grid md:grid-cols-2 gap-0" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-gray-100" onClick={(e) => e.stopPropagation()}>
             <div className="relative h-[60vh] md:h-[80vh] overflow-hidden select-none">
               {images.map((img, index) => (
                 <img
                   key={index}
                   src={img}
                   alt={`${product.name} - Image ${index + 1}`}
-                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 pointer-events-none ${
-                    index === currentImageIndex ? 'opacity-100' : 'opacity-0'
+                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
+                    index === currentImageIndex ? 'opacity-100 z-0' : 'opacity-0 z-0'
                   }`}
                   draggable={false}
                 />
               ))}
               {images.length > 1 && (
-                <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-between">
+                <>
                   <button
                     type="button"
                     aria-label="Image précédente"
                     onClick={(e) => { e.stopPropagation(); e.preventDefault(); prevImage(); }}
-                    className="pointer-events-auto cursor-pointer absolute left-2 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/95 shadow-lg border border-gray-200 hover:bg-white hover:scale-105 transition-all duration-200 min-w-[48px] min-h-[48px] flex items-center justify-center"
+                    className="z-40 absolute left-2 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/95 shadow-lg border border-gray-200 hover:bg-white hover:scale-105 transition-all duration-200 min-w-[48px] min-h-[48px] flex items-center justify-center cursor-pointer"
                   >
                     <ChevronLeft className="w-7 h-7 text-gray-900" />
                   </button>
@@ -105,11 +104,11 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                     type="button"
                     aria-label="Image suivante"
                     onClick={(e) => { e.stopPropagation(); e.preventDefault(); nextImage(); }}
-                    className="pointer-events-auto cursor-pointer absolute right-2 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/95 shadow-lg border border-gray-200 hover:bg-white hover:scale-105 transition-all duration-200 min-w-[48px] min-h-[48px] flex items-center justify-center"
+                    className="z-40 absolute right-2 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/95 shadow-lg border border-gray-200 hover:bg-white hover:scale-105 transition-all duration-200 min-w-[48px] min-h-[48px] flex items-center justify-center cursor-pointer"
                   >
                     <ChevronRight className="w-7 h-7 text-gray-900" />
                   </button>
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 pointer-events-auto">
+                  <div className="z-40 absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
                     {images.map((_, index) => (
                       <button
                         type="button"
@@ -122,7 +121,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                       />
                     ))}
                   </div>
-                </div>
+                </>
               )}
             </div>
           </div>

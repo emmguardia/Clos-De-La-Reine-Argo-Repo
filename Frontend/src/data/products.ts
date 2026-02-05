@@ -21,7 +21,7 @@ const API_URL = import.meta.env.VITE_API_URL || '';
 
 export async function fetchProducts(): Promise<Product[]> {
   try {
-    const response = await fetch(`${API_URL}/api/products`);
+    const response = await fetch(`${API_URL}/api/products`, { cache: 'no-store' });
     if (!response.ok) {
       throw new Error('Erreur lors de la récupération des produits');
     }
@@ -40,8 +40,8 @@ export async function fetchProducts(): Promise<Product[]> {
       isNew: (p.isNew as boolean) || false,
       briefDescription: (p.briefDescription as string) || undefined
     }));
-  } catch {
-    console.error('Erreur lors du chargement des produits:', error);
+  } catch (err) {
+    console.error('Erreur lors du chargement des produits:', err);
     return [];
   }
 }

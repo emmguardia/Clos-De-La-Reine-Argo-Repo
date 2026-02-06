@@ -4,7 +4,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
-import { sendNewContactNotificationEmail, sendContactConfirmationEmail } from './utils/email.js';
+import { sendNewContactNotificationEmail, sendContactConfirmationEmail, sendOrderConfirmationEmail, sendNewOrderNotificationEmail } from './utils/email.js';
 import Stripe from 'stripe';
 
 const app = express();
@@ -2247,6 +2247,42 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
       );
       const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
       await updateStats(updatedOrder);
+
+      const user = await db.collection('users').findOne(
+        { _id: new ObjectId(updatedOrder.userId) },
+        { projection: { email: 1, firstName: 1, lastName: 1 } }
+      );
+      const products = await db.collection('products').find({}).toArray();
+      const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
+      const ship = updatedOrder.shippingAddress || {};
+      const itemsForEmail = (updatedOrder.items || []).map(item => ({
+        name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
+        quantity: item.quantity,
+        price: item.price
+      }));
+      const shippingCost = updatedOrder.shippingAmount != null ? Number(updatedOrder.shippingAmount) : 5.9;
+      const orderData = {
+        orderNumber: updatedOrder.orderNumber || updatedOrder._id.toString(),
+        firstName: ship.firstName || user?.firstName || '',
+        lastName: ship.lastName || user?.lastName || '',
+        items: itemsForEmail,
+        totalAmount: Number(updatedOrder.total),
+        shippingCost,
+        shippingAddress: ship,
+        customerName: [ship.firstName, ship.lastName].filter(Boolean).join(' ') || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Client'),
+        customerEmail: ship.email || user?.email || '',
+        customerPhone: ship.phone || '',
+        paymentMethod: 'Stripe'
+      };
+      try {
+        const clientEmail = ship.email || user?.email;
+        if (clientEmail) {
+          await sendOrderConfirmationEmail(clientEmail, orderData);
+        }
+        await sendNewOrderNotificationEmail(orderData);
+      } catch (emailErr) {
+        console.error('Erreur envoi emails après paiement:', emailErr);
+      }
       return res.json({ message: 'Paiement enregistré', status: 'paid' });
     }
 

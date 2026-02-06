@@ -14,6 +14,7 @@ import FavoritesPage from './pages/FavoritesPage';
 import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
 import PaymentPage from './pages/PaymentPage';
+import PaymentThankYouPage from './pages/PaymentThankYouPage';
 import CounterProposalPage from './pages/CounterProposalPage';
 import AdminPanelPage from './pages/AdminPanelPage';
 import OrdersAdminPage from './pages/OrdersAdminPage';
@@ -51,6 +52,7 @@ function App() {
         <Route path="/panier" element={<CartPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/commande/:orderId/paiement" element={<PaymentPage />} />
+        <Route path="/commande/:orderId/merci" element={<PaymentThankYouPage />} />
         <Route path="/commande/:orderId/:action" element={<CounterProposalPage />} />
         <Route path="/admin" element={<AdminPanelPage />} />
         <Route path="/admin/commandes" element={<OrdersAdminPage />} />

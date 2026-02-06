@@ -32,17 +32,17 @@ interface AdresseSuggestion {
 
 function StripePaymentForm({
   orderId,
-  clientSecret: _clientSecret,
+  clientSecret,
   shippingAddress,
   total,
-  onSuccess: _onSuccess,
+  onConfirmSuccess,
   onError
 }: {
   orderId: string;
   clientSecret: string;
   shippingAddress: Record<string, string>;
   total: number;
-  onSuccess: () => void;
+  onConfirmSuccess: (paymentIntentId: string) => Promise<void>;
   onError: (msg: string) => void;
 }) {
   const stripe = useStripe();
@@ -69,6 +69,11 @@ function StripePaymentForm({
       });
       if (error) {
         onError(error.message || 'Paiement refusé');
+        return;
+      }
+      const paymentIntentId = clientSecret.split('_secret_')[0];
+      if (paymentIntentId) {
+        await onConfirmSuccess(paymentIntentId);
       }
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Erreur paiement');
@@ -233,7 +238,7 @@ export default function PaymentPage() {
         });
         if (res.ok) {
           setSearchParams({});
-          navigate('/profil?tab=commandes');
+          navigate(`/commande/${orderId}/merci`);
         } else {
           const data = await safeJsonResponse(res, { error: '' });
           setError(data.error || 'Erreur lors de la confirmation du paiement.');
@@ -353,6 +358,22 @@ export default function PaymentPage() {
     const product = products.find(p => p.id === productId);
     return product ? product.name : `Produit #${productId}`;
   };
+
+  const handlePaymentConfirmed = useCallback(async (paymentIntentId: string) => {
+    const token = getTokenFromStorage();
+    if (!token || !orderId) return;
+    const res = await fetch(`${API_URL}/api/orders/${orderId}/payment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ paymentIntentId, shippingAddress })
+    });
+    if (res.ok) {
+      navigate(`/commande/${orderId}/merci`);
+    } else {
+      const data = await safeJsonResponse(res, { error: '' });
+      setError(data.error || 'Erreur lors de la confirmation du paiement.');
+    }
+  }, [orderId, shippingAddress, navigate]);
 
   const stripePromise = useMemo(
     () => (effectiveStripeKey ? loadStripe(effectiveStripeKey) : null),
@@ -602,7 +623,7 @@ export default function PaymentPage() {
                           clientSecret={clientSecret}
                           shippingAddress={shippingAddress}
                           total={order.total}
-                          onSuccess={() => navigate('/profil?tab=commandes')}
+                          onConfirmSuccess={handlePaymentConfirmed}
                           onError={setError}
                         />
                       </Elements>

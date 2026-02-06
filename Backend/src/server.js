@@ -2235,7 +2235,12 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
     if (paymentIntentId && stripe) {
       const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
       if (paymentIntent.status !== 'succeeded') {
-        return res.status(400).json({ error: 'Paiement non confirmé. Réessayez.' });
+        const msg = paymentIntent.status === 'requires_action'
+          ? 'Veuillez terminer l\'authentification (3D Secure) puis réessayer.'
+          : paymentIntent.status === 'requires_payment_method'
+            ? 'Paiement annulé ou refusé. Vérifiez votre carte et réessayez.'
+            : 'Paiement non finalisé. Veuillez retourner sur la page paiement et cliquer sur « Payer » en validant jusqu\'au bout.';
+        return res.status(400).json({ error: msg });
       }
       const updateData = {
         status: 'paid',

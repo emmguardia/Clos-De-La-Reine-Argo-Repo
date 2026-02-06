@@ -211,7 +211,6 @@ export default function PaymentPage() {
   }, []);
 
   const [paymentIntentFromHash, setPaymentIntentFromHash] = useState<string | null>(null);
-  const [paymentIntentIdFromStorage, setPaymentIntentIdFromStorage] = useState<string | null>(null);
   useEffect(() => {
     const hash = typeof window !== 'undefined' ? window.location.hash?.replace(/^#/, '') : '';
     if (hash) {
@@ -220,17 +219,18 @@ export default function PaymentPage() {
       if (pi) setPaymentIntentFromHash(pi);
     }
   }, []);
-  useEffect(() => {
-    if (!orderId) return;
+  const paymentIntentIdFromStorage = useMemo(() => {
+    if (!orderId || typeof window === 'undefined') return null;
     try {
       const raw = sessionStorage.getItem(`payment_client_secret_${orderId}`);
       if (raw && raw.includes('_secret_')) {
         const id = raw.split('_secret_')[0];
-        if (id && id.startsWith('pi_')) setPaymentIntentIdFromStorage(id);
+        if (id && id.startsWith('pi_')) return id;
       }
     } catch {
       /* ignore */
     }
+    return null;
   }, [orderId]);
   const paymentIntentId = searchParams.get('payment_intent') || paymentIntentFromHash || paymentIntentIdFromStorage;
   const paymentConfirmationDone = useRef(false);

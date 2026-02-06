@@ -211,6 +211,7 @@ export default function PaymentPage() {
   }, []);
 
   const [paymentIntentFromHash, setPaymentIntentFromHash] = useState<string | null>(null);
+  const [paymentIntentIdFromStorage, setPaymentIntentIdFromStorage] = useState<string | null>(null);
   useEffect(() => {
     const hash = typeof window !== 'undefined' ? window.location.hash?.replace(/^#/, '') : '';
     if (hash) {
@@ -219,13 +220,29 @@ export default function PaymentPage() {
       if (pi) setPaymentIntentFromHash(pi);
     }
   }, []);
-  const paymentIntentId = searchParams.get('payment_intent') || paymentIntentFromHash;
-  const _redirectStatus = searchParams.get('redirect_status');
+  useEffect(() => {
+    if (!orderId) return;
+    try {
+      const raw = sessionStorage.getItem(`payment_client_secret_${orderId}`);
+      if (raw && raw.includes('_secret_')) {
+        const id = raw.split('_secret_')[0];
+        if (id && id.startsWith('pi_')) setPaymentIntentIdFromStorage(id);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [orderId]);
+  const paymentIntentId = searchParams.get('payment_intent') || paymentIntentFromHash || paymentIntentIdFromStorage;
   const paymentConfirmationDone = useRef(false);
   useEffect(() => {
     if (!orderId || !paymentIntentId) return;
     if (paymentConfirmationDone.current) return;
     paymentConfirmationDone.current = true;
+    try {
+      sessionStorage.removeItem(`payment_client_secret_${orderId}`);
+    } catch {
+      /* ignore */
+    }
     const token = getTokenFromStorage();
     if (!token) {
       setError('Session expirée. Connectez-vous pour confirmer le paiement.');
@@ -275,7 +292,14 @@ export default function PaymentPage() {
         });
         if (!res.ok || cancelled) return;
         const data = await safeJsonResponse(res, {});
-        if (data.clientSecret) setClientSecret(data.clientSecret);
+        if (data.clientSecret) {
+          setClientSecret(data.clientSecret);
+          try {
+            sessionStorage.setItem(`payment_client_secret_${orderId}`, data.clientSecret);
+          } catch {
+            /* ignore */
+          }
+        }
       } catch {
         if (!cancelled) setError('Impossible de préparer le paiement.');
       }

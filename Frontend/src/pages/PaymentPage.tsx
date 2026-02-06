@@ -220,7 +220,7 @@ export default function PaymentPage() {
     }
   }, []);
   const paymentIntentId = searchParams.get('payment_intent') || paymentIntentFromHash;
-  const redirectStatus = searchParams.get('redirect_status');
+  const _redirectStatus = searchParams.get('redirect_status');
   const paymentConfirmationDone = useRef(false);
   useEffect(() => {
     if (!orderId || !paymentIntentId) return;
@@ -256,7 +256,7 @@ export default function PaymentPage() {
           const data = await safeJsonResponse(res, { error: '' });
           setError(data.error || 'Erreur lors de la confirmation du paiement.');
         }
-      } catch (err) {
+      } catch (_err) {
         setError('Impossible de joindre le serveur. Vérifiez votre connexion.');
       }
     })();

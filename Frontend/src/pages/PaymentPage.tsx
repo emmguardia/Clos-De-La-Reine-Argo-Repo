@@ -210,15 +210,27 @@ export default function PaymentPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const paymentIntentId = searchParams.get('payment_intent');
+  const [paymentIntentFromHash, setPaymentIntentFromHash] = useState<string | null>(null);
+  useEffect(() => {
+    const hash = typeof window !== 'undefined' ? window.location.hash?.replace(/^#/, '') : '';
+    if (hash) {
+      const params = new URLSearchParams(hash);
+      const pi = params.get('payment_intent');
+      if (pi) setPaymentIntentFromHash(pi);
+    }
+  }, []);
+  const paymentIntentId = searchParams.get('payment_intent') || paymentIntentFromHash;
   const redirectStatus = searchParams.get('redirect_status');
   const paymentConfirmationDone = useRef(false);
   useEffect(() => {
-    if (!orderId || !paymentIntentId || redirectStatus !== 'succeeded') return;
+    if (!orderId || !paymentIntentId) return;
     if (paymentConfirmationDone.current) return;
     paymentConfirmationDone.current = true;
     const token = getTokenFromStorage();
-    if (!token) return;
+    if (!token) {
+      setError('Session expirée. Connectez-vous pour confirmer le paiement.');
+      return;
+    }
     let ship: Record<string, string> = {};
     try {
       const saved = sessionStorage.getItem(`payment_address_${orderId}`);
@@ -231,7 +243,8 @@ export default function PaymentPage() {
     }
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/api/orders/${orderId}/payment`, {
+        const url = `${API_URL}/api/orders/${orderId}/payment`;
+        const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ paymentIntentId, shippingAddress: ship })
@@ -243,11 +256,11 @@ export default function PaymentPage() {
           const data = await safeJsonResponse(res, { error: '' });
           setError(data.error || 'Erreur lors de la confirmation du paiement.');
         }
-      } catch {
-        setError('Erreur lors de la confirmation du paiement.');
+      } catch (err) {
+        setError('Impossible de joindre le serveur. Vérifiez votre connexion.');
       }
     })();
-  }, [orderId, paymentIntentId, redirectStatus, navigate, setSearchParams]);
+  }, [orderId, paymentIntentId, navigate, setSearchParams]);
 
   useEffect(() => {
     if (step !== 2 || !orderId || !effectiveStripeKey || !order) return;
@@ -380,7 +393,7 @@ export default function PaymentPage() {
     [effectiveStripeKey]
   );
 
-  const isReturnFromStripe = Boolean(paymentIntentId && redirectStatus === 'succeeded');
+  const isReturnFromStripe = Boolean(paymentIntentId);
 
   if (loading) {
     return (

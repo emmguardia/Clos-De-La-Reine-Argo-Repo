@@ -2214,9 +2214,11 @@ app.post('/api/orders/:id/create-payment-intent', authenticateToken, async (req,
 });
 
 app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
+  const orderIdParam = req.params.id;
+  console.log('[PAYMENT] POST /api/orders/:id/payment', orderIdParam, 'paymentIntentId:', req.body?.paymentIntentId ? 'present' : 'absent');
   try {
     const { paymentMethod, cardNumber, expiryDate, cvv, cardholderName, shippingAddress, promoCode, paymentIntentId } = req.body;
-    const order = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+    const order = await db.collection('orders').findOne({ _id: new ObjectId(orderIdParam) });
     if (!order) {
       return res.status(404).json({ error: 'Commande non trouvée' });
     }

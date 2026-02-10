@@ -57,6 +57,7 @@ function StripePaymentForm({
     try {
       try {
         sessionStorage.setItem(`payment_address_${orderId}`, JSON.stringify(shippingAddress));
+        sessionStorage.setItem(`stripe_redirect_${orderId}`, Date.now().toString());
       } catch {
         /* ignore */
       }
@@ -234,8 +235,20 @@ export default function PaymentPage() {
   }, [orderId]);
   const paymentIntentIdFromUrl = searchParams.get('payment_intent') || paymentIntentFromHash;
   const paymentIntentId = paymentIntentIdFromUrl || paymentIntentIdFromStorage;
+  const hasReturnFromStripeFlag = useMemo(() => {
+    if (!orderId) return false;
+    try {
+      const raw = sessionStorage.getItem(`stripe_redirect_${orderId}`);
+      if (!raw) return false;
+      const t = parseInt(raw, 10);
+      if (Number.isNaN(t)) return false;
+      return Date.now() - t < 15 * 60 * 1000;
+    } catch {
+      return false;
+    }
+  }, [orderId]);
   const isReturnFromStripeRedirect = Boolean(
-    paymentIntentIdFromUrl || (paymentIntentIdFromStorage && !clientSecret)
+    paymentIntentIdFromUrl || (paymentIntentIdFromStorage && !clientSecret && hasReturnFromStripeFlag)
   );
   const paymentConfirmationDone = useRef(false);
   useEffect(() => {
@@ -251,6 +264,7 @@ export default function PaymentPage() {
     try {
       sessionStorage.setItem(sentKey, '1');
       sessionStorage.removeItem(`payment_client_secret_${orderId}`);
+      sessionStorage.removeItem(`stripe_redirect_${orderId}`);
     } catch {
       /* ignore */
     }

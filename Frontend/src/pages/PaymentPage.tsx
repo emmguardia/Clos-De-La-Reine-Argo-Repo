@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Lock, MapPin, CreditCard, ArrowRight, ArrowLeft, Package, CheckCircle, Truck } from 'lucide-react';
+import { Lock, MapPin, CreditCard, ArrowLeft, Package, CheckCircle, Truck } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useProducts } from '../hooks/useProducts';

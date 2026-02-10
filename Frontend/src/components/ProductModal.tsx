@@ -206,26 +206,31 @@ function ProductModalBody({
                     <button
                       type="button"
                       onClick={() => setGuideOpen((o) => !o)}
-                      className="text-xs font-medium cursor-pointer flex items-center gap-1.5 opacity-80 hover:opacity-100 w-full text-left"
+                      className="text-xs font-medium cursor-pointer flex items-center gap-1.5 opacity-80 hover:opacity-100 w-full text-left transition-opacity duration-200"
                       style={{ color: 'var(--ink)' }}
                     >
                       {guideOpen ? (
-                        <ChevronDown className="w-3.5 h-3.5 shrink-0 transition-transform duration-200" />
+                        <ChevronDown className="w-3.5 h-3.5 shrink-0 transition-transform duration-300 ease-out" />
                       ) : (
-                        <ChevronRight className="w-3.5 h-3.5 shrink-0 transition-transform duration-200" />
+                        <ChevronRight className="w-3.5 h-3.5 shrink-0 transition-transform duration-300 ease-out" />
                       )}
                       Guide des tailles (exemples de races)
                     </button>
-                    {guideOpen && (
-                      <div className="mt-2 pl-4 text-xs leading-relaxed border-l-2 space-y-1.5 py-2" style={{ borderColor: 'var(--blush)', color: 'var(--ink)' }}>
-                        <p><strong>XS</strong> · Chihuahua, Yorkshire Terrier, Spitz nain (Poméranien)</p>
-                        <p><strong>S</strong> · Teckel, Jack Russell Terrier, Carlin</p>
-                        <p><strong>M</strong> · Cocker Anglais, Beagle, Bouledogue Français</p>
-                        <p><strong>L</strong> · Golden Retriever, Labrador, Berger Australien</p>
-                        <p><strong>XL</strong> · Léonberg, Terre-Neuve, Saint-Bernard</p>
-                        <p className="mt-2 opacity-80 italic">Indicatif. Pour un choix parfait, privilégiez les mesures du chien (tour de cou, tour de poitrail).</p>
+                    <div
+                      className="grid transition-[grid-template-rows] duration-300 ease-out"
+                      style={{ gridTemplateRows: guideOpen ? '1fr' : '0fr' }}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="mt-2 pl-4 text-xs leading-relaxed border-l-2 space-y-1.5 py-2 transition-opacity duration-300" style={{ borderColor: 'var(--blush)', color: 'var(--ink)', opacity: guideOpen ? 1 : 0 }}>
+                          <p><strong>XS</strong> · Chihuahua, Yorkshire Terrier, Spitz nain (Poméranien)</p>
+                          <p><strong>S</strong> · Teckel, Jack Russell Terrier, Carlin</p>
+                          <p><strong>M</strong> · Cocker Anglais, Beagle, Bouledogue Français</p>
+                          <p><strong>L</strong> · Golden Retriever, Labrador, Berger Australien</p>
+                          <p><strong>XL</strong> · Léonberg, Terre-Neuve, Saint-Bernard</p>
+                          <p className="mt-2 opacity-80 italic">Indicatif. Pour un choix parfait, privilégiez les mesures du chien (tour de cou, tour de poitrail).</p>
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
               </div>

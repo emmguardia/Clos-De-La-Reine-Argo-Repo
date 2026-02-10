@@ -208,7 +208,15 @@ export default function AdminPanelPage() {
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const value = e.target.value;
     let sanitizedValue = value;
-    
+
+    if (e.target.name === 'category') {
+      const newSizes = value === 'harnais' ? 'XS, S, M, L, XL' : value === 'laisses' ? '1m, 1m20' : formData.sizes;
+      setFormData({ ...formData, category: value as 'colliers' | 'laisses' | 'harnais', sizes: newSizes });
+      setFormError('');
+      setFormSuccess('');
+      return;
+    }
+
     if (e.target.name === 'name') {
       sanitizedValue = value.replace(/[<>]/g, '').slice(0, 200);
     } else if (e.target.name === 'price') {
@@ -220,7 +228,7 @@ export default function AdminPanelPage() {
     } else if (e.target.name === 'image' || e.target.name === 'secondImage') {
       sanitizedValue = value.slice(0, 1000);
     }
-    
+
     setFormData({ ...formData, [e.target.name]: sanitizedValue });
     setFormError('');
     setFormSuccess('');
@@ -303,7 +311,7 @@ export default function AdminPanelPage() {
           category: formData.category,
           collection: formData.collection,
           color: formData.color.trim(),
-          sizes: formData.sizes.trim(),
+          sizes: formData.category === 'harnais' ? 'XS, S, M, L, XL' : formData.category === 'laisses' ? '1m, 1m20' : formData.sizes.trim(),
           image: formData.image,
           secondImage: formData.secondImage || undefined,
           additionalImages: additionalImages.filter((url) => typeof url === 'string' && url.trim().length > 0),
@@ -564,15 +572,27 @@ export default function AdminPanelPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Tailles (séparées par des virgules)</label>
-                      <input
-                        type="text"
-                        name="sizes"
-                        value={formData.sizes}
-                        onChange={handleFormChange}
-                        placeholder="Ex: 1m, 1m20"
-                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
-                      />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Tailles {formData.category === 'harnais' || formData.category === 'laisses' ? '(fixes pour cette catégorie)' : '(séparées par des virgules)'}
+                      </label>
+                      {formData.category === 'harnais' || formData.category === 'laisses' ? (
+                        <input
+                          type="text"
+                          name="sizes"
+                          value={formData.category === 'harnais' ? 'XS, S, M, L, XL' : '1m, 1m20'}
+                          readOnly
+                          className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          name="sizes"
+                          value={formData.sizes}
+                          onChange={handleFormChange}
+                          placeholder="Ex: S, M, L"
+                          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                        />
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Brève description (optionnel)</label>

@@ -210,11 +210,11 @@ export default function AdminPanelPage() {
     let sanitizedValue = value;
     
     if (e.target.name === 'name') {
-      sanitizedValue = sanitizeInput(value).slice(0, 200);
+      sanitizedValue = value.replace(/[<>]/g, '').slice(0, 200);
     } else if (e.target.name === 'price') {
       sanitizedValue = value.replace(/[^0-9.]/g, '').slice(0, 10);
     } else if (e.target.name === 'color' || e.target.name === 'sizes') {
-      sanitizedValue = sanitizeInput(value).slice(0, 500);
+      sanitizedValue = value.replace(/[<>]/g, '').slice(0, 500);
     } else if (e.target.name === 'briefDescription') {
       sanitizedValue = sanitizeDescription(value, 500);
     } else if (e.target.name === 'image' || e.target.name === 'secondImage') {
@@ -270,7 +270,7 @@ export default function AdminPanelPage() {
     setFormSuccess('');
     setFormLoading(true);
 
-    if (!formData.name || !formData.price || !formData.image) {
+    if (!formData.name.trim() || !formData.price || !formData.image) {
       setFormError('Nom, prix et image principale sont requis');
       setFormLoading(false);
       return;
@@ -298,12 +298,12 @@ export default function AdminPanelPage() {
           'Authorization': `Bearer ${adminToken}`
         },
         body: JSON.stringify({
-          name: formData.name,
+          name: formData.name.trim(),
           price: parseFloat(formData.price),
           category: formData.category,
           collection: formData.collection,
-          color: formData.color,
-          sizes: formData.sizes,
+          color: formData.color.trim(),
+          sizes: formData.sizes.trim(),
           image: formData.image,
           secondImage: formData.secondImage || undefined,
           additionalImages: additionalImages.filter((url) => typeof url === 'string' && url.trim().length > 0),

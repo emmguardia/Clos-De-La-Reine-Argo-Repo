@@ -197,6 +197,29 @@ export default function PaymentPage() {
   }, [fetchOrder]);
 
   useEffect(() => {
+    if (!orderId || loading) return;
+    try {
+      const saved = sessionStorage.getItem(`payment_address_${orderId}`);
+      if (saved) {
+        const ship = JSON.parse(saved) as Record<string, string>;
+        setShippingAddress({
+          firstName: ship.firstName ?? '',
+          lastName: ship.lastName ?? '',
+          email: ship.email ?? '',
+          phone: ship.phone ?? '',
+          address: ship.address ?? '',
+          city: ship.city ?? '',
+          postalCode: ship.postalCode ?? '',
+          country: ship.country ?? 'France'
+        });
+        setAddressQuery(ship.address ?? '');
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [orderId, loading]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -239,10 +262,16 @@ export default function PaymentPage() {
     if (!orderId) return false;
     try {
       const raw = sessionStorage.getItem(`stripe_redirect_${orderId}`);
-      if (!raw) return false;
-      const t = parseInt(raw, 10);
-      if (Number.isNaN(t)) return false;
-      return Date.now() - t < 15 * 60 * 1000;
+      if (raw) {
+        const t = parseInt(raw, 10);
+        if (!Number.isNaN(t) && Date.now() - t < 15 * 60 * 1000) return true;
+      }
+      const timeRaw = sessionStorage.getItem(`payment_client_secret_time_${orderId}`);
+      if (timeRaw) {
+        const t = parseInt(timeRaw, 10);
+        if (!Number.isNaN(t) && Date.now() - t < 5 * 60 * 1000) return true;
+      }
+      return false;
     } catch {
       return false;
     }
@@ -264,6 +293,7 @@ export default function PaymentPage() {
     try {
       sessionStorage.setItem(sentKey, '1');
       sessionStorage.removeItem(`payment_client_secret_${orderId}`);
+      sessionStorage.removeItem(`payment_client_secret_time_${orderId}`);
       sessionStorage.removeItem(`stripe_redirect_${orderId}`);
     } catch {
       /* ignore */
@@ -346,6 +376,7 @@ export default function PaymentPage() {
           setClientSecret(data.clientSecret);
           try {
             sessionStorage.setItem(`payment_client_secret_${orderId}`, data.clientSecret);
+            sessionStorage.setItem(`payment_client_secret_time_${orderId}`, Date.now().toString());
           } catch {
             /* ignore */
           }

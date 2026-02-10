@@ -200,6 +200,22 @@ function ProductModalBody({
                     </span>
                   ))}
                 </div>
+                {product.category === 'harnais' && (
+                  <details className="mt-3 group">
+                    <summary className="text-xs font-medium cursor-pointer list-none flex items-center gap-1 opacity-80 hover:opacity-100" style={{ color: 'var(--ink)' }}>
+                      <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+                      Guide des tailles (exemples de races)
+                    </summary>
+                    <div className="mt-2 pl-4 text-xs leading-relaxed border-l-2 space-y-1.5 py-2" style={{ borderColor: 'var(--blush)', color: 'var(--ink)' }}>
+                      <p><strong>XS</strong> · Chihuahua, Yorkshire Terrier, Spitz nain (Poméranien)</p>
+                      <p><strong>S</strong> · Teckel, Jack Russell Terrier, Carlin</p>
+                      <p><strong>M</strong> · Cocker Anglais, Beagle, Bouledogue Français</p>
+                      <p><strong>L</strong> · Golden Retriever, Labrador, Berger Australien</p>
+                      <p><strong>XL</strong> · Léonberg, Terre-Neuve, Saint-Bernard</p>
+                      <p className="mt-2 opacity-80 italic">Indicatif. Pour un choix parfait, privilégiez les mesures du chien (tour de cou, tour de poitrail).</p>
+                    </div>
+                  </details>
+                )}
               </div>
             </div>
 

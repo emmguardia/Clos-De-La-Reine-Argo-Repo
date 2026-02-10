@@ -236,9 +236,16 @@ export default function PaymentPage() {
   const paymentConfirmationDone = useRef(false);
   useEffect(() => {
     if (!orderId || !paymentIntentId) return;
+    const sentKey = `payment_confirm_sent_${orderId}_${paymentIntentId}`;
+    try {
+      if (sessionStorage.getItem(sentKey)) return;
+    } catch {
+      /* ignore */
+    }
     if (paymentConfirmationDone.current) return;
     paymentConfirmationDone.current = true;
     try {
+      sessionStorage.setItem(sentKey, '1');
       sessionStorage.removeItem(`payment_client_secret_${orderId}`);
     } catch {
       /* ignore */
@@ -267,11 +274,36 @@ export default function PaymentPage() {
           body: JSON.stringify({ paymentIntentId, shippingAddress: ship })
         });
         if (res.ok) {
+          try {
+            sessionStorage.removeItem(sentKey);
+          } catch {
+            /* ignore */
+          }
           setSearchParams({});
           navigate(`/commande/${orderId}/merci`);
         } else {
           const data = await safeJsonResponse(res, { error: '' });
-          setError(data.error || 'Erreur lors de la confirmation du paiement.');
+          const msg = data.error || 'Erreur lors de la confirmation du paiement.';
+          const isCardRefused = /annulé|refusé|refus/.test(msg);
+          setError(isCardRefused ? `${msg} Vous pouvez réessayer en cliquant sur « Payer » ci-dessous.` : msg);
+          setStep(2);
+          setShippingAddress({
+            firstName: ship.firstName ?? '',
+            lastName: ship.lastName ?? '',
+            email: ship.email ?? '',
+            phone: ship.phone ?? '',
+            address: ship.address ?? '',
+            city: ship.city ?? '',
+            postalCode: ship.postalCode ?? '',
+            country: ship.country ?? 'France'
+          });
+          setAddressQuery(ship.address ?? '');
+          setClientSecret(null);
+          try {
+            sessionStorage.setItem(`payment_address_${orderId}`, JSON.stringify(ship));
+          } catch {
+            /* ignore */
+          }
         }
       } catch (_err) {
         setError('Impossible de joindre le serveur. Vérifiez votre connexion.');

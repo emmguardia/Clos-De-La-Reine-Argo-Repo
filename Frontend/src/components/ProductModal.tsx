@@ -209,7 +209,7 @@ function ProductModalBody({
                       className="text-xs font-medium cursor-pointer flex items-center gap-1.5 opacity-80 hover:opacity-100 w-full text-left"
                       style={{ color: 'var(--ink)' }}
                     >
-                      <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${guideOpen ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${guideOpen ? 'rotate-180' : '-rotate-90'}`} />
                       Guide des tailles (exemples de races)
                     </button>
                     {guideOpen && (

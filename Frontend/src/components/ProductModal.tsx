@@ -210,7 +210,7 @@ function ProductModalBody({
                       style={{ color: 'var(--ink)' }}
                     >
                       {guideOpen ? (
-                        <ChevronDown className="w-3.5 h-3.5 shrink-0 transition-transform duration-200 rotate-180" />
+                        <ChevronDown className="w-3.5 h-3.5 shrink-0 transition-transform duration-200" />
                       ) : (
                         <ChevronRight className="w-3.5 h-3.5 shrink-0 transition-transform duration-200" />
                       )}

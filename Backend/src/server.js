@@ -2244,7 +2244,8 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
         }
         console.log('[PAYMENT] PaymentIntent status:', paymentIntent.status, 'id:', paymentIntentId);
         if (paymentIntent.status === 'succeeded') break;
-        if (paymentIntent.status !== 'processing' && paymentIntent.status !== 'requires_action') break;
+        const canRetry = ['processing', 'requires_action', 'requires_payment_method'].includes(paymentIntent.status);
+        if (!canRetry) break;
       }
       if (paymentIntent.status !== 'succeeded') {
         const msg = paymentIntent.status === 'requires_action'

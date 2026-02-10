@@ -36,7 +36,8 @@ function StripePaymentForm({
   shippingAddress,
   total,
   onConfirmSuccess,
-  onError
+  onError,
+  canPay = true
 }: {
   orderId: string;
   clientSecret: string;
@@ -44,6 +45,7 @@ function StripePaymentForm({
   total: number;
   onConfirmSuccess: (paymentIntentId: string) => Promise<void>;
   onError: (msg: string) => void;
+  canPay?: boolean;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -66,7 +68,8 @@ function StripePaymentForm({
         confirmParams: {
           return_url: `${window.location.origin}/commande/${orderId}/paiement`,
           receipt_email: shippingAddress.email || undefined
-        }
+        },
+        redirect: 'if_required'
       });
       if (error) {
         onError(error.message || 'Paiement refusé');
@@ -97,7 +100,7 @@ function StripePaymentForm({
         </button>
         <button
           type="submit"
-          disabled={submitting || !stripe}
+          disabled={submitting || !stripe || !canPay}
           className="flex-1 py-4 rounded-2xl bg-gray-900 text-white font-medium flex items-center justify-center gap-2 hover:bg-gray-800 disabled:opacity-50"
         >
           <Lock className="w-5 h-5" />
@@ -117,7 +120,6 @@ export default function PaymentPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [step, setStep] = useState<1 | 2>(1);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [addressQuery, setAddressQuery] = useState('');
   const [addressSuggestions, setAddressSuggestions] = useState<AdresseSuggestion[]>([]);
@@ -135,8 +137,7 @@ export default function PaymentPage() {
   const [stripePublishableKey, setStripePublishableKey] = useState<string | null>(null);
   const effectiveStripeKey = (stripePublishableKey !== null ? stripePublishableKey : STRIPE_PUBLISHABLE_KEY_ENV) || undefined;
 
-  const progressPercent = step === 1 ? 50 : 100;
-  const canGoToStep2 =
+  const canPay =
     shippingAddress.firstName &&
     shippingAddress.lastName &&
     shippingAddress.email &&
@@ -198,11 +199,12 @@ export default function PaymentPage() {
 
   useEffect(() => {
     if (!orderId || loading) return;
+    let next: Partial<Record<string, string>> = {};
     try {
       const saved = sessionStorage.getItem(`payment_address_${orderId}`);
       if (saved) {
         const ship = JSON.parse(saved) as Record<string, string>;
-        setShippingAddress({
+        next = {
           firstName: ship.firstName ?? '',
           lastName: ship.lastName ?? '',
           email: ship.email ?? '',
@@ -211,11 +213,36 @@ export default function PaymentPage() {
           city: ship.city ?? '',
           postalCode: ship.postalCode ?? '',
           country: ship.country ?? 'France'
-        });
-        setAddressQuery(ship.address ?? '');
+        };
       }
     } catch {
       /* ignore */
+    }
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr) as { firstName?: string; lastName?: string; email?: string };
+        if (user && typeof user === 'object') {
+          if (!next.firstName && user.firstName) next.firstName = String(user.firstName).slice(0, 50);
+          if (!next.lastName && user.lastName) next.lastName = String(user.lastName).slice(0, 50);
+          if (!next.email && user.email) next.email = String(user.email).slice(0, 255);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    if (Object.keys(next).length > 0) {
+      setShippingAddress((prev) => ({
+        firstName: next.firstName ?? prev.firstName,
+        lastName: next.lastName ?? prev.lastName,
+        email: next.email ?? prev.email,
+        phone: next.phone ?? prev.phone,
+        address: next.address ?? prev.address,
+        city: next.city ?? prev.city,
+        postalCode: next.postalCode ?? prev.postalCode,
+        country: next.country ?? prev.country
+      }));
+      if (next.address !== undefined) setAddressQuery(next.address);
     }
   }, [orderId, loading]);
 
@@ -308,7 +335,6 @@ export default function PaymentPage() {
       const saved = sessionStorage.getItem(`payment_address_${orderId}`);
       if (saved) {
         ship = JSON.parse(saved) as Record<string, string>;
-        sessionStorage.removeItem(`payment_address_${orderId}`);
       }
     } catch {
       /* ignore */
@@ -324,6 +350,7 @@ export default function PaymentPage() {
         if (res.ok) {
           try {
             sessionStorage.removeItem(sentKey);
+            sessionStorage.removeItem(`payment_address_${orderId}`);
           } catch {
             /* ignore */
           }
@@ -334,7 +361,6 @@ export default function PaymentPage() {
           const msg = data.error || 'Erreur lors de la confirmation du paiement.';
           const isCardRefused = /annulé|refusé|refus/.test(msg);
           setError(isCardRefused ? `${msg} Vous pouvez réessayer en cliquant sur « Payer » ci-dessous.` : msg);
-          setStep(2);
           setShippingAddress({
             firstName: ship.firstName ?? '',
             lastName: ship.lastName ?? '',
@@ -360,7 +386,7 @@ export default function PaymentPage() {
   }, [orderId, paymentIntentId, isReturnFromStripeRedirect, navigate, setSearchParams]);
 
   useEffect(() => {
-    if (step !== 2 || !orderId || !effectiveStripeKey || !order) return;
+    if (!orderId || !effectiveStripeKey || !order) return;
     const token = getTokenFromStorage();
     if (!token) return;
     let cancelled = false;
@@ -386,7 +412,7 @@ export default function PaymentPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [step, orderId, order, effectiveStripeKey]);
+  }, [orderId, order, effectiveStripeKey]);
 
   useEffect(() => {
     if (!addressQuery.trim() || addressQuery.length < 3) {
@@ -435,11 +461,7 @@ export default function PaymentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (step === 1) {
-      setStep(2);
-      return;
-    }
-    if (!effectiveStripeKey || clientSecret) return;
+    if (!effectiveStripeKey || !clientSecret) return;
     setError('');
     setSubmitting(true);
     try {
@@ -567,37 +589,21 @@ export default function PaymentPage() {
         <div className="grid md:grid-cols-3 gap-8">
           <div className="md:col-span-2">
             <div className="bg-white/90 backdrop-blur-lg rounded-3xl shadow-xl shadow-black/10 p-8 border border-black/5">
-              <div className="mb-8">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm font-medium text-gray-700">Étape {step} sur 2</span>
-                  <span className="text-sm text-gray-500">{progressPercent}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-gradient-to-r from-[#f2dedd] to-[#e5f2eb] h-full rounded-full transition-all duration-500 ease-out"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-              </div>
-
               {error && (
                 <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-sm">
                   {error}
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-              {step === 1 ? (
-                <>
+              <div className="space-y-6">
                   <div className="flex items-center gap-3 mb-6">
                     <div className="bg-gray-900 rounded-full w-10 h-10 flex items-center justify-center">
                       <MapPin className="w-5 h-5 text-white" />
                     </div>
-                    <h2 className="text-2xl font-light text-gray-900">Adresse de livraison (France)</h2>
+                    <h2 className="text-2xl font-light text-gray-900">Adresse de livraison et paiement</h2>
                   </div>
 
                   <div className="space-y-4">
-
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Prénom *</label>
@@ -713,18 +719,7 @@ export default function PaymentPage() {
                     </div>
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={!canGoToStep2}
-                    className="w-full py-4 rounded-2xl bg-gray-900 text-white font-medium flex items-center justify-center gap-2 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Continuer vers le paiement
-                    <ArrowRight className="w-5 h-5" />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center gap-3 mb-6">
+                  <div className="flex items-center gap-3 mb-6 pt-6 border-t border-gray-200">
                     <div className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center">
                       <CreditCard className="w-5 h-5 text-white" />
                     </div>
@@ -743,6 +738,7 @@ export default function PaymentPage() {
                           total={order.total}
                           onConfirmSuccess={handlePaymentConfirmed}
                           onError={setError}
+                          canPay={canPay}
                         />
                         {effectiveStripeKey.startsWith('pk_test_') && (
                           <p className="mt-4 text-xs text-gray-500">
@@ -750,7 +746,7 @@ export default function PaymentPage() {
                           </p>
                         )}
                       </Elements>
-                    ) : effectiveStripeKey && step === 2 ? (
+                    ) : effectiveStripeKey ? (
                       <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-8 text-center">
                         <p className="text-gray-600">Préparation du paiement...</p>
                       </div>
@@ -770,15 +766,16 @@ export default function PaymentPage() {
                     <div className="flex gap-4 mt-6">
                       <button
                         type="button"
-                        onClick={() => setStep(1)}
+                        onClick={() => navigate('/profil?tab=commandes')}
                         className="flex-1 py-4 rounded-2xl border border-gray-200 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
                       >
                         <ArrowLeft className="w-5 h-5" />
-                        Retour
+                        Retour aux commandes
                       </button>
                       {!effectiveStripeKey && (
                         <button
-                          type="submit"
+                          type="button"
+                          onClick={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
                           disabled={submitting}
                           className="flex-1 py-4 rounded-2xl bg-gray-900 text-white font-medium flex items-center justify-center gap-2 hover:bg-gray-800 disabled:opacity-50 transition-colors"
                         >
@@ -788,9 +785,7 @@ export default function PaymentPage() {
                       )}
                     </div>
                   )}
-                </>
-              )}
-            </form>
+              </div>
             </div>
           </div>
 
@@ -832,7 +827,7 @@ export default function PaymentPage() {
                   </div>
                 );
               })()}
-              {step === 2 && shippingAddress.address && (
+              {shippingAddress.address && (
                 <div className="border-t border-gray-200 pt-4 mb-4">
                   <h3 className="text-sm font-medium text-gray-900 mb-2">Livraison</h3>
                   <p className="text-sm text-gray-600">

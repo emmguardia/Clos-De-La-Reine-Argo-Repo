@@ -232,10 +232,14 @@ export default function PaymentPage() {
     }
     return null;
   }, [orderId]);
-  const paymentIntentId = searchParams.get('payment_intent') || paymentIntentFromHash || paymentIntentIdFromStorage;
+  const paymentIntentIdFromUrl = searchParams.get('payment_intent') || paymentIntentFromHash;
+  const paymentIntentId = paymentIntentIdFromUrl || paymentIntentIdFromStorage;
+  const isReturnFromStripeRedirect = Boolean(
+    paymentIntentIdFromUrl || (paymentIntentIdFromStorage && !clientSecret)
+  );
   const paymentConfirmationDone = useRef(false);
   useEffect(() => {
-    if (!orderId || !paymentIntentId) return;
+    if (!orderId || !paymentIntentId || !isReturnFromStripeRedirect) return;
     const sentKey = `payment_confirm_sent_${orderId}_${paymentIntentId}`;
     try {
       if (sessionStorage.getItem(sentKey)) return;
@@ -309,7 +313,7 @@ export default function PaymentPage() {
         setError('Impossible de joindre le serveur. Vérifiez votre connexion.');
       }
     })();
-  }, [orderId, paymentIntentId, navigate, setSearchParams]);
+  }, [orderId, paymentIntentId, isReturnFromStripeRedirect, navigate, setSearchParams]);
 
   useEffect(() => {
     if (step !== 2 || !orderId || !effectiveStripeKey || !order) return;
@@ -449,7 +453,7 @@ export default function PaymentPage() {
     [effectiveStripeKey]
   );
 
-  const isReturnFromStripe = Boolean(paymentIntentId);
+  const isReturnFromStripe = isReturnFromStripeRedirect;
 
   if (loading) {
     return (
@@ -695,6 +699,11 @@ export default function PaymentPage() {
                           onConfirmSuccess={handlePaymentConfirmed}
                           onError={setError}
                         />
+                        {effectiveStripeKey.startsWith('pk_test_') && (
+                          <p className="mt-4 text-xs text-gray-500">
+                            Carte de test Stripe : <strong>4242 4242 4242 4242</strong> — date d&apos;expiration future, CVC 3 chiffres, code postal quelconque. Si une fenêtre 3D Secure s&apos;ouvre, validez-la jusqu&apos;au bout.
+                          </p>
+                        )}
                       </Elements>
                     ) : effectiveStripeKey && step === 2 ? (
                       <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-8 text-center">

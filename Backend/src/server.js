@@ -2233,13 +2233,27 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
     }
 
     if (paymentIntentId && stripe) {
-      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      let paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      const maxRetries = 3;
+      const retryDelayMs = 2000;
+      for (let attempt = 0; attempt <= maxRetries && paymentIntent.status !== 'succeeded'; attempt++) {
+        if (attempt > 0) {
+          console.log('[PAYMENT] Retry', attempt, 'status was', paymentIntent.status);
+          await new Promise(r => setTimeout(r, retryDelayMs));
+          paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        }
+        console.log('[PAYMENT] PaymentIntent status:', paymentIntent.status, 'id:', paymentIntentId);
+        if (paymentIntent.status === 'succeeded') break;
+        if (paymentIntent.status !== 'processing' && paymentIntent.status !== 'requires_action') break;
+      }
       if (paymentIntent.status !== 'succeeded') {
         const msg = paymentIntent.status === 'requires_action'
           ? 'Veuillez terminer l\'authentification (3D Secure) puis réessayer.'
           : paymentIntent.status === 'requires_payment_method'
             ? 'Paiement annulé ou refusé. Vérifiez votre carte et réessayez.'
-            : 'Paiement non finalisé. Veuillez retourner sur la page paiement et cliquer sur « Payer » en validant jusqu\'au bout.';
+            : paymentIntent.status === 'processing'
+              ? 'Paiement en cours. Rechargez la page dans quelques secondes ou consultez vos commandes.'
+              : 'Paiement non finalisé. Veuillez retourner sur la page paiement et cliquer sur « Payer » en validant jusqu\'au bout.';
         return res.status(400).json({ error: msg });
       }
       const updateData = {

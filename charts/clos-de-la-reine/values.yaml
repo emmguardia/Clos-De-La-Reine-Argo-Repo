@@ -2,6 +2,10 @@
 # Les images sont mises à jour par la CI (workflow build-and-push)
 
 namespace: clos-de-la-reine
+
+# En prod on déploie le secret via SealedSecret (chiffré dans le repo)
+sealedSecret:
+  enabled: true
 nameOverride: ""
 fullnameOverride: ""
 

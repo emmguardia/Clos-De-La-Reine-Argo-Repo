@@ -1,8 +1,12 @@
 # Valeurs pour l'environnement Dev/Staging (namespace clos-de-la-reine-dev)
 # Utilisé par ArgoCD Application "Clos de la Reine - Dev" (branche develop)
 # Les images sont taguées :dev par la CI sur push develop
+# En dev on n'utilise pas SealedSecret : le secret clos-secrets est créé à la main (copie du secret prod).
 
 namespace: clos-de-la-reine-dev
+
+sealedSecret:
+  enabled: false
 
 imagePullSecrets:
   - name: ghcr-secret

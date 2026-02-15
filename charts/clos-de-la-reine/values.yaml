@@ -32,6 +32,7 @@ backend:
       cpu: "500m"
       memory: "512Mi"
   hpa:
+    enabled: true
     minReplicas: 1
     maxReplicas: 6
     cpuTarget: 70
@@ -51,6 +52,7 @@ frontend:
       cpu: "300m"
       memory: "256Mi"
   hpa:
+    enabled: true
     minReplicas: 1
     maxReplicas: 6
     cpuTarget: 70

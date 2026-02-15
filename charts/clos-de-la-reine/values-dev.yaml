@@ -14,7 +14,7 @@ imagePullSecrets:
 backend:
   image: ghcr.io/emmguardia/clos-de-la-reine-back:dev
   imagePullPolicy: Always
-  replicas: 1
+  replicas: 0  # Mettre à 1 quand tu bosses (kubectl scale ... --replicas=1)
   port: 3000
   env:
     PORT: "3000"
@@ -29,11 +29,13 @@ backend:
     limits:
       cpu: "300m"
       memory: "256Mi"
+  hpa:
+    enabled: false  # Pas d'HPA en dev (replicas gérés à la main)
 
 frontend:
   image: ghcr.io/emmguardia/clos-de-la-reine-front:dev
   imagePullPolicy: Always
-  replicas: 1
+  replicas: 0  # Mettre à 1 quand tu bosses
   serviceType: NodePort
   port: 80
   # Le front parle au back via le ConfigMap nginx (même namespace = clos-de-la-reine-dev)
@@ -44,3 +46,5 @@ frontend:
     limits:
       cpu: "300m"
       memory: "256Mi"
+  hpa:
+    enabled: false  # Pas d'HPA en dev

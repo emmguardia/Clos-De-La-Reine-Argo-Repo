@@ -1,3 +1,4 @@
+{{- if .Values.backend.hpa.enabled | default true }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -38,7 +39,9 @@ spec:
       - type: Percent
         value: 100
         periodSeconds: 30
+{{- end }}
 ---
+{{- if .Values.frontend.hpa.enabled | default true }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -79,3 +82,4 @@ spec:
       - type: Percent
         value: 100
         periodSeconds: 30
+{{- end }}

@@ -26,7 +26,7 @@ backend:
     PORT: "3000"
     NODE_ENV: production
     # URL du frontend (CORS + liens emails reset-password). À adapter si tu changes de domaine (ex: https://leclosdelareine.com)
-    FRONTEND_URL: "https://clos-de-la-reine.zenixweb.fr"
+    FRONTEND_URL: "https://leclosdelareine.com"
     JWT_PRIVATE_KEY_PATH: /app/secrets/jwt_private_key.pem
     EMAIL_SERVICE_URL: http://email-service.email-service.svc.cluster.local:8080
   secretName: clos-secrets

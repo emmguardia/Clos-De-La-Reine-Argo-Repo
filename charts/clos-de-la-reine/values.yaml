@@ -17,10 +17,16 @@ backend:
   image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:d9dfb5d0578b9ca739b38c4fe9ba5d59d5580d904d66472da16622d56816ee5c
   imagePullPolicy: IfNotPresent
   replicas: 1
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0  # Prod : zéro downtime
+      maxSurge: 1
   port: 3000
   env:
     PORT: "3000"
     NODE_ENV: production
+    # URL du frontend (CORS + liens emails reset-password). À adapter si tu changes de domaine (ex: https://leclosdelareine.com)
+    FRONTEND_URL: "https://clos-de-la-reine.zenixweb.fr"
     JWT_PRIVATE_KEY_PATH: /app/secrets/jwt_private_key.pem
     EMAIL_SERVICE_URL: http://email-service.email-service.svc.cluster.local:8080
   secretName: clos-secrets
@@ -42,6 +48,10 @@ backend:
 frontend:
   image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:8e8041405f476108e9ccab3b8ee8f011427802bb994236c9d698c8b178ed08ea
   replicas: 1
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0  # Prod : zéro downtime
+      maxSurge: 1
   serviceType: NodePort
   port: 80
   resources:

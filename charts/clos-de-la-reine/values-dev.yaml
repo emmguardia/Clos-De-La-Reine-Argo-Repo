@@ -1,0 +1,59 @@
+# Valeurs pour l'environnement Dev/Staging (namespace clos-de-la-reine-dev)
+# Utilisé par ArgoCD Application "Clos de la Reine - Dev" (branche develop)
+# Les images sont taguées :dev par la CI sur push develop
+# En dev on n'utilise pas SealedSecret : le secret clos-secrets est créé à la main (copie du secret prod).
+
+namespace: clos-de-la-reine-dev
+
+sealedSecret:
+  enabled: false
+
+imagePullSecrets:
+  - name: ghcr-secret
+
+backend:
+  image: ghcr.io/emmguardia/clos-de-la-reine-back:dev
+  imagePullPolicy: Always
+  replicas: 0  # Mettre à 1 quand tu bosses (kubectl scale ... --replicas=1)
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1  # Nécessaire pour replicas=0 (maxUnavailable: 0 bloque le scale 0→1)
+      maxSurge: 1
+  port: 3000
+  env:
+    PORT: "3000"
+    NODE_ENV: development
+    FRONTEND_URL: ""  # Vide = CORS '*' et fallback closdelareine.fr pour les emails
+    JWT_PRIVATE_KEY_PATH: /app/secrets/jwt_private_key.pem
+    EMAIL_SERVICE_URL: http://email-service.email-service.svc.cluster.local:8080
+  secretName: clos-secrets
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+  hpa:
+    enabled: false  # Pas d'HPA en dev (replicas gérés à la main)
+
+frontend:
+  image: ghcr.io/emmguardia/clos-de-la-reine-front:dev
+  imagePullPolicy: Always
+  replicas: 0  # Mettre à 1 quand tu bosses
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1  # Nécessaire pour replicas=0 (maxUnavailable: 0 bloque le scale 0→1)
+      maxSurge: 1
+  serviceType: NodePort
+  port: 80
+  # Le front parle au back via le ConfigMap nginx (même namespace = clos-de-la-reine-dev)
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+  hpa:
+    enabled: false  # Pas d'HPA en dev

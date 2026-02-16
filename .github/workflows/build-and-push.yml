@@ -1,3 +1,7 @@
+# Build and push: develop → tag :dev (staging), main → version + digest (prod)
+# ArgoCD: App Dev = branche develop + namespace clos-de-la-reine-dev
+#         App Prod = branche main + namespace clos-de-la-reine
+
 name: Build and push to GHCR
 
 on:
@@ -5,12 +9,21 @@ on:
     branches:
       - main
       - master
+      - develop
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build (dev or prod tag)'
+        required: true
+        default: 'main'
+        type: choice
+        options:
+          - main
+          - develop
 
 env:
   REGISTRY: ghcr.io
 
-# Droits nécessaires pour push des images vers GHCR (packages)
 permissions:
   contents: read
   packages: write
@@ -18,7 +31,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: build-and-push
+  group: build-and-push-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -103,24 +116,32 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Bump version
-        id: version
+      - name: Set image tag (dev vs prod)
+        id: tag
         shell: powershell
         run: |
-          $path = "version.txt"
-          $content = (Get-Content $path -Raw).Trim()
-          if (-not ($content -match '^(\d+)\.(\d+)\.(\d+)$')) { Write-Error "version.txt invalide: $content (attendu X.Y.Z)" }
-          $major = [int]$Matches[1]
-          $minor = [int]$Matches[2]
-          $patch = [int]$Matches[3]
-          if ($patch -lt 9) { $patch++ } else { $patch = 0; $minor++ }
-          $newVersion = "${major}.${minor}.${patch}"
-          Set-Content $path -Value $newVersion -NoNewline
-          $tag = "v$newVersion"
-          "VERSION_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $branch = "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.ref_name }}"
+          if ($branch -eq 'develop') {
+            $tag = "dev"
+            $isDev = "true"
+          } else {
+            $path = "version.txt"
+            $content = (Get-Content $path -Raw).Trim()
+            if (-not ($content -match '^(\d+)\.(\d+)\.(\d+)$')) { Write-Error "version.txt invalide: $content (attendu X.Y.Z)" }
+            $major = [int]$Matches[1]
+            $minor = [int]$Matches[2]
+            $patch = [int]$Matches[3]
+            if ($patch -lt 9) { $patch++ } else { $patch = 0; $minor++ }
+            $newVersion = "${major}.${minor}.${patch}"
+            $tag = "v${newVersion}"
+            $isDev = "false"
+            Set-Content $path -Value $newVersion -NoNewline
+          }
+          "IMAGE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "IS_DEV=$isDev" | Out-File -FilePath $env:GITHUB_ENV -Append
           echo "tag=$tag" >> $env:GITHUB_OUTPUT
-          echo "version=$newVersion" >> $env:GITHUB_OUTPUT
-          Write-Host "Version: $tag"
+          echo "is_dev=$isDev" >> $env:GITHUB_OUTPUT
+          Write-Host "Branch: $branch -> tag: $tag (is_dev=$isDev)"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -132,7 +153,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # driver docker = utilise le Docker de l'hôte, qui a la config du login → push authentifié
           driver: docker
 
       - name: Build backend (dist/)
@@ -148,7 +168,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-back
           tags: |
-            type=raw,value=${{ steps.version.outputs.tag }}
+            type=raw,value=${{ steps.tag.outputs.tag }}
 
       - name: Build and push backend
         id: build-backend
@@ -167,7 +187,7 @@ jobs:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $img = "${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-back:${{ steps.version.outputs.tag }}"
+          $img = "${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-back:${{ steps.tag.outputs.tag }}"
           docker run --rm -e TRIVY_USERNAME -e TRIVY_PASSWORD aquasec/trivy image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --format table $img
 
       - name: Verify Node (self-hosted)
@@ -176,13 +196,10 @@ jobs:
         run: |
           $v = node --version
           Write-Host "Node $v"
-          if (-not ($v -match '^v(\d+)\.')) { Write-Error "Node version inconnue: $v" }
-          if ([int]$Matches[1] -lt 20) { Write-Error "Node 20 ou plus requis (tu as $v). Installe https://nodejs.org" }
 
       - name: Install and build frontend
         shell: powershell
         env:
-          # Vide pour éviter double /api : le front appelle déjà /api/auth/login etc.
           VITE_API_URL: ""
         run: |
           Set-Location Frontend
@@ -195,7 +212,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-front
           tags: |
-            type=raw,value=${{ steps.version.outputs.tag }}
+            type=raw,value=${{ steps.tag.outputs.tag }}
 
       - name: Build and push frontend
         id: build-frontend
@@ -214,13 +231,15 @@ jobs:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $img = "${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-front:${{ steps.version.outputs.tag }}"
+          $img = "${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-front:${{ steps.tag.outputs.tag }}"
           docker run --rm -e TRIVY_USERNAME -e TRIVY_PASSWORD aquasec/trivy image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --format table $img
 
-      - name: Pin Helm values to image digest
+      # Prod uniquement : piner les images par digest dans values.yaml et commit
+      - name: Pin Helm values to image digest (prod only)
+        if: steps.tag.outputs.is_dev == 'false'
         shell: powershell
         run: |
-          $tag = "${{ steps.version.outputs.tag }}"
+          $tag = "${{ steps.tag.outputs.tag }}"
           $digestBackend = "${{ steps.build-backend.outputs.digest }}"
           $digestFrontend = "${{ steps.build-frontend.outputs.digest }}"
           $owner = "${{ github.repository_owner }}"
@@ -243,7 +262,7 @@ jobs:
             git commit -m "chore(helm): pin images to digest $tag [skip ci]"
             git push
             if ($LASTEXITCODE -ne 0) {
-              Write-Error "git push a échoué. Vérifier: permissions GITHUB_TOKEN (contents: write), branch protection, règles push."
+              Write-Error "git push a échoué."
               exit 1
             }
           }

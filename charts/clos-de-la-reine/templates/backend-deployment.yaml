@@ -11,8 +11,8 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+      maxSurge: {{ .Values.backend.strategy.rollingUpdate.maxSurge | default 1 }}
+      maxUnavailable: {{ .Values.backend.strategy.rollingUpdate.maxUnavailable | default 0 }}
   selector:
     matchLabels:
       app: clos-de-la-reine-back
@@ -48,6 +48,10 @@ spec:
           value: {{ .Values.backend.env.JWT_PRIVATE_KEY_PATH | quote }}
         - name: EMAIL_SERVICE_URL
           value: {{ .Values.backend.env.EMAIL_SERVICE_URL | quote }}
+        {{- if .Values.backend.env.FRONTEND_URL }}
+        - name: FRONTEND_URL
+          value: {{ .Values.backend.env.FRONTEND_URL | quote }}
+        {{- end }}
         - name: MONGODB_URI
           valueFrom:
             secretKeyRef:

@@ -48,6 +48,10 @@ spec:
           value: {{ .Values.backend.env.JWT_PRIVATE_KEY_PATH | quote }}
         - name: EMAIL_SERVICE_URL
           value: {{ .Values.backend.env.EMAIL_SERVICE_URL | quote }}
+        - name: INVOICE_SERVICE_URL
+          value: {{ .Values.backend.env.INVOICE_SERVICE_URL | quote }}
+        - name: JWT_INVOICE_PRIVATE_KEY_PATH
+          value: {{ .Values.backend.env.JWT_INVOICE_PRIVATE_KEY_PATH | quote }}
         {{- if .Values.backend.env.FRONTEND_URL }}
         - name: FRONTEND_URL
           value: {{ .Values.backend.env.FRONTEND_URL | quote }}
@@ -130,3 +134,5 @@ spec:
             path: jwt_private_key.pem
           - key: jwt-public-key
             path: jwt_public_key.pem
+          - key: jwt-invoice-private-key
+            path: jwt_invoice_private_key.pem

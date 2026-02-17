@@ -1136,20 +1136,21 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
     };
     
     const now = new Date();
-    const year = now.getFullYear().toString().slice(-2);
+    const year = now.getFullYear().toString();
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const monthPrefix = `${year}${month}-`;
+    const day = now.getDate().toString().padStart(2, '0');
+    const dayPrefix = `${year}${month}${day}`;
     
-    const monthOrders = await db.collection('orders').find({
-      orderNumber: { $regex: `^${monthPrefix}` }
+    const dayOrders = await db.collection('orders').find({
+      orderNumber: { $regex: `^${dayPrefix}` }
     }).toArray();
     
     let maxNumber = 0;
-    monthOrders.forEach(order => {
+    dayOrders.forEach(order => {
       if (order.orderNumber) {
-        const match = order.orderNumber.match(/^\d{4}-(\d+)$/);
+        const match = order.orderNumber.match(/^(\d{8})(\d+)$/);
         if (match) {
-          const num = parseInt(match[1], 10);
+          const num = parseInt(match[2], 10);
           if (num > maxNumber) {
             maxNumber = num;
           }
@@ -1158,7 +1159,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
     });
     
     const nextNumber = (maxNumber + 1).toString().padStart(4, '0');
-    const orderNumber = `${monthPrefix}${nextNumber}`;
+    const orderNumber = `${dayPrefix}${nextNumber}`;
     order.orderNumber = orderNumber;
     const result = await db.collection('orders').insertOne(order);
     await db.collection('carts').updateOne(

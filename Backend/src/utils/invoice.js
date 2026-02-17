@@ -56,7 +56,8 @@ export async function sendInvoiceEmail(clientEmail, orderData) {
     console.log('✅ [INVOICE] Facture envoyée à', clientEmail);
     return { success: true };
   } catch (e) {
-    console.error('❌ [INVOICE] Erreur:', e.message);
+    const cause = e.cause ? ` (cause: ${e.cause.code || e.cause.message || e.cause})` : '';
+    console.error('❌ [INVOICE] Erreur:', e.message, cause, '| URL:', INVOICE_SERVICE_URL);
     return { success: false, error: e.message };
   }
 }

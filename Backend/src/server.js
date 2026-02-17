@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import { sendNewContactNotificationEmail, sendContactConfirmationEmail, sendOrderConfirmationEmail, sendNewOrderNotificationEmail } from './utils/email.js';
+import { sendInvoiceEmail } from './utils/invoice.js';
 import Stripe from 'stripe';
 
 const app = express();
@@ -2300,6 +2301,7 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
         const clientEmail = ship.email || user?.email;
         if (clientEmail) {
           await sendOrderConfirmationEmail(clientEmail, orderData);
+          await sendInvoiceEmail(clientEmail, orderData);
         }
         await sendNewOrderNotificationEmail(orderData);
       } catch (emailErr) {

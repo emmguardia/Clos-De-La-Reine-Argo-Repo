@@ -197,15 +197,6 @@ jobs:
           $v = node --version
           Write-Host "Node $v"
 
-      - name: Install and build frontend
-        shell: powershell
-        env:
-          VITE_API_URL: ""
-        run: |
-          Set-Location Frontend
-          if (Test-Path package-lock.json) { npm ci } else { npm install }
-          npm run build
-
       - name: Extract metadata (frontend)
         id: meta-frontend
         uses: docker/metadata-action@v5

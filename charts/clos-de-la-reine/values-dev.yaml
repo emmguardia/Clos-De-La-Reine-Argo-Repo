@@ -12,7 +12,7 @@ imagePullSecrets:
   - name: ghcr-secret
 
 backend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-back:dev
+  image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:8c27e269e52b6995bffffb5dbe07d4a7bb58a444ad2fac331cfff7fc3376b5e2
   imagePullPolicy: Always
   replicas: 0  # Mettre à 1 quand tu bosses (kubectl scale ... --replicas=1)
   strategy:
@@ -38,7 +38,7 @@ backend:
     enabled: false  # Pas d'HPA en dev (replicas gérés à la main)
 
 frontend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-front:dev
+  image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:5f4aa250741646502877a01f4cce62b9655452099f81d090a71baa38994cd015
   imagePullPolicy: Always
   replicas: 0  # Mettre à 1 quand tu bosses
   strategy:

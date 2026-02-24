@@ -80,14 +80,13 @@ export default function HomePage() {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-28">
           <div className="max-w-3xl space-y-8">
             <p className="uppercase tracking-[0.35em] text-xs text-gray-500 animate-fadeIn">
-              Maison animale
+              Maison d'élégance canine
             </p>
             <h1 className="text-4xl sm:text-6xl font-light text-gray-900 leading-tight animate-fadeIn">
-              L'essentiel chic pour vos compagnons
+              Le raffinement pour compagnons d'exception.
             </h1>
             <p className="text-lg text-gray-600 max-w-2xl animate-fadeIn-delay-1">
-              Une sélection pointue mêlant confort, élégance et matières premium. Pensée pour
-              sublimer votre intérieur et le bien-être de ceux qui le partagent.
+              Une sélection exigeante alliant noblesse des matières et confort, dédiée à l'élégance de vos précieux animaux.
             </p>
             <div className="flex flex-wrap items-center gap-4 animate-fadeIn-delay-2">
               <a
@@ -265,16 +264,16 @@ export default function HomePage() {
           </div>
           <div className="space-y-4 order-1 md:order-2">
             <p className="uppercase tracking-[0.28em] text-xs text-gray-500">Fondatrice</p>
-            <h2 className="text-3xl font-light text-gray-900">Joanne, œil couture et esprit atelier</h2>
+            <h2 className="text-3xl font-light text-gray-900">Joanne — œil couture, esprit atelier</h2>
             <p className="text-gray-600 leading-relaxed">
-              Cavalière, maman et passionnée par la beauté sous toutes ses formes, Joanne crée des lignes raffinées pour chiens par exigence et sincérité.
-              Chaque pièce est pensée en petite série : matières choisies, détails soignés, confort et émotion au premier plan.
-              Ici, pas de production de masse : vos retours guident ses ajustements pour des accessoires justes, beaux et vrais.
+              Cavalière, maman et sensible à la beauté dans ses moindres détails, Joanne imagine des lignes raffinées dédiées à l'élégance canine, portées par l'exigence et la sincérité.
+              Chaque pièce est conçue en série limitée, avec des matières sélectionnées avec soin, des finitions précises et une attention constante au confort comme à l'émotion.
+              Le Clos de la Reine privilégie une production mesurée, guidée par l'écoute et les retours, afin de proposer des créations justes, durables et intemporelles.
             </p>
             <div className="flex flex-col gap-2 text-sm text-gray-700">
-              <span>• Sélection matières responsables</span>
-              <span>• Production courte, ajustée aux retours</span>
-              <span>• Collections intemporelles</span>
+              <span>— Sélection de matières responsables</span>
+              <span>— Production raisonnée, ajustée avec précision</span>
+              <span>— Collections pensées pour durer</span>
             </div>
           </div>
         </div>

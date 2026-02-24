@@ -17,13 +17,16 @@ RUN npm install -g tar@7.5.8 \
     && cp -r /usr/local/lib/node_modules/tar "$NPM_TAR" \
     && npm cache clean --force
 
-# Corriger CVE-2026-26996 (minimatch)
+# Corriger CVE-2026-26996 (minimatch): forcer 10.2.1 partout (npm et dépendances)
 RUN npm install -g minimatch@10.2.1 \
-    && G="/usr/local/lib/node_modules" \
-    && for d in $(find "$G" -name "minimatch" -type d 2>/dev/null); do \
-         [ "$d" = "$G/minimatch" ] && continue; \
-         rm -rf "$d" && mkdir -p "$(dirname "$d")" && cp -r "$G/minimatch" "$d"; \
-       done \
+    && NPM_MM="/usr/local/lib/node_modules/npm/node_modules/minimatch" \
+    && rm -rf "$NPM_MM" \
+    && mkdir -p "$(dirname "$NPM_MM")" \
+    && cp -r /usr/local/lib/node_modules/minimatch "$NPM_MM" \
+    && (find /usr/local/lib/node_modules -name "minimatch" -type d 2>/dev/null | while read d; do \
+         [ "$d" = "/usr/local/lib/node_modules/minimatch" ] && continue; \
+         rm -rf "$d" && cp -r /usr/local/lib/node_modules/minimatch "$d"; \
+       done) \
     && npm cache clean --force
 
 # Corriger CVE-2024-21538 (cross-spawn) et CVE-2025-64756 (glob)
@@ -45,6 +48,12 @@ COPY dist/package*.json ./
 
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit --no-fund --loglevel=error 2>&1 | grep -v "npm notice" || true; else npm install --omit=dev --no-audit --no-fund --loglevel=error 2>&1 | grep -v "npm notice" || true; fi \
     && npm cache clean --force 2>/dev/null || true
+
+# Re-patch minimatch après npm ci (remplace toute version < 10.2.1)
+RUN for d in $(find /usr/local/lib/node_modules /app/node_modules -name "minimatch" -type d 2>/dev/null); do \
+      [ "$d" = "/usr/local/lib/node_modules/minimatch" ] && continue; \
+      rm -rf "$d" && cp -r /usr/local/lib/node_modules/minimatch "$d"; \
+    done
 
 COPY dist/src/ ./src/
 

@@ -9,12 +9,21 @@ RUN apk update && apk upgrade --no-cache
 
 WORKDIR /app
 
-# Corriger CVE-2026-24842, CVE-2026-23950, CVE-2026-23745 (tar): forcer 7.5.7 partout
-RUN npm install -g tar@7.5.7 \
+# Corriger CVE-2026-26960 (tar): forcer 7.5.8 partout
+RUN npm install -g tar@7.5.8 \
     && NPM_TAR="/usr/local/lib/node_modules/npm/node_modules/tar" \
     && rm -rf "$NPM_TAR" \
     && mkdir -p "$(dirname "$NPM_TAR")" \
     && cp -r /usr/local/lib/node_modules/tar "$NPM_TAR" \
+    && npm cache clean --force
+
+# Corriger CVE-2026-26996 (minimatch)
+RUN npm install -g minimatch@10.2.1 \
+    && G="/usr/local/lib/node_modules" \
+    && for d in $(find "$G" -name "minimatch" -type d 2>/dev/null); do \
+         [ "$d" = "$G/minimatch" ] && continue; \
+         rm -rf "$d" && mkdir -p "$(dirname "$d")" && cp -r "$G/minimatch" "$d"; \
+       done \
     && npm cache clean --force
 
 # Corriger CVE-2024-21538 (cross-spawn) et CVE-2025-64756 (glob)

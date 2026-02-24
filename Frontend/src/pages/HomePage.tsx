@@ -271,9 +271,9 @@ export default function HomePage() {
               Le Clos de la Reine privilégie une production mesurée, guidée par l'écoute et les retours, afin de proposer des créations justes, durables et intemporelles.
             </p>
             <div className="flex flex-col gap-2 text-sm text-gray-700">
-              <span>— Sélection de matières responsables</span>
-              <span>— Production raisonnée, ajustée avec précision</span>
-              <span>— Collections pensées pour durer</span>
+              <span>• Sélection de matières responsables</span>
+              <span>• Production raisonnée, ajustée avec précision</span>
+              <span>• Collections pensées pour durer</span>
             </div>
           </div>
         </div>

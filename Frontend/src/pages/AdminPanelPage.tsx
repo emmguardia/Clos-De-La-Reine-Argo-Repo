@@ -1,4 +1,4 @@
-import { Package, FolderOpen, BarChart3, Image as ImageIcon, Plus, Edit, Trash2, Search, X, Save, ShoppingBag, HelpCircle, LogOut, Tag } from 'lucide-react';
+import { Package, FolderOpen, BarChart3, Image as ImageIcon, Plus, Edit, Trash2, Search, X, Save, ShoppingBag, HelpCircle, LogOut, Tag, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useProducts } from '../hooks/useProducts';
@@ -51,6 +51,13 @@ export default function AdminPanelPage() {
   const [currentPagePro, setCurrentPagePro] = useState(1);
   const [currentPageClient, setCurrentPageClient] = useState(1);
   const itemsPerPage = 6;
+  const [settings, setSettings] = useState<{ surmesurecollier: string; surmesureharnais: string; laisse1m20: string }>({
+    surmesurecollier: '',
+    surmesureharnais: '',
+    laisse1m20: ''
+  });
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSuccess, setSettingsSuccess] = useState('');
 
   useEffect(() => {
     const adminToken = localStorage.getItem('adminToken');
@@ -82,9 +89,56 @@ export default function AdminPanelPage() {
 
       fetchCollections();
       fetchGalleryItems();
+      fetchSettings();
     } catch {
       localStorage.removeItem('adminToken');
       window.location.href = '/admin/login';
+    }
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/settings`);
+      if (response.ok) {
+        const data = await safeJsonResponse(response, {});
+        const d = data as { surmesurecollier?: number | null; surmesureharnais?: number | null; laisse1m20?: number | null };
+        setSettings({
+          surmesurecollier: d.surmesurecollier != null ? String(d.surmesurecollier).replace('.', ',') : '',
+          surmesureharnais: d.surmesureharnais != null ? String(d.surmesureharnais).replace('.', ',') : '',
+          laisse1m20: d.laisse1m20 != null ? String(d.laisse1m20).replace('.', ',') : ''
+        });
+      }
+    } catch (err) {
+      console.error('Erreur settings:', err);
+    }
+  };
+
+  const saveSettings = async () => {
+    const adminToken = localStorage.getItem('adminToken');
+    if (!adminToken) return;
+    setSettingsLoading(true);
+    setSettingsSuccess('');
+    try {
+      const response = await fetch(`${API_URL}/api/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`
+        },
+        body: JSON.stringify({
+          surmesurecollier: settings.surmesurecollier === '' ? null : settings.surmesurecollier.replace(',', '.'),
+          surmesureharnais: settings.surmesureharnais === '' ? null : settings.surmesureharnais.replace(',', '.'),
+          laisse1m20: settings.laisse1m20 === '' ? null : settings.laisse1m20.replace(',', '.')
+        })
+      });
+      if (response.ok) {
+        setSettingsSuccess('Paramètres enregistrés');
+        setTimeout(() => setSettingsSuccess(''), 3000);
+      }
+    } catch (err) {
+      console.error('Erreur sauvegarde settings:', err);
+    } finally {
+      setSettingsLoading(false);
     }
   };
 
@@ -210,7 +264,7 @@ export default function AdminPanelPage() {
     let sanitizedValue = value;
 
     if (e.target.name === 'category') {
-      const newSizes = value === 'harnais' ? 'XS, S, M, L, XL' : value === 'laisses' ? '1m, 1m20' : formData.sizes;
+      const newSizes = value === 'harnais' || value === 'colliers' ? 'XS, S, M, L, XL' : value === 'laisses' ? '1m, 1m20' : formData.sizes;
       setFormData({ ...formData, category: value as 'colliers' | 'laisses' | 'harnais', sizes: newSizes });
       setFormError('');
       setFormSuccess('');
@@ -311,7 +365,7 @@ export default function AdminPanelPage() {
           category: formData.category,
           collection: formData.collection,
           color: formData.color.trim(),
-          sizes: formData.category === 'harnais' ? 'XS, S, M, L, XL' : formData.category === 'laisses' ? '1m, 1m20' : formData.sizes.trim(),
+          sizes: formData.category === 'harnais' || formData.category === 'colliers' ? 'XS, S, M, L, XL' : formData.category === 'laisses' ? '1m, 1m20' : formData.sizes.trim(),
           image: formData.image,
           secondImage: formData.secondImage || undefined,
           additionalImages: additionalImages.filter((url) => typeof url === 'string' && url.trim().length > 0),
@@ -573,13 +627,13 @@ export default function AdminPanelPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Tailles {formData.category === 'harnais' || formData.category === 'laisses' ? '(fixes pour cette catégorie)' : '(séparées par des virgules)'}
+                        Tailles {formData.category === 'harnais' || formData.category === 'colliers' || formData.category === 'laisses' ? '(fixes pour cette catégorie)' : '(séparées par des virgules)'}
                       </label>
-                      {formData.category === 'harnais' || formData.category === 'laisses' ? (
+                      {formData.category === 'harnais' || formData.category === 'colliers' || formData.category === 'laisses' ? (
                         <input
                           type="text"
                           name="sizes"
-                          value={formData.category === 'harnais' ? 'XS, S, M, L, XL' : '1m, 1m20'}
+                          value={formData.category === 'harnais' || formData.category === 'colliers' ? 'XS, S, M, L, XL' : '1m, 1m20'}
                           readOnly
                           className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
                         />
@@ -1031,6 +1085,58 @@ export default function AdminPanelPage() {
                     )}
                   </>
                 )}
+              </div>
+            </section>
+            <section className="bg-white rounded-2xl p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-6">
+                <Settings className="w-6 h-6 text-gray-600" />
+                <h2 className="text-2xl font-light text-gray-900">Paramètres de prix</h2>
+              </div>
+              {settingsSuccess && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-xl text-sm">{settingsSuccess}</div>
+              )}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sur mesure collier (€)</label>
+                  <input
+                    type="text"
+                    value={settings.surmesurecollier}
+                    onChange={(e) => setSettings({ ...settings, surmesurecollier: e.target.value.replace(/[^0-9,.]/g, '') })}
+                    placeholder="Ex: 5,50 ou vide"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Supplément appliqué quand le client coche « sur mesure » pour un collier. Laisser vide = 0.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sur mesure harnais (€)</label>
+                  <input
+                    type="text"
+                    value={settings.surmesureharnais}
+                    onChange={(e) => setSettings({ ...settings, surmesureharnais: e.target.value.replace(/[^0-9,.]/g, '') })}
+                    placeholder="Ex: 5,50 ou vide"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Supplément appliqué quand le client coche « sur mesure » pour un harnais. Laisser vide = 0.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Laisse 1,20 m (€)</label>
+                  <input
+                    type="text"
+                    value={settings.laisse1m20}
+                    onChange={(e) => setSettings({ ...settings, laisse1m20: e.target.value.replace(/[^0-9,.]/g, '') })}
+                    placeholder="Ex: 3 ou vide"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Supplément pour la laisse 1,20 m par rapport à 1 m. Laisser vide = 0.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={saveSettings}
+                  disabled={settingsLoading}
+                  className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {settingsLoading ? 'Enregistrement...' : <><Save className="w-4 h-4" /> Enregistrer</>}
+                </button>
               </div>
             </section>
           </div>

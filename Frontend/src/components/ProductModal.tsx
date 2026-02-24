@@ -37,7 +37,7 @@ function ProductModalBody({
   onClose: () => void;
   favorite: boolean;
   onFavoriteClick: () => void;
-  addToCart: (id: number, qty: number) => void;
+  addToCart: (id: number, qty: number, size?: string) => void;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const goPrev = useCallback(() => {
@@ -67,6 +67,17 @@ function ProductModalBody({
 
   const hasMultipleImages = images.length > 1;
   const [guideOpen, setGuideOpen] = useState(false);
+  const needsSizeSelection = product.category === 'laisses' || product.category === 'colliers' || product.category === 'harnais';
+  const laisseSizes = ['1m', '1m20'];
+  const collarHarnessSizes = ['XS', 'S', 'M', 'L', 'XL'];
+  const [selectedSize, setSelectedSize] = useState<string>(
+    product.category === 'laisses' ? '1m' : product.category === 'colliers' || product.category === 'harnais' ? 'M' : ''
+  );
+  const handleAddToCart = () => {
+    if (needsSizeSelection && !selectedSize) return;
+    addToCart(product.id, 1, needsSizeSelection ? selectedSize : undefined);
+    onClose();
+  };
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn"
@@ -188,20 +199,41 @@ function ProductModalBody({
 
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wider opacity-70" style={{ color: 'var(--ink)' }}>
-                  Tailles
+                  {product.category === 'laisses' ? 'Longueur' : 'Tailles'}
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  {product.sizes.map((size) => (
-                    <span
-                      key={size}
-                      className="px-3 py-1.5 rounded-full text-sm border"
-                      style={{ borderColor: 'var(--ink)', color: 'var(--ink)', borderWidth: '1px' }}
+                {needsSizeSelection ? (
+                  <>
+                    <p className="text-sm opacity-90" style={{ color: 'var(--ink)' }}>
+                      {product.category === 'laisses' ? '1 m ou 1,20 m' : 'XS à XL'}
+                    </p>
+                    <select
+                      value={selectedSize}
+                      onChange={(e) => setSelectedSize(e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl border text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
+                      style={{ borderColor: 'var(--ink)', color: 'var(--ink)' }}
                     >
-                      {size}
-                    </span>
-                  ))}
-                </div>
-                {product.category === 'harnais' && (
+                      <option value="">Choisir ma taille</option>
+                      {(product.category === 'laisses' ? laisseSizes : collarHarnessSizes).map((size) => (
+                        <option key={size} value={size}>
+                          {size === '1m20' ? '1,20 m' : size}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {product.sizes.map((size) => (
+                      <span
+                        key={size}
+                        className="px-3 py-1.5 rounded-full text-sm border"
+                        style={{ borderColor: 'var(--ink)', color: 'var(--ink)', borderWidth: '1px' }}
+                      >
+                        {size}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {(product.category === 'harnais' || product.category === 'colliers') && (
                   <div className="mt-3">
                     <button
                       type="button"
@@ -239,8 +271,9 @@ function ProductModalBody({
             <div className="mt-6 pt-6 space-y-3 border-t border-gray-200">
               <button
                 type="button"
-                onClick={() => { addToCart(product.id, 1); onClose(); }}
-                className="w-full py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                onClick={handleAddToCart}
+                disabled={needsSizeSelection && !selectedSize}
+                className="w-full py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ background: 'var(--ink)', color: 'var(--cream)' }}
               >
                 <ShoppingCart className="w-5 h-5" />

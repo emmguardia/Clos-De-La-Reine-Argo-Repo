@@ -70,9 +70,7 @@ function ProductModalBody({
   const needsSizeSelection = product.category === 'laisses' || product.category === 'colliers' || product.category === 'harnais';
   const laisseSizes = ['1m', '1m20'];
   const collarHarnessSizes = ['XS', 'S', 'M', 'L', 'XL'];
-  const [selectedSize, setSelectedSize] = useState<string>(
-    product.category === 'laisses' ? '1m' : product.category === 'colliers' || product.category === 'harnais' ? 'M' : ''
-  );
+  const [selectedSize, setSelectedSize] = useState<string>('');
   const handleAddToCart = () => {
     if (needsSizeSelection && !selectedSize) return;
     addToCart(product.id, 1, needsSizeSelection ? selectedSize : undefined);
@@ -97,16 +95,16 @@ function ProductModalBody({
         style={{ boxShadow: 'var(--shadow)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-col md:flex-row md:min-h-0 max-h-[90vh]">
+        <div className="flex flex-col md:flex-row md:min-h-0 max-h-[90vh] md:items-start">
           {/* Gauche : image en pleine hauteur comme l’autre projet */}
-          <div className="relative w-full md:w-1/2 bg-gray-100 flex flex-col">
-            <div className="relative h-[55vh] md:h-[80vh] overflow-hidden">
+          <div className="relative w-full md:w-1/2 bg-gray-100 flex-shrink-0 h-[55vh] md:h-[80vh]">
+            <div className="relative w-full h-full overflow-hidden">
               {images[currentIndex] ? (
                 <img
                   key={`${product.id}-${currentIndex}`}
                   src={images[currentIndex]}
                   alt={`${product.name} - Image ${currentIndex + 1}`}
-                  className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+                  className="absolute inset-0 w-full h-full object-cover animate-imageFade"
                   draggable={false}
                 />
               ) : (
@@ -150,8 +148,8 @@ function ProductModalBody({
             </div>
           </div>
 
-          {/* Droite : infos */}
-          <div className="w-full md:w-1/2 p-6 md:p-10 flex flex-col justify-between overflow-y-auto bg-white max-h-[90vh]">
+          {/* Droite : infos — hauteur alignée sur l'image pour éviter le blanc */}
+          <div className="w-full md:w-1/2 p-6 md:p-10 flex flex-col bg-white h-[55vh] md:h-[80vh] min-h-0">
             <button
               type="button"
               onClick={onClose}
@@ -161,7 +159,8 @@ function ProductModalBody({
               <X className="w-5 h-5" />
             </button>
 
-            <div className="space-y-4 pr-10">
+            <div className="flex-1 overflow-y-auto min-h-0 pr-2 -mr-2">
+            <div className="space-y-4 pr-8">
               <span
                 className="inline-block text-xs font-medium uppercase tracking-[0.2em] px-3 py-1.5 rounded-full"
                 style={{ background: 'var(--blush)', color: 'var(--ink)' }}
@@ -252,8 +251,8 @@ function ProductModalBody({
                       className="grid transition-[grid-template-rows] duration-300 ease-out"
                       style={{ gridTemplateRows: guideOpen ? '1fr' : '0fr' }}
                     >
-                      <div className="overflow-hidden">
-                        <div className="mt-2 pl-4 text-xs leading-relaxed border-l-2 space-y-1.5 py-2 transition-opacity duration-300" style={{ borderColor: 'var(--blush)', color: 'var(--ink)', opacity: guideOpen ? 1 : 0 }}>
+                      <div className="overflow-hidden min-h-0">
+                        <div className="mt-2 pl-4 text-xs leading-relaxed border-l-2 space-y-1.5 py-2 transition-opacity duration-300 max-h-32 overflow-y-auto" style={{ borderColor: 'var(--blush)', color: 'var(--ink)', opacity: guideOpen ? 1 : 0 }}>
                           <p><strong>XS</strong> · Chihuahua, Yorkshire Terrier, Spitz nain (Poméranien)</p>
                           <p><strong>S</strong> · Teckel, Jack Russell Terrier, Carlin</p>
                           <p><strong>M</strong> · Cocker Anglais, Beagle, Bouledogue Français</p>
@@ -267,8 +266,9 @@ function ProductModalBody({
                 )}
               </div>
             </div>
+            </div>
 
-            <div className="mt-6 pt-6 space-y-3 border-t border-gray-200">
+            <div className="flex-shrink-0 mt-4 pt-4 space-y-3 border-t border-gray-200">
               <button
                 type="button"
                 onClick={handleAddToCart}

@@ -529,7 +529,7 @@ export default function CheckoutPage() {
                                 className="mt-1 rounded border-gray-300"
                               />
                               <span className="text-sm text-gray-700">
-                                Collier sur mesure — pas de possibilité de retour, supplément de prix appliqué
+                                Collier sur mesure — fabrication personnalisée, tarif adapté, non retournable
                               </span>
                             </label>
                           )}
@@ -542,7 +542,7 @@ export default function CheckoutPage() {
                                 className="mt-1 rounded border-gray-300"
                               />
                               <span className="text-sm text-gray-700">
-                                Harnais sur mesure — pas de possibilité de retour, supplément de prix appliqué
+                                Harnais sur mesure — fabrication personnalisée, tarif adapté, non retournable
                               </span>
                             </label>
                           )}

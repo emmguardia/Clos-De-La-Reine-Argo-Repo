@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ShoppingCart, Check } from 'lucide-react';
 
 export default function CartToast() {
@@ -23,9 +24,9 @@ export default function CartToast() {
 
   if (!visible) return null;
 
-  return (
+  const toast = (
     <div
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[99999] animate-slideUp flex items-center gap-3 px-5 py-4 rounded-2xl bg-gray-900 text-white shadow-xl border border-gray-700/50"
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[2147483647] animate-slideUp flex items-center gap-3 px-5 py-4 rounded-2xl bg-gray-900 text-white shadow-2xl border border-gray-700/50"
       role="status"
       aria-live="polite"
     >
@@ -39,4 +40,6 @@ export default function CartToast() {
       <ShoppingCart className="w-5 h-5 text-gray-400" />
     </div>
   );
+
+  return createPortal(toast, document.body);
 }

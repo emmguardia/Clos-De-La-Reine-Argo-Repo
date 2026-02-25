@@ -75,9 +75,6 @@ export default function BoutiquePage() {
   );
   const totalPages = Math.ceil(filtered.length / PRODUCTS_PER_PAGE);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedCollection, selectedColor]);
   return (
     <div className="bg-white min-h-screen">
       <div className="relative border-b border-black/5">
@@ -123,7 +120,7 @@ export default function BoutiquePage() {
                 <button
                   key={col}
                   type="button"
-                  onClick={() => setSelectedCollection(col)}
+                  onClick={() => { setSelectedCollection(col); setCurrentPage(1); }}
                   className={`px-3 py-2 rounded-full text-sm transition-colors cursor-pointer ${
                     selectedCollection === col 
                       ? 'bg-gray-900 text-white' 
@@ -141,7 +138,7 @@ export default function BoutiquePage() {
                 <button
                   key={color}
                   type="button"
-                  onClick={() => setSelectedColor(color)}
+                  onClick={() => { setSelectedColor(color); setCurrentPage(1); }}
                   className={`px-3 py-2 rounded-full text-sm transition-colors cursor-pointer ${
                     selectedColor === color 
                       ? 'bg-gray-900 text-white' 

@@ -1,4 +1,4 @@
-import { X, ChevronLeft, ChevronRight, Heart, ShoppingCart, ChevronDown } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Heart, ShoppingCart, ChevronDown, Check } from 'lucide-react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Product } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
@@ -37,7 +37,7 @@ function ProductModalBody({
   onClose: () => void;
   favorite: boolean;
   onFavoriteClick: () => void;
-  addToCart: (id: number, qty: number, size?: string) => void;
+  addToCart: (id: number, qty: number, size?: string, productName?: string) => void;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const goPrev = useCallback(() => {
@@ -71,9 +71,12 @@ function ProductModalBody({
   const laisseSizes = ['1m', '1m20'];
   const collarHarnessSizes = ['XS', 'S', 'M', 'L', 'XL'];
   const [selectedSize, setSelectedSize] = useState<string>('');
-  const handleAddToCart = () => {
+  const [adding, setAdding] = useState(false);
+  const handleAddToCart = async () => {
     if (needsSizeSelection && !selectedSize) return;
-    addToCart(product.id, 1, needsSizeSelection ? selectedSize : undefined);
+    setAdding(true);
+    await addToCart(product.id, 1, needsSizeSelection ? selectedSize : undefined, product.name);
+    await new Promise((r) => setTimeout(r, 300));
     onClose();
   };
   return (
@@ -272,12 +275,16 @@ function ProductModalBody({
               <button
                 type="button"
                 onClick={handleAddToCart}
-                disabled={needsSizeSelection && !selectedSize}
-                className="w-full py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={(needsSizeSelection && !selectedSize) || adding}
+                className={`w-full py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${adding ? 'scale-95' : ''}`}
                 style={{ background: 'var(--ink)', color: 'var(--cream)' }}
               >
-                <ShoppingCart className="w-5 h-5" />
-                Ajouter au panier
+                {adding ? (
+                  <Check className="w-5 h-5 text-green-300" />
+                ) : (
+                  <ShoppingCart className="w-5 h-5" />
+                )}
+                {adding ? 'Ajouté !' : 'Ajouter au panier'}
               </button>
               <button
                 type="button"

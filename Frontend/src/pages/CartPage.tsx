@@ -7,12 +7,19 @@ export default function CartPage() {
   const navigate = useNavigate();
   const { items, loading, updateQuantity, removeFromCart } = useCart();
   const { products } = useProducts();
+  const formatSize = (size?: string) => {
+    if (!size) return '';
+    if (size === '1m20') return '1,20 m';
+    if (size === '1m') return '1 m';
+    return size;
+  };
+
   const cartProducts = items.map(item => {
     const product = products.find(p => p.id === item.productId);
     if (!product) return null;
     const surcharge = product.category === 'laisses' && item.size === '1m20' && (product.surcharge1m20 ?? 0) > 0 ? (product.surcharge1m20 ?? 0) : 0;
     return { ...product, quantity: item.quantity, size: item.size, unitPrice: product.price + surcharge };
-  }).filter(Boolean) as Array<{ id: number; name: string; price: number; image: string; quantity: number; size?: string; unitPrice: number }>;
+  }).filter(Boolean) as Array<{ id: number; name: string; price: number; image: string; quantity: number; size?: string; category: string; unitPrice: number }>;
 
   const total = cartProducts.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
 
@@ -68,9 +75,9 @@ export default function CartPage() {
                   <div className="flex-1">
                     <h3 className="font-medium text-gray-900">{item.name}</h3>
                     <p className="text-sm text-gray-600">
-                      {item.unitPrice}€
+                      {item.unitPrice.toFixed(2)} €
                       {item.size && (
-                        <span className="ml-2 text-gray-500">· {item.size === '1m20' ? '1,20 m' : item.size}</span>
+                        <span className="ml-2 text-gray-500">· {formatSize(item.size)}</span>
                       )}
                     </p>
                     <div className="flex items-center gap-2 mt-2">
@@ -97,7 +104,7 @@ export default function CartPage() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end justify-between">
-                    <p className="font-medium">{(item.unitPrice * item.quantity).toFixed(2)}€</p>
+                    <p className="font-medium">{(item.unitPrice * item.quantity).toFixed(2)} €</p>
                     <button
                       onClick={() => removeFromCart(item.id, item.size)}
                       className="p-2 text-red-600 hover:bg-red-50 rounded"
@@ -110,7 +117,7 @@ export default function CartPage() {
               <div className="pt-4 border-t border-gray-200">
                 <div className="flex justify-between text-lg font-medium mb-4">
                   <span>Total</span>
-                  <span>{total.toFixed(2)}€</span>
+                  <span>{total.toFixed(2)} €</span>
                 </div>
                 <button
                   onClick={() => navigate('/checkout')}

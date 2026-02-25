@@ -31,6 +31,11 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
+  @keyframes slideUp {
+    from { opacity: 0; transform: translate(-50%, 20px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+  }
+
   @keyframes pulse {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.08); }
@@ -43,6 +48,7 @@
   .animate-fadeIn-delay-3 { animation: fadeIn 0.8s ease-out 0.45s forwards; opacity: 0; }
   .animate-float { animation: float 3s ease-in-out infinite; }
   .animate-slideDown { animation: slideDown 0.3s ease-out; }
+  .animate-slideUp { animation: slideUp 0.35s ease-out; }
   .animate-pulse { animation: pulse 2s ease-in-out infinite; }
 }
 

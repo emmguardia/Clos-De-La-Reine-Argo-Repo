@@ -46,7 +46,7 @@ export function useCart() {
     }
   };
 
-  const addToCart = async (productId: number, quantity: number = 1, size?: string) => {
+  const addToCart = async (productId: number, quantity: number = 1, size?: string, productName?: string) => {
     const token = getTokenFromStorage();
     if (!token) {
       window.location.href = '/connexion';
@@ -80,6 +80,7 @@ export function useCart() {
         if (data.items && Array.isArray(data.items)) {
           setItems(data.items);
           window.dispatchEvent(new Event('cartUpdated'));
+          window.dispatchEvent(new CustomEvent('cartItemAdded', { detail: { productName } }));
         }
       }
     } catch (error) {

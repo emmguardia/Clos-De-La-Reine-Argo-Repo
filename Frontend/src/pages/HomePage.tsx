@@ -19,10 +19,10 @@ interface FeaturedProduct {
 }
 const featuredProducts: FeaturedProduct[] = [
   {
-    id: 'collier_nicole',
-    title: 'Collier Nicky',
+    id: 'collier_tartan_beige',
+    title: 'collier tartan beige',
     subtitle: 'Collier et laisse assortis, bleu profond',
-    price: 'XX€',
+    price: '27€',
     badge: 'Collier phare',
     image: '/Images/Back_to_school_1.jpg',
     tone: 'from-[#f2dedd]/90 via-white to-[#e5f2eb]/60',
@@ -31,10 +31,10 @@ const featuredProducts: FeaturedProduct[] = [
     collection: 'Back to School',
   },
   {
-    id: 'laisse',
-    title: 'Laisse tressée main',
+    id: 'laisse_tartan_beige',
+    title: 'Laisse tartan beige',
     subtitle: 'Tressage atelier, mousqueton inox, teinte moka',
-    price: 'XX€',
+    price: '37€',
     badge: 'Laisse phare',
     image: '/Images/Collier_BTS1.jpg',
     tone: 'from-[#e5f2eb]/90 via-white to-[#f8f4ef]/60',
@@ -43,10 +43,10 @@ const featuredProducts: FeaturedProduct[] = [
     collection: 'Back to School',
   },
   {
-    id: 'harnais',
-    title: 'Harnais confort mesh',
+    id: 'harnais_tartan_beige ',
+    title: 'Harnais tartan beige',
     subtitle: 'Mesh respirant, sangles sable, ergonomie douce',
-    price: 'XX€',
+    price: '47€',
     badge: 'Harnais phare',
     image: '/Images/Back_to_school_3.jpg',
     tone: 'from-[#f8f4ef]/90 via-white to-[#f2dedd]/60',

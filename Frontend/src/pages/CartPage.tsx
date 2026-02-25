@@ -1,28 +1,16 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
 import { useCart } from '../hooks/useCart';
 import { useProducts } from '../hooks/useProducts';
 import { Trash2, Plus, Minus } from 'lucide-react';
-
-const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
 export default function CartPage() {
   const navigate = useNavigate();
   const { items, loading, updateQuantity, removeFromCart } = useCart();
   const { products } = useProducts();
-  const [laisse1m20Surcharge, setLaisse1m20Surcharge] = useState<number | null>(null);
-
-  useEffect(() => {
-    fetch(`${API_URL}/api/settings`)
-      .then(r => r.ok ? r.json() : {})
-      .then((data: { laisse1m20?: number | null }) => setLaisse1m20Surcharge(data.laisse1m20 ?? 0))
-      .catch(() => setLaisse1m20Surcharge(0));
-  }, []);
-
   const cartProducts = items.map(item => {
     const product = products.find(p => p.id === item.productId);
     if (!product) return null;
-    const surcharge = product.category === 'laisses' && item.size === '1m20' && laisse1m20Surcharge != null ? laisse1m20Surcharge : 0;
+    const surcharge = product.category === 'laisses' && item.size === '1m20' && (product.surcharge1m20 ?? 0) > 0 ? (product.surcharge1m20 ?? 0) : 0;
     return { ...product, quantity: item.quantity, size: item.size, unitPrice: product.price + surcharge };
   }).filter(Boolean) as Array<{ id: number; name: string; price: number; image: string; quantity: number; size?: string; unitPrice: number }>;
 

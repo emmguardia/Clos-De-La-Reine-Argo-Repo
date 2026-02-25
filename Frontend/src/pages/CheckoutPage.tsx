@@ -29,11 +29,6 @@ export default function CheckoutPage() {
     surMesureCollier: false,
     surMesureHarnais: false
   });
-  const [settings, setSettings] = useState<{ surmesurecollier: number | null; surmesureharnais: number | null; laisse1m20: number | null }>({
-    surmesurecollier: null,
-    surmesureharnais: null,
-    laisse1m20: null
-  });
   const [additionalInfo, setAdditionalInfo] = useState('');
   const [breedSuggestions, setBreedSuggestions] = useState<string[]>([]);
   const [showBreedSuggestions, setShowBreedSuggestions] = useState(false);
@@ -102,19 +97,6 @@ export default function CheckoutPage() {
     fetchUserData();
   }, [navigate]);
 
-  useEffect(() => {
-    fetch(`${API_URL}/api/settings`)
-      .then(r => r.ok ? r.json() : {})
-      .then((data: { surmesurecollier?: number | null; surmesureharnais?: number | null; laisse1m20?: number | null }) =>
-        setSettings({
-          surmesurecollier: data.surmesurecollier ?? null,
-          surmesureharnais: data.surmesureharnais ?? null,
-          laisse1m20: data.laisse1m20 ?? null
-        })
-      )
-      .catch(() => {});
-  }, []);
-
   const handleBreedChange = (value: string) => {
     setDogInfo({ ...dogInfo, breed: value });
     if (value.length > 0) {
@@ -141,9 +123,9 @@ export default function CheckoutPage() {
     const product = products.find(p => p.id === item.productId);
     if (!product) return null;
     let unitPrice = product.price;
-    if (product.category === 'laisses' && item.size === '1m20' && settings.laisse1m20 != null) unitPrice += settings.laisse1m20;
-    if (product.category === 'colliers' && dogInfo.surMesureCollier && settings.surmesurecollier != null) unitPrice += settings.surmesurecollier;
-    if (product.category === 'harnais' && dogInfo.surMesureHarnais && settings.surmesureharnais != null) unitPrice += settings.surmesureharnais;
+    if (product.category === 'laisses' && item.size === '1m20' && (product.surcharge1m20 ?? 0) > 0) unitPrice += (product.surcharge1m20 ?? 0);
+    if (product.category === 'colliers' && dogInfo.surMesureCollier && (product.surchargeSurMesure ?? 0) > 0) unitPrice += (product.surchargeSurMesure ?? 0);
+    if (product.category === 'harnais' && dogInfo.surMesureHarnais && (product.surchargeSurMesure ?? 0) > 0) unitPrice += (product.surchargeSurMesure ?? 0);
     return { ...product, quantity: item.quantity, size: item.size, unitPrice };
   }).filter(Boolean) as Array<{ id: number; name: string; price: number; image: string; quantity: number; size?: string; category: string; unitPrice: number }>;
 

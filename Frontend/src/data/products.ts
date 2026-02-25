@@ -10,6 +10,8 @@ export interface Product {
   collection: string;
   color: string | string[]; 
   sizes: string[];
+  surcharge1m20?: number | null;
+  surchargeSurMesure?: number | null;
   stock?: number;
   isNew?: boolean;
   briefDescription?: string;
@@ -37,6 +39,8 @@ export async function fetchProducts(): Promise<Product[]> {
       collection: p.collection as string,
       color: p.color as string | string[],
       sizes: (p.sizes as string[]) || [],
+      surcharge1m20: (p.surcharge1m20 as number | null | undefined) ?? null,
+      surchargeSurMesure: (p.surchargeSurMesure as number | null | undefined) ?? null,
       isNew: (p.isNew as boolean) || false,
       briefDescription: (p.briefDescription as string) || undefined
     }));

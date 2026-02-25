@@ -178,8 +178,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-back:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-back:buildcache,mode=max
 
       - name: Trivy scan (backend)
         shell: powershell
@@ -213,8 +213,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-front:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-front:buildcache,mode=max
 
       - name: Trivy scan (frontend)
         shell: powershell

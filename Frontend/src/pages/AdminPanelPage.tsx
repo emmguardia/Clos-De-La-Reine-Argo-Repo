@@ -29,11 +29,12 @@ export default function AdminPanelPage() {
     category: 'colliers' as 'colliers' | 'laisses' | 'harnais',
     collection: '',
     color: '',
-    sizes: '',
     image: '',
     secondImage: '',
     isNew: false,
-    briefDescription: ''
+    briefDescription: '',
+    surcharge1m20: '',
+    surchargeSurMesure: ''
   });
   const [additionalImages, setAdditionalImages] = useState<string[]>([]);
   const [formError, setFormError] = useState('');
@@ -51,7 +52,6 @@ export default function AdminPanelPage() {
   const [currentPagePro, setCurrentPagePro] = useState(1);
   const [currentPageClient, setCurrentPageClient] = useState(1);
   const itemsPerPage = 6;
-
   useEffect(() => {
     const adminToken = localStorage.getItem('adminToken');
     if (!adminToken) {
@@ -210,8 +210,7 @@ export default function AdminPanelPage() {
     let sanitizedValue = value;
 
     if (e.target.name === 'category') {
-      const newSizes = value === 'harnais' ? 'XS, S, M, L, XL' : value === 'laisses' ? '1m, 1m20' : formData.sizes;
-      setFormData({ ...formData, category: value as 'colliers' | 'laisses' | 'harnais', sizes: newSizes });
+      setFormData({ ...formData, category: value as 'colliers' | 'laisses' | 'harnais' });
       setFormError('');
       setFormSuccess('');
       return;
@@ -220,8 +219,10 @@ export default function AdminPanelPage() {
     if (e.target.name === 'name') {
       sanitizedValue = value.replace(/[<>]/g, '').slice(0, 200);
     } else if (e.target.name === 'price') {
-      sanitizedValue = value.replace(/[^0-9.]/g, '').slice(0, 10);
-    } else if (e.target.name === 'color' || e.target.name === 'sizes') {
+      sanitizedValue = value.replace(/[^0-9.,]/g, '').slice(0, 10);
+    } else if (e.target.name === 'surcharge1m20' || e.target.name === 'surchargeSurMesure') {
+      sanitizedValue = value.replace(/[^0-9.,]/g, '').slice(0, 10);
+    } else if (e.target.name === 'color') {
       sanitizedValue = value.replace(/[<>]/g, '').slice(0, 500);
     } else if (e.target.name === 'briefDescription') {
       sanitizedValue = sanitizeDescription(value, 500);
@@ -241,11 +242,12 @@ export default function AdminPanelPage() {
       category: 'colliers',
       collection: collections.length > 0 ? collections[0] : '',
       color: '',
-      sizes: '',
       image: '',
       secondImage: '',
       isNew: false,
-      briefDescription: ''
+      briefDescription: '',
+      surcharge1m20: '',
+      surchargeSurMesure: ''
     });
     setAdditionalImages([]);
     setFormError('');
@@ -262,11 +264,12 @@ export default function AdminPanelPage() {
       category: product.category,
       collection: product.collection,
       color: Array.isArray(product.color) ? product.color.join(', ') : product.color,
-      sizes: Array.isArray(product.sizes) ? product.sizes.join(', ') : (typeof product.sizes === 'string' ? product.sizes : ''),
       image: product.image,
       secondImage: product.secondImage || '',
       isNew: product.isNew || false,
-      briefDescription: product.briefDescription || ''
+      briefDescription: product.briefDescription || '',
+      surcharge1m20: product.surcharge1m20 != null ? String(product.surcharge1m20).replace('.', ',') : '',
+      surchargeSurMesure: product.surchargeSurMesure != null ? String(product.surchargeSurMesure).replace('.', ',') : ''
     });
     setAdditionalImages(product.additionalImages || []);
     setShowAddForm(true);
@@ -311,12 +314,13 @@ export default function AdminPanelPage() {
           category: formData.category,
           collection: formData.collection,
           color: formData.color.trim(),
-          sizes: formData.category === 'harnais' ? 'XS, S, M, L, XL' : formData.category === 'laisses' ? '1m, 1m20' : formData.sizes.trim(),
           image: formData.image,
           secondImage: formData.secondImage || undefined,
           additionalImages: additionalImages.filter((url) => typeof url === 'string' && url.trim().length > 0),
           isNew: formData.isNew,
-          briefDescription: formData.briefDescription || undefined
+          briefDescription: formData.briefDescription || undefined,
+          surcharge1m20: formData.category === 'laisses' ? (formData.surcharge1m20 ? formData.surcharge1m20.replace(',', '.') : null) : null,
+          surchargeSurMesure: formData.category === 'colliers' || formData.category === 'harnais' ? (formData.surchargeSurMesure ? formData.surchargeSurMesure.replace(',', '.') : null) : null
         }),
       });
 
@@ -571,29 +575,34 @@ export default function AdminPanelPage() {
                         className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Tailles {formData.category === 'harnais' || formData.category === 'laisses' ? '(fixes pour cette catégorie)' : '(séparées par des virgules)'}
-                      </label>
-                      {formData.category === 'harnais' || formData.category === 'laisses' ? (
+                    {formData.category === 'laisses' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Supplément 1,20 m (€)</label>
                         <input
                           type="text"
-                          name="sizes"
-                          value={formData.category === 'harnais' ? 'XS, S, M, L, XL' : '1m, 1m20'}
-                          readOnly
-                          className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
-                        />
-                      ) : (
-                        <input
-                          type="text"
-                          name="sizes"
-                          value={formData.sizes}
+                          name="surcharge1m20"
+                          value={formData.surcharge1m20}
                           onChange={handleFormChange}
-                          placeholder="Ex: S, M, L"
+                          placeholder="Ex: 3 ou vide"
                           className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
                         />
-                      )}
-                    </div>
+                        <p className="text-xs text-gray-500 mt-1">Si rempli, ce montant s&apos;ajoute au prix quand le client choisit 1,20 m. Vide = 0 €</p>
+                      </div>
+                    )}
+                    {(formData.category === 'colliers' || formData.category === 'harnais') && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Supplément sur mesure (€)</label>
+                        <input
+                          type="text"
+                          name="surchargeSurMesure"
+                          value={formData.surchargeSurMesure}
+                          onChange={handleFormChange}
+                          placeholder="Ex: 5 ou vide"
+                          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Si rempli, ce montant s&apos;ajoute quand le client coche « sur mesure » au paiement. Vide = 0 €</p>
+                      </div>
+                    )}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Brève description (optionnel)</label>
                       <textarea

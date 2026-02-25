@@ -1,0 +1,31 @@
+# Application ArgoCD pour l'environnement Dev
+# À appliquer : kubectl apply -f argocd/clos-de-la-reine-dev.yaml -n argocd
+# Ou à intégrer dans votre repo de config ArgoCD
+#
+# IMPORTANT : targetRevision: develop et valueFiles: values-dev.yaml
+# Sans ça, l'app utilise values.yaml (prod) et les images de prod !
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: clos-de-la-reine-dev
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/emmguardia/Clos-De-La-Reine-Argo-Repo
+    targetRevision: develop
+    path: charts/clos-de-la-reine
+    helm:
+      valueFiles:
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: clos-de-la-reine-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

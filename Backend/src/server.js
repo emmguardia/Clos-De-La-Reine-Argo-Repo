@@ -519,20 +519,26 @@ app.delete('/api/auth/me', authenticateToken, async (req, res) => {
 app.get('/api/products', async (req, res) => {
   try {
     const products = await db.collection('products').find({}).toArray();
-    const formattedProducts = products.map(product => ({
-      id: product.id || product._id?.toString() || product._id,
-      name: product.name,
-      price: product.price,
-      image: product.image,
-      secondImage: product.secondImage,
-      additionalImages: product.additionalImages || [],
-      category: product.category,
-      collection: product.collection,
-      color: product.color,
-      sizes: product.sizes,
-      isNew: product.isNew || false,
-      briefDescription: product.briefDescription || undefined
-    }));
+    const formattedProducts = products.map(product => {
+      const cat = product.category;
+      const sizes = product.sizes?.length ? product.sizes : (cat === 'laisses' ? ['1m', '1m20'] : (cat === 'colliers' || cat === 'harnais') ? ['XS', 'S', 'M', 'L', 'XL'] : []);
+      return {
+        id: product.id || product._id?.toString() || product._id,
+        name: product.name,
+        price: product.price,
+        image: product.image,
+        secondImage: product.secondImage,
+        additionalImages: product.additionalImages || [],
+        category: product.category,
+        collection: product.collection,
+        color: product.color,
+        sizes,
+        surcharge1m20: product.surcharge1m20 ?? null,
+        surchargeSurMesure: product.surchargeSurMesure ?? null,
+        isNew: product.isNew || false,
+        briefDescription: product.briefDescription || undefined
+      };
+    });
     res.json(formattedProducts);
   } catch (error) {
     console.error('Erreur lors de la récupération des produits:', error);
@@ -555,7 +561,7 @@ app.get('/api/products/:id', async (req, res) => {
 
 app.post('/api/products', authenticateAdmin, async (req, res) => {
   try {
-    const { name, price, image, secondImage, additionalImages, category, collection, color, sizes, isNew, briefDescription } = req.body;
+    const { name, price, image, secondImage, additionalImages, category, collection, color, isNew, briefDescription, surcharge1m20, surchargeSurMesure } = req.body;
 
     if (!name || !price || !image || !category || !collection) {
       return res.status(400).json({ error: 'Champs requis manquants' });
@@ -566,6 +572,7 @@ app.post('/api/products', authenticateAdmin, async (req, res) => {
       ? Math.max(...products.map(p => p.id || 0))
       : 0;
 
+    const sizes = category === 'laisses' ? ['1m', '1m20'] : (category === 'colliers' || category === 'harnais') ? ['XS', 'S', 'M', 'L', 'XL'] : [];
     const product = {
       id: maxId + 1,
       name,
@@ -576,7 +583,9 @@ app.post('/api/products', authenticateAdmin, async (req, res) => {
       category,
       collection,
       color: Array.isArray(color) ? color : (color ? color.split(',').map(c => c.trim()) : []),
-      sizes: Array.isArray(sizes) ? sizes : (sizes ? sizes.split(',').map(s => s.trim()) : []),
+      sizes,
+      surcharge1m20: surcharge1m20 !== undefined && surcharge1m20 !== '' && surcharge1m20 !== null ? parseFloat(String(surcharge1m20).replace(',', '.')) : null,
+      surchargeSurMesure: surchargeSurMesure !== undefined && surchargeSurMesure !== '' && surchargeSurMesure !== null ? parseFloat(String(surchargeSurMesure).replace(',', '.')) : null,
       isNew: isNew || false,
       briefDescription: briefDescription ? String(briefDescription).trim().slice(0, 500) : '',
       createdAt: new Date(),
@@ -594,7 +603,7 @@ app.post('/api/products', authenticateAdmin, async (req, res) => {
 app.put('/api/products/:id', authenticateAdmin, async (req, res) => {
   try {
     const productId = parseInt(req.params.id);
-    const { name, price, image, secondImage, additionalImages, category, collection, color, sizes, isNew, briefDescription } = req.body;
+    const { name, price, image, secondImage, additionalImages, category, collection, color, isNew, briefDescription, surcharge1m20, surchargeSurMesure } = req.body;
 
     const updateData = {
       updatedAt: new Date()
@@ -608,13 +617,19 @@ app.put('/api/products/:id', authenticateAdmin, async (req, res) => {
       const list = Array.isArray(additionalImages) ? additionalImages : [];
       updateData.additionalImages = list.filter((u) => typeof u === 'string' && u.trim().length > 0);
     }
-    if (category) updateData.category = category;
+    if (category) {
+      updateData.category = category;
+      updateData.sizes = category === 'laisses' ? ['1m', '1m20'] : (category === 'colliers' || category === 'harnais') ? ['XS', 'S', 'M', 'L', 'XL'] : [];
+    }
     if (collection) updateData.collection = collection;
     if (color !== undefined) {
       updateData.color = Array.isArray(color) ? color : (color ? color.split(',').map(c => c.trim()) : []);
     }
-    if (sizes !== undefined) {
-      updateData.sizes = Array.isArray(sizes) ? sizes : (sizes ? sizes.split(',').map(s => s.trim()) : []);
+    if (surcharge1m20 !== undefined) {
+      updateData.surcharge1m20 = surcharge1m20 !== '' && surcharge1m20 !== null ? parseFloat(String(surcharge1m20).replace(',', '.')) : null;
+    }
+    if (surchargeSurMesure !== undefined) {
+      updateData.surchargeSurMesure = surchargeSurMesure !== '' && surchargeSurMesure !== null ? parseFloat(String(surchargeSurMesure).replace(',', '.')) : null;
     }
     if (briefDescription !== undefined) {
       updateData.briefDescription = briefDescription ? String(briefDescription).trim().slice(0, 500) : '';
@@ -952,6 +967,45 @@ app.delete('/api/faq/:id', authenticateAdmin, async (req, res) => {
   }
 });
 
+// Settings (surmesurecollier, surmesureharnais, laisse1m20) - modifiables dans l'admin
+app.get('/api/settings', async (req, res) => {
+  try {
+    const doc = await db.collection('settings').findOne({ _id: 'pricing' });
+    res.json({
+      surmesurecollier: doc?.surmesurecollier ?? null,
+      surmesureharnais: doc?.surmesureharnais ?? null,
+      laisse1m20: doc?.laisse1m20 ?? null
+    });
+  } catch (error) {
+    console.error('Erreur settings:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+app.put('/api/settings', authenticateAdmin, async (req, res) => {
+  try {
+    const { surmesurecollier, surmesureharnais, laisse1m20 } = req.body;
+    const update = {};
+    if (surmesurecollier !== undefined) update.surmesurecollier = surmesurecollier === '' || surmesurecollier === null ? null : parseFloat(String(surmesurecollier).replace(',', '.'));
+    if (surmesureharnais !== undefined) update.surmesureharnais = surmesureharnais === '' || surmesureharnais === null ? null : parseFloat(String(surmesureharnais).replace(',', '.'));
+    if (laisse1m20 !== undefined) update.laisse1m20 = laisse1m20 === '' || laisse1m20 === null ? null : parseFloat(String(laisse1m20).replace(',', '.'));
+    await db.collection('settings').updateOne(
+      { _id: 'pricing' },
+      { $set: { ...update, updatedAt: new Date() } },
+      { upsert: true }
+    );
+    const doc = await db.collection('settings').findOne({ _id: 'pricing' });
+    res.json({
+      surmesurecollier: doc?.surmesurecollier ?? null,
+      surmesureharnais: doc?.surmesureharnais ?? null,
+      laisse1m20: doc?.laisse1m20 ?? null
+    });
+  } catch (error) {
+    console.error('Erreur mise à jour settings:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 app.get('/api/cart', authenticateToken, async (req, res) => {
   try {
     const cart = await db.collection('carts').findOne({ userId: req.user.userId });
@@ -964,17 +1018,22 @@ app.get('/api/cart', authenticateToken, async (req, res) => {
 
 app.post('/api/cart', authenticateToken, async (req, res) => {
   try {
-    const { productId, quantity } = req.body;
+    const { productId, quantity, size } = req.body;
     if (!productId || !quantity) {
       return res.status(400).json({ error: 'Produit et quantité requis' });
     }
     const cart = await db.collection('carts').findOne({ userId: req.user.userId });
     const items = cart ? cart.items : [];
-    const existingIndex = items.findIndex(item => item.productId === productId);
+    const sizeKey = size != null && size !== '' ? String(size) : undefined;
+    const existingIndex = items.findIndex(item =>
+      item.productId === productId && (item.size || undefined) === sizeKey
+    );
     if (existingIndex >= 0) {
       items[existingIndex].quantity += quantity;
     } else {
-      items.push({ productId, quantity });
+      const newItem = { productId, quantity };
+      if (sizeKey) newItem.size = sizeKey;
+      items.push(newItem);
     }
     await db.collection('carts').updateOne(
       { userId: req.user.userId },
@@ -990,14 +1049,20 @@ app.post('/api/cart', authenticateToken, async (req, res) => {
 
 app.put('/api/cart/:productId', authenticateToken, async (req, res) => {
   try {
-    const { quantity } = req.body;
+    const { quantity, size } = req.body;
     const cart = await db.collection('carts').findOne({ userId: req.user.userId });
     if (!cart) {
       return res.status(404).json({ error: 'Panier non trouvé' });
     }
-    const items = cart.items.filter(item => item.productId !== parseInt(req.params.productId));
+    const sizeKey = size != null && size !== '' ? String(size) : undefined;
+    const productId = parseInt(req.params.productId);
+    const items = cart.items.filter(item =>
+      !(item.productId === productId && (item.size || undefined) === sizeKey)
+    );
     if (quantity > 0) {
-      items.push({ productId: parseInt(req.params.productId), quantity });
+      const newItem = { productId, quantity };
+      if (sizeKey) newItem.size = sizeKey;
+      items.push(newItem);
     }
     await db.collection('carts').updateOne(
       { userId: req.user.userId },
@@ -1012,11 +1077,16 @@ app.put('/api/cart/:productId', authenticateToken, async (req, res) => {
 
 app.delete('/api/cart/:productId', authenticateToken, async (req, res) => {
   try {
+    const size = req.query.size;
     const cart = await db.collection('carts').findOne({ userId: req.user.userId });
     if (!cart) {
       return res.status(404).json({ error: 'Panier non trouvé' });
     }
-    const items = cart.items.filter(item => item.productId !== parseInt(req.params.productId));
+    const sizeKey = size != null && size !== '' ? String(size) : undefined;
+    const productId = parseInt(req.params.productId);
+    const items = cart.items.filter(item =>
+      !(item.productId === productId && (item.size || undefined) === sizeKey)
+    );
     await db.collection('carts').updateOne(
       { userId: req.user.userId },
       { $set: { items, updatedAt: new Date() } }
@@ -1120,7 +1190,11 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
       shippingAddress,
       dogInfo: {
         breed: dogInfo.breed,
-        age: dogInfo.age
+        age: dogInfo.age,
+        tourDeCou: dogInfo.tourDeCou || null,
+        tourDeTaille: dogInfo.tourDeTaille || null,
+        surMesureCollier: !!dogInfo.surMesureCollier,
+        surMesureHarnais: !!dogInfo.surMesureHarnais
       },
       notes: notes || '',
       total: parseFloat(total),

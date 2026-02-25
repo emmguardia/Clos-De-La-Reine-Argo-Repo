@@ -23,7 +23,11 @@ export default function CheckoutPage() {
   });
   const [dogInfo, setDogInfo] = useState({
     breed: '',
-    age: ''
+    age: '',
+    tourDeCou: '',
+    tourDeTaille: '',
+    surMesureCollier: false,
+    surMesureHarnais: false
   });
   const [additionalInfo, setAdditionalInfo] = useState('');
   const [breedSuggestions, setBreedSuggestions] = useState<string[]>([]);
@@ -112,12 +116,20 @@ export default function CheckoutPage() {
     setShowBreedSuggestions(false);
   };
 
+  const hasCollier = items.some(i => products.find(p => p.id === i.productId)?.category === 'colliers');
+  const hasHarnais = items.some(i => products.find(p => p.id === i.productId)?.category === 'harnais');
+
   const cartProducts = items.map(item => {
     const product = products.find(p => p.id === item.productId);
-    return product ? { ...product, quantity: item.quantity } : null;
-  }).filter(Boolean) as Array<{ id: number; name: string; price: number; image: string; quantity: number }>;
+    if (!product) return null;
+    let unitPrice = product.price;
+    if (product.category === 'laisses' && item.size === '1m20' && (product.surcharge1m20 ?? 0) > 0) unitPrice += (product.surcharge1m20 ?? 0);
+    if (product.category === 'colliers' && dogInfo.surMesureCollier && (product.surchargeSurMesure ?? 0) > 0) unitPrice += (product.surchargeSurMesure ?? 0);
+    if (product.category === 'harnais' && dogInfo.surMesureHarnais && (product.surchargeSurMesure ?? 0) > 0) unitPrice += (product.surchargeSurMesure ?? 0);
+    return { ...product, quantity: item.quantity, size: item.size, unitPrice };
+  }).filter(Boolean) as Array<{ id: number; name: string; price: number; image: string; quantity: number; size?: string; category: string; unitPrice: number }>;
 
-  const subtotal = cartProducts.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const subtotal = cartProducts.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
   const shippingAmount = SHIPPING_LA_POSTE;
   const beforeFees = subtotal + shippingAmount;
   const feesAmount = Math.round(beforeFees * FRAIS_TAUX * 100) / 100;
@@ -155,9 +167,16 @@ export default function CheckoutPage() {
           'Authorization': `Bearer ${token}`
         },
           body: JSON.stringify({
-          items: cartProducts.map(p => ({ productId: p.id, quantity: p.quantity, price: p.price })),
+          items: cartProducts.map(p => ({ productId: p.id, quantity: p.quantity, price: p.unitPrice, size: p.size })),
           shippingAddress: formData,
-          dogInfo,
+          dogInfo: {
+            breed: dogInfo.breed,
+            age: dogInfo.age,
+            tourDeCou: dogInfo.tourDeCou || undefined,
+            tourDeTaille: dogInfo.tourDeTaille || undefined,
+            surMesureCollier: dogInfo.surMesureCollier,
+            surMesureHarnais: dogInfo.surMesureHarnais
+          },
           notes: additionalInfo,
           total,
           shippingAmount,
@@ -452,6 +471,66 @@ export default function CheckoutPage() {
                         <p className="text-xs text-gray-500 mt-2">Maximum 20 ans</p>
                       </div>
 
+                      {hasCollier && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Tour de cou (cm)</label>
+                          <input
+                            type="text"
+                            value={dogInfo.tourDeCou}
+                            onChange={(e) => setDogInfo({ ...dogInfo, tourDeCou: sanitizeInput(e.target.value).slice(0, 10) })}
+                            placeholder="Ex: 28"
+                            className="w-full px-4 py-3 border border-gray-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                          />
+                          <p className="text-xs text-gray-500 mt-2">Indicatif ou sur mesure selon votre choix ci-dessous</p>
+                        </div>
+                      )}
+
+                      {hasHarnais && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Tour de taille / poitrail (cm)</label>
+                          <input
+                            type="text"
+                            value={dogInfo.tourDeTaille}
+                            onChange={(e) => setDogInfo({ ...dogInfo, tourDeTaille: sanitizeInput(e.target.value).slice(0, 10) })}
+                            placeholder="Ex: 45"
+                            className="w-full px-4 py-3 border border-gray-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                          />
+                          <p className="text-xs text-gray-500 mt-2">Indicatif ou sur mesure selon votre choix ci-dessous</p>
+                        </div>
+                      )}
+
+                      {(hasCollier || hasHarnais) && (
+                        <div className="space-y-4 p-4 rounded-2xl border border-amber-200 bg-amber-50/50">
+                          <p className="text-sm font-medium text-gray-800">Sur mesure</p>
+                          {hasCollier && (
+                            <label className="flex items-start gap-3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={dogInfo.surMesureCollier}
+                                onChange={(e) => setDogInfo({ ...dogInfo, surMesureCollier: e.target.checked })}
+                                className="mt-1 rounded border-gray-300"
+                              />
+                              <span className="text-sm text-gray-700">
+                                Collier sur mesure — fabrication personnalisée, tarif adapté, non retournable
+                              </span>
+                            </label>
+                          )}
+                          {hasHarnais && (
+                            <label className="flex items-start gap-3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={dogInfo.surMesureHarnais}
+                                onChange={(e) => setDogInfo({ ...dogInfo, surMesureHarnais: e.target.checked })}
+                                className="mt-1 rounded border-gray-300"
+                              />
+                              <span className="text-sm text-gray-700">
+                                Harnais sur mesure — fabrication personnalisée, tarif adapté, non retournable
+                              </span>
+                            </label>
+                          )}
+                        </div>
+                      )}
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Informations supplémentaires</label>
                         <textarea
@@ -492,12 +571,15 @@ export default function CheckoutPage() {
               <h2 className="text-xl font-light text-gray-900 mb-6">Récapitulatif</h2>
               <div className="space-y-4 mb-6">
                 {cartProducts.map(item => (
-                  <div key={item.id} className="flex gap-4">
+                  <div key={`${item.id}-${item.size || ''}`} className="flex gap-4">
                     <img src={item.image} alt={item.name} className="w-16 h-16 object-cover rounded-2xl" />
                     <div className="flex-1">
                       <p className="font-medium text-gray-900">{item.name}</p>
-                      <p className="text-sm text-gray-600">Quantité: {item.quantity}</p>
-                      <p className="text-sm font-medium text-gray-900">{(item.price * item.quantity).toFixed(2)}€</p>
+                      <p className="text-sm text-gray-600">
+                        Quantité: {item.quantity}
+                        {item.size && <span> · {item.size === '1m20' ? '1,20 m' : item.size}</span>}
+                      </p>
+                      <p className="text-sm font-medium text-gray-900">{(item.unitPrice * item.quantity).toFixed(2)}€</p>
                     </div>
                   </div>
                 ))}

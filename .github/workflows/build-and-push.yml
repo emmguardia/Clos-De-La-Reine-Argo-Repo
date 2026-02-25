@@ -178,8 +178,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-back:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-back:buildcache,mode=max
 
       - name: Trivy scan (backend)
         shell: powershell
@@ -197,15 +197,6 @@ jobs:
           $v = node --version
           Write-Host "Node $v"
 
-      - name: Install and build frontend
-        shell: powershell
-        env:
-          VITE_API_URL: ""
-        run: |
-          Set-Location Frontend
-          if (Test-Path package-lock.json) { npm ci } else { npm install }
-          npm run build
-
       - name: Extract metadata (frontend)
         id: meta-frontend
         uses: docker/metadata-action@v5
@@ -222,8 +213,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-front:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-front:buildcache,mode=max
 
       - name: Trivy scan (frontend)
         shell: powershell
@@ -234,29 +225,42 @@ jobs:
           $img = "${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-front:${{ steps.tag.outputs.tag }}"
           docker run --rm -e TRIVY_USERNAME -e TRIVY_PASSWORD aquasec/trivy image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --format table $img
 
-      # Prod uniquement : piner les images par digest dans values.yaml et commit
-      - name: Pin Helm values to image digest (prod only)
-        if: steps.tag.outputs.is_dev == 'false'
+      # Piner les images par digest pour qu'ArgoCD détecte le changement et déploie
+      - name: Pin Helm values to image digest
         shell: powershell
         run: |
           $tag = "${{ steps.tag.outputs.tag }}"
+          $isDev = "${{ steps.tag.outputs.is_dev }}"
           $digestBackend = "${{ steps.build-backend.outputs.digest }}"
           $digestFrontend = "${{ steps.build-frontend.outputs.digest }}"
           $owner = "${{ github.repository_owner }}"
           $reg = "${{ env.REGISTRY }}"
           $backendImage = if ($digestBackend) { "${reg}/${owner}/clos-de-la-reine-back@${digestBackend}" } else { "${reg}/${owner}/clos-de-la-reine-back:${tag}" }
           $frontendImage = if ($digestFrontend) { "${reg}/${owner}/clos-de-la-reine-front@${digestFrontend}" } else { "${reg}/${owner}/clos-de-la-reine-front:${tag}" }
-          $valuesPath = "charts/clos-de-la-reine/values.yaml"
+
+          if ($isDev -eq "true") {
+            $valuesPath = "charts/clos-de-la-reine/values-dev.yaml"
+          } else {
+            $valuesPath = "charts/clos-de-la-reine/values.yaml"
+          }
+
           $content = Get-Content $valuesPath -Raw
           $content = $content -replace '  image: ghcr\.io/[^\r\n]+clos-de-la-reine-back[^\r\n]*', "  image: $backendImage"
           $content = $content -replace '  image: ghcr\.io/[^\r\n]+clos-de-la-reine-front[^\r\n]*', "  image: $frontendImage"
           Set-Content $valuesPath -Value $content -NoNewline
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add version.txt $valuesPath
+
+          if ($isDev -eq "true") {
+            git add $valuesPath
+          } else {
+            git add version.txt $valuesPath
+          }
+
           git diff --staged --quiet
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "Helm values and version already up to date, skip commit"
+            Write-Host "Helm values already up to date, skip commit"
           } else {
             git pull --rebase origin ${{ github.ref_name }}
             git commit -m "chore(helm): pin images to digest $tag [skip ci]"

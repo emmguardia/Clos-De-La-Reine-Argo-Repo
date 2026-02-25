@@ -1,4 +1,4 @@
-import { X, ChevronLeft, ChevronRight, Heart, ShoppingCart, ChevronDown } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Heart, ShoppingCart, ChevronDown, Check } from 'lucide-react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Product } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
@@ -37,7 +37,7 @@ function ProductModalBody({
   onClose: () => void;
   favorite: boolean;
   onFavoriteClick: () => void;
-  addToCart: (id: number, qty: number) => void;
+  addToCart: (id: number, qty: number, size?: string, productName?: string) => void;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const goPrev = useCallback(() => {
@@ -67,6 +67,18 @@ function ProductModalBody({
 
   const hasMultipleImages = images.length > 1;
   const [guideOpen, setGuideOpen] = useState(false);
+  const needsSizeSelection = product.category === 'laisses' || product.category === 'colliers' || product.category === 'harnais';
+  const laisseSizes = ['1m', '1m20'];
+  const collarHarnessSizes = ['XS', 'S', 'M', 'L', 'XL'];
+  const [selectedSize, setSelectedSize] = useState<string>('');
+  const [adding, setAdding] = useState(false);
+  const handleAddToCart = async () => {
+    if (needsSizeSelection && !selectedSize) return;
+    setAdding(true);
+    await addToCart(product.id, 1, needsSizeSelection ? selectedSize : undefined, product.name);
+    await new Promise((r) => setTimeout(r, 300));
+    onClose();
+  };
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn"
@@ -86,16 +98,16 @@ function ProductModalBody({
         style={{ boxShadow: 'var(--shadow)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-col md:flex-row md:min-h-0 max-h-[90vh]">
+        <div className="flex flex-col md:flex-row md:min-h-0 max-h-[90vh] md:items-start">
           {/* Gauche : image en pleine hauteur comme l’autre projet */}
-          <div className="relative w-full md:w-1/2 bg-gray-100 flex flex-col">
-            <div className="relative h-[55vh] md:h-[80vh] overflow-hidden">
+          <div className="relative w-full md:w-1/2 bg-gray-100 flex-shrink-0 h-[55vh] md:h-[80vh]">
+            <div className="relative w-full h-full overflow-hidden">
               {images[currentIndex] ? (
                 <img
                   key={`${product.id}-${currentIndex}`}
                   src={images[currentIndex]}
                   alt={`${product.name} - Image ${currentIndex + 1}`}
-                  className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+                  className="absolute inset-0 w-full h-full object-cover animate-imageFade"
                   draggable={false}
                 />
               ) : (
@@ -139,8 +151,8 @@ function ProductModalBody({
             </div>
           </div>
 
-          {/* Droite : infos */}
-          <div className="w-full md:w-1/2 p-6 md:p-10 flex flex-col justify-between overflow-y-auto bg-white max-h-[90vh]">
+          {/* Droite : infos — hauteur alignée sur l'image pour éviter le blanc */}
+          <div className="w-full md:w-1/2 p-6 md:p-10 flex flex-col bg-white h-[55vh] md:h-[80vh] min-h-0">
             <button
               type="button"
               onClick={onClose}
@@ -150,7 +162,8 @@ function ProductModalBody({
               <X className="w-5 h-5" />
             </button>
 
-            <div className="space-y-4 pr-10">
+            <div className="flex-1 overflow-y-auto min-h-0 pr-2 -mr-2">
+            <div className="space-y-4 pr-8">
               <span
                 className="inline-block text-xs font-medium uppercase tracking-[0.2em] px-3 py-1.5 rounded-full"
                 style={{ background: 'var(--blush)', color: 'var(--ink)' }}
@@ -188,20 +201,41 @@ function ProductModalBody({
 
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wider opacity-70" style={{ color: 'var(--ink)' }}>
-                  Tailles
+                  {product.category === 'laisses' ? 'Longueur' : 'Tailles'}
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  {product.sizes.map((size) => (
-                    <span
-                      key={size}
-                      className="px-3 py-1.5 rounded-full text-sm border"
-                      style={{ borderColor: 'var(--ink)', color: 'var(--ink)', borderWidth: '1px' }}
+                {needsSizeSelection ? (
+                  <>
+                    <p className="text-sm opacity-90" style={{ color: 'var(--ink)' }}>
+                      {product.category === 'laisses' ? '1 m ou 1,20 m' : 'XS à XL'}
+                    </p>
+                    <select
+                      value={selectedSize}
+                      onChange={(e) => setSelectedSize(e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl border text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
+                      style={{ borderColor: 'var(--ink)', color: 'var(--ink)' }}
                     >
-                      {size}
-                    </span>
-                  ))}
-                </div>
-                {product.category === 'harnais' && (
+                      <option value="">Choisir ma taille</option>
+                      {(product.category === 'laisses' ? laisseSizes : collarHarnessSizes).map((size) => (
+                        <option key={size} value={size}>
+                          {size === '1m20' ? '1,20 m' : size}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {product.sizes.map((size) => (
+                      <span
+                        key={size}
+                        className="px-3 py-1.5 rounded-full text-sm border"
+                        style={{ borderColor: 'var(--ink)', color: 'var(--ink)', borderWidth: '1px' }}
+                      >
+                        {size}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {(product.category === 'harnais' || product.category === 'colliers') && (
                   <div className="mt-3">
                     <button
                       type="button"
@@ -220,8 +254,8 @@ function ProductModalBody({
                       className="grid transition-[grid-template-rows] duration-300 ease-out"
                       style={{ gridTemplateRows: guideOpen ? '1fr' : '0fr' }}
                     >
-                      <div className="overflow-hidden">
-                        <div className="mt-2 pl-4 text-xs leading-relaxed border-l-2 space-y-1.5 py-2 transition-opacity duration-300" style={{ borderColor: 'var(--blush)', color: 'var(--ink)', opacity: guideOpen ? 1 : 0 }}>
+                      <div className="overflow-hidden min-h-0">
+                        <div className="mt-2 pl-4 text-xs leading-relaxed border-l-2 space-y-1.5 py-2 transition-opacity duration-300 max-h-32 overflow-y-auto" style={{ borderColor: 'var(--blush)', color: 'var(--ink)', opacity: guideOpen ? 1 : 0 }}>
                           <p><strong>XS</strong> · Chihuahua, Yorkshire Terrier, Spitz nain (Poméranien)</p>
                           <p><strong>S</strong> · Teckel, Jack Russell Terrier, Carlin</p>
                           <p><strong>M</strong> · Cocker Anglais, Beagle, Bouledogue Français</p>
@@ -235,16 +269,22 @@ function ProductModalBody({
                 )}
               </div>
             </div>
+            </div>
 
-            <div className="mt-6 pt-6 space-y-3 border-t border-gray-200">
+            <div className="flex-shrink-0 mt-4 pt-4 space-y-3 border-t border-gray-200">
               <button
                 type="button"
-                onClick={() => { addToCart(product.id, 1); onClose(); }}
-                className="w-full py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                onClick={handleAddToCart}
+                disabled={(needsSizeSelection && !selectedSize) || adding}
+                className={`w-full py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${adding ? 'scale-95' : ''}`}
                 style={{ background: 'var(--ink)', color: 'var(--cream)' }}
               >
-                <ShoppingCart className="w-5 h-5" />
-                Ajouter au panier
+                {adding ? (
+                  <Check className="w-5 h-5 text-green-300" />
+                ) : (
+                  <ShoppingCart className="w-5 h-5" />
+                )}
+                {adding ? 'Ajouté !' : 'Ajouter au panier'}
               </button>
               <button
                 type="button"

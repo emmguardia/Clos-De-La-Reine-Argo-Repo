@@ -50,7 +50,10 @@ export default function GalleryPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="mb-12 text-center">
           <h1 className="text-4xl font-light text-gray-900 mb-2">Galerie</h1>
-          <p className="text-gray-600">Découvrez nos créations et celles de nos clients</p>
+          <p className="text-gray-600 max-w-3xl mx-auto">
+            Joanne imagine et supervise chaque direction artistique — des lieux aux décors — pour façonner un univers fidèle à l'esprit du Clos de la Reine.
+            Depuis les débuts, le regard d'Émilie Zangarrelli et son équipe en capte l'essence et en révèle toute la subtilité.
+          </p>
         </div>
         {professionalImages.length > 0 && (
           <section className="mb-16">
@@ -89,7 +92,7 @@ export default function GalleryPage() {
           <section>
             <div className="mb-8">
               <h2 className="text-3xl font-light text-gray-900 mb-2">Clients</h2>
-              <p className="text-gray-600">Photos partagées par nos clients</p>
+              <p className="text-gray-600">Nos créations prennent tout leur sens lorsqu'elles accompagnent vos fidèles.</p>
             </div>
             <div className="columns-2 sm:columns-3 lg:columns-4 gap-4 mb-8">
               {clientImages.map((item, index) => {

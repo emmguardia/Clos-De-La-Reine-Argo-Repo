@@ -3,6 +3,8 @@ import { getTokenFromStorage, safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
+let cartFetchPromise: Promise<CartItem[]> | null = null;
+
 export interface CartItem {
   productId: number;
   quantity: number;
@@ -27,21 +29,24 @@ export function useCart() {
     const token = getTokenFromStorage();
     if (!token) return;
     
-    try {
+    const doFetch = async (): Promise<CartItem[]> => {
       const response = await fetch(`${API_URL}/api/cart`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (response.ok) {
-        const data = await safeJsonResponse(response, []);
-        if (Array.isArray(data)) {
-          setItems(data);
-        }
+      const data = await safeJsonResponse(response, []);
+      return Array.isArray(data) ? data : [];
+    };
+
+    try {
+      if (!cartFetchPromise) {
+        cartFetchPromise = doFetch();
       }
+      const data = await cartFetchPromise;
+      setItems(data);
     } catch (error) {
       console.error('Erreur lors de la récupération du panier:', error);
     } finally {
+      cartFetchPromise = null;
       setLoading(false);
     }
   };

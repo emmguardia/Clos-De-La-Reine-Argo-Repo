@@ -25,7 +25,7 @@ export default function CartToast() {
 
   return (
     <div
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] animate-slideUp flex items-center gap-3 px-5 py-4 rounded-2xl bg-gray-900 text-white shadow-xl border border-gray-700/50"
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[99999] animate-slideUp flex items-center gap-3 px-5 py-4 rounded-2xl bg-gray-900 text-white shadow-xl border border-gray-700/50"
       role="status"
       aria-live="polite"
     >

@@ -2,8 +2,11 @@ import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ProductCard from '../components/ProductCard';
 import ProductModal from '../components/ProductModal';
+import Pagination from '../components/Pagination';
 import { useProducts } from '../hooks/useProducts';
 import type { Product, ProductCategory } from '../data/products';
+
+const PRODUCTS_PER_PAGE = 12;
 export default function BoutiquePage() {
   const { products, loading } = useProducts();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -15,6 +18,7 @@ export default function BoutiquePage() {
   const [selectedColor, setSelectedColor] = useState<string>('all');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const categoryProducts = useMemo(
     () => selectedCategory === 'all' 
       ? products 
@@ -57,12 +61,23 @@ export default function BoutiquePage() {
     setSelectedCategory(category);
     setSelectedCollection('all');
     setSelectedColor('all');
+    setCurrentPage(1);
     if (category === 'all') {
       setSearchParams({});
     } else {
       setSearchParams({ category });
     }
   };
+
+  const paginatedProducts = useMemo(
+    () => filtered.slice((currentPage - 1) * PRODUCTS_PER_PAGE, currentPage * PRODUCTS_PER_PAGE),
+    [filtered, currentPage]
+  );
+  const totalPages = Math.ceil(filtered.length / PRODUCTS_PER_PAGE);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCollection, selectedColor]);
   return (
     <div className="bg-white min-h-screen">
       <div className="relative border-b border-black/5">
@@ -144,6 +159,7 @@ export default function BoutiquePage() {
                 handleCategoryChange('all');
                 setSelectedCollection('all');
                 setSelectedColor('all');
+                setCurrentPage(1);
               }}
               className="mt-2 px-4 py-2 rounded-full bg-gray-900 text-white text-sm hover:bg-gray-800 transition-colors w-fit cursor-pointer"
             >
@@ -172,7 +188,7 @@ export default function BoutiquePage() {
               <div className="h-px w-16 bg-gray-900" aria-hidden="true" />
             </header>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filtered.map((product) => (
+              {paginatedProducts.map((product) => (
                 <ProductCard 
                   key={product.id} 
                   product={product} 
@@ -183,6 +199,12 @@ export default function BoutiquePage() {
                 />
               ))}
             </div>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              className="mt-10"
+            />
           </section>
         ) : (
           <div className="text-center py-16" role="status" aria-live="polite">

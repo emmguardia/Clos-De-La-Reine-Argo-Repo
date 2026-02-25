@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 import { useProducts } from '../hooks/useProducts';
 import type { Product } from '../data/products';
 import ImageUpload from '../components/ImageUpload';
+import Pagination from '../components/Pagination';
+
+const PRODUCTS_PER_PAGE = 10;
 import { sanitizeInput, sanitizeDescription, safeJsonResponse } from '../utils/security';
 
 interface GalleryItem {
@@ -51,6 +54,7 @@ export default function AdminPanelPage() {
   const [galleryDeleteLoading, setGalleryDeleteLoading] = useState<Record<string, boolean>>({});
   const [currentPagePro, setCurrentPagePro] = useState(1);
   const [currentPageClient, setCurrentPageClient] = useState(1);
+  const [currentPageProducts, setCurrentPageProducts] = useState(1);
   const itemsPerPage = 6;
   useEffect(() => {
     const adminToken = localStorage.getItem('adminToken');
@@ -61,6 +65,10 @@ export default function AdminPanelPage() {
     verifyAdminToken();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    setCurrentPageProducts(1);
+  }, [searchTerm]);
 
   const verifyAdminToken = async () => {
     try {
@@ -380,6 +388,11 @@ export default function AdminPanelPage() {
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.collection.toLowerCase().includes(searchTerm.toLowerCase())
   );
+  const paginatedProducts = filteredProducts.slice(
+    (currentPageProducts - 1) * PRODUCTS_PER_PAGE,
+    currentPageProducts * PRODUCTS_PER_PAGE
+  );
+  const totalPagesProducts = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
 
   const handleLogout = () => {
     if (confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
@@ -722,7 +735,7 @@ export default function AdminPanelPage() {
                   <div className="text-center py-8 text-gray-500">Aucun produit trouvé</div>
                 ) : (
                   <div className="space-y-4">
-                    {filteredProducts.map((product) => (
+                    {paginatedProducts.map((product) => (
                       <div key={product.id} className="p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors">
                         <div className="flex items-center gap-4">
                           <img
@@ -764,6 +777,12 @@ export default function AdminPanelPage() {
                         </div>
                       </div>
                     ))}
+                    <Pagination
+                      currentPage={currentPageProducts}
+                      totalPages={totalPagesProducts}
+                      onPageChange={setCurrentPageProducts}
+                      className="mt-6"
+                    />
                   </div>
                 )}
               </div>

@@ -3,9 +3,12 @@ import { getTokenFromStorage, safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
-interface CartItem {
+let cartFetchPromise: Promise<CartItem[]> | null = null;
+
+export interface CartItem {
   productId: number;
   quantity: number;
+  size?: string;
 }
 
 export function useCart() {
@@ -26,26 +29,29 @@ export function useCart() {
     const token = getTokenFromStorage();
     if (!token) return;
     
-    try {
+    const doFetch = async (): Promise<CartItem[]> => {
       const response = await fetch(`${API_URL}/api/cart`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (response.ok) {
-        const data = await safeJsonResponse(response, []);
-        if (Array.isArray(data)) {
-          setItems(data);
-        }
+      const data = await safeJsonResponse(response, []);
+      return Array.isArray(data) ? data : [];
+    };
+
+    try {
+      if (!cartFetchPromise) {
+        cartFetchPromise = doFetch();
       }
+      const data = await cartFetchPromise;
+      setItems(data);
     } catch (error) {
       console.error('Erreur lors de la récupération du panier:', error);
     } finally {
+      cartFetchPromise = null;
       setLoading(false);
     }
   };
 
-  const addToCart = async (productId: number, quantity: number = 1) => {
+  const addToCart = async (productId: number, quantity: number = 1, size?: string, productName?: string) => {
     const token = getTokenFromStorage();
     if (!token) {
       window.location.href = '/connexion';
@@ -64,19 +70,22 @@ export function useCart() {
     }
 
     try {
+      const body: { productId: number; quantity: number; size?: string } = { productId, quantity };
+      if (size) body.size = size;
       const response = await fetch(`${API_URL}/api/cart`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ productId, quantity })
+        body: JSON.stringify(body)
       });
       if (response.ok) {
         const data = await safeJsonResponse(response, { items: [] });
         if (data.items && Array.isArray(data.items)) {
           setItems(data.items);
           window.dispatchEvent(new Event('cartUpdated'));
+          window.dispatchEvent(new CustomEvent('cartItemAdded', { detail: { productName } }));
         }
       }
     } catch (error) {
@@ -84,7 +93,7 @@ export function useCart() {
     }
   };
 
-  const updateQuantity = async (productId: number, quantity: number) => {
+  const updateQuantity = async (productId: number, quantity: number, size?: string) => {
     const token = getTokenFromStorage();
     if (!token) return;
 
@@ -93,8 +102,9 @@ export function useCart() {
       return;
     }
 
+    const sizeKey = size ?? undefined;
     const otherItemsTotal = items
-      .filter(item => item.productId !== productId)
+      .filter(item => !(item.productId === productId && (item.size || undefined) === sizeKey))
       .reduce((sum, item) => sum + item.quantity, 0);
     
     if (otherItemsTotal + quantity > 10) {
@@ -103,13 +113,15 @@ export function useCart() {
     }
 
     try {
+      const body: { quantity: number; size?: string } = { quantity };
+      if (size) body.size = size;
       const response = await fetch(`${API_URL}/api/cart/${productId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ quantity })
+        body: JSON.stringify(body)
       });
       if (response.ok) {
         const data = await safeJsonResponse(response, { items: [] });
@@ -123,7 +135,7 @@ export function useCart() {
     }
   };
 
-  const removeFromCart = async (productId: number) => {
+  const removeFromCart = async (productId: number, size?: string) => {
     const token = getTokenFromStorage();
     if (!token) return;
 
@@ -132,7 +144,8 @@ export function useCart() {
     }
 
     try {
-      const response = await fetch(`${API_URL}/api/cart/${productId}`, {
+      const url = size ? `${API_URL}/api/cart/${productId}?size=${encodeURIComponent(size)}` : `${API_URL}/api/cart/${productId}`;
+      const response = await fetch(url, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`

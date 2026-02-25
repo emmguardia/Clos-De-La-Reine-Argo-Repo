@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import Header from './components/Header';
+import CartToast from './components/CartToast';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
 import BoutiquePage from './pages/BoutiquePage';
@@ -39,6 +40,7 @@ function App() {
     <div className="min-h-screen bg-white">
       <ScrollToTop />
       <Header />
+      <CartToast />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/boutique" element={<BoutiquePage />} />

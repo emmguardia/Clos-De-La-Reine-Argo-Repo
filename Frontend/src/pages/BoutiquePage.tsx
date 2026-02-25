@@ -80,7 +80,7 @@ export default function BoutiquePage() {
             <p className="uppercase tracking-[0.28em] text-xs text-gray-500">Boutique</p>
             <h1 className="text-4xl sm:text-5xl font-light text-gray-900 leading-tight">Notre boutique</h1>
             <p className="text-gray-700 max-w-3xl">
-              Découvrez notre sélection de colliers, harnais et laisses. <br /> Matières premium, finitions sellier, élégance épurée.
+              Matières de qualité, finitions soignées, teintes douces et intemporelles.
             </p>
           </div>
           <div className="bg-white/80 border border-black/5 rounded-3xl p-6 shadow-sm space-y-4">

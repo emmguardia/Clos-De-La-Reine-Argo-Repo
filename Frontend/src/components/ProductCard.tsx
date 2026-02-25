@@ -23,9 +23,15 @@ export default function ProductCard({ product, showCollection = true, compact = 
     }
   };
 
+  const needsSize = product.category === 'laisses' || product.category === 'colliers' || product.category === 'harnais';
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
-    addToCart(product.id, 1);
+    if (needsSize && onProductClick) {
+      onProductClick(product);
+    } else {
+      addToCart(product.id, 1);
+    }
   };
   return (
     <div 

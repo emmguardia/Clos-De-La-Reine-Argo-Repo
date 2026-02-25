@@ -35,19 +35,20 @@ export default function Header() {
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleCartUpdate = () => {
-      refreshCart();
-    };
-    const handleFavoritesUpdate = () => {
-      refreshFavorites();
-    };
+    const handleCartUpdate = () => refreshCart();
     window.addEventListener('cartUpdated', handleCartUpdate);
-    window.addEventListener('favoritesUpdated', handleFavoritesUpdate);
+    window.addEventListener('cartItemAdded', handleCartUpdate);
     return () => {
       window.removeEventListener('cartUpdated', handleCartUpdate);
-      window.removeEventListener('favoritesUpdated', handleFavoritesUpdate);
+      window.removeEventListener('cartItemAdded', handleCartUpdate);
     };
-  }, [refreshCart, refreshFavorites]);
+  }, [refreshCart]);
+
+  useEffect(() => {
+    const handleFavoritesUpdate = () => refreshFavorites();
+    window.addEventListener('favoritesUpdated', handleFavoritesUpdate);
+    return () => window.removeEventListener('favoritesUpdated', handleFavoritesUpdate);
+  }, [refreshFavorites]);
 
   const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const favoritesCount = favorites.length;

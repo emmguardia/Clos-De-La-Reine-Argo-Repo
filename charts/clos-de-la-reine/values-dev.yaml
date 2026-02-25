@@ -1,6 +1,6 @@
 # Valeurs pour l'environnement Dev/Staging (namespace clos-de-la-reine-dev)
 # Utilisé par ArgoCD Application "Clos de la Reine - Dev" (branche develop)
-# Les images sont taguées :dev par la CI sur push develop
+# Les images sont mises à jour par la CI (digest) pour qu'ArgoCD détecte et déploie
 # En dev on n'utilise pas SealedSecret : le secret clos-secrets est créé à la main (copie du secret prod).
 
 namespace: clos-de-la-reine-dev
@@ -12,7 +12,7 @@ imagePullSecrets:
   - name: ghcr-secret
 
 backend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-back:dev
+  image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:aec8732478f7a6b1a29619a2f64e29112f695c8c508e3e2c8cb242c5ca54ff95
   imagePullPolicy: Always
   replicas: 0  # Mettre à 1 quand tu bosses (kubectl scale ... --replicas=1)
   strategy:
@@ -38,7 +38,7 @@ backend:
     enabled: false  # Pas d'HPA en dev (replicas gérés à la main)
 
 frontend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-front:dev
+  image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:46ae620b97c77c95258bdee13862e5939a4925b34705949a1aadf7751e3ce825
   imagePullPolicy: Always
   replicas: 0  # Mettre à 1 quand tu bosses
   strategy:

@@ -4,7 +4,7 @@ import { useProducts } from '../hooks/useProducts';
 import ProductCard from '../components/ProductCard';
 import ProductModal from '../components/ProductModal';
 import type { ProductCategory, Product } from '../data/products';
-const heroImage = '/Images/header.jpg';
+const heroImage = '/Images/header.webp';
 interface FeaturedProduct {
   id: string;
   title: string;
@@ -24,7 +24,7 @@ const featuredProducts: FeaturedProduct[] = [
     subtitle: 'Collier et laisse assortis, bleu profond',
     price: '27€',
     badge: 'Collier phare',
-    image: '/Images/Back_to_school_1.jpg',
+    image: '/Images/Back_to_school_1.webp',
     tone: 'from-[#f2dedd]/90 via-white to-[#e5f2eb]/60',
     to: '/boutique?category=colliers',
     category: 'colliers',
@@ -36,7 +36,7 @@ const featuredProducts: FeaturedProduct[] = [
     subtitle: 'Tressage atelier, mousqueton inox, teinte moka',
     price: '37€',
     badge: 'Laisse phare',
-    image: '/Images/Collier_BTS1.jpg',
+    image: '/Images/Collier_BTS1.webp',
     tone: 'from-[#e5f2eb]/90 via-white to-[#f8f4ef]/60',
     to: '/boutique?category=laisses',
     category: 'laisses',
@@ -48,7 +48,7 @@ const featuredProducts: FeaturedProduct[] = [
     subtitle: 'Mesh respirant, sangles sable, ergonomie douce',
     price: '47€',
     badge: 'Harnais phare',
-    image: '/Images/Back_to_school_3.jpg',
+    image: '/Images/Back_to_school_3.webp',
     tone: 'from-[#f8f4ef]/90 via-white to-[#f2dedd]/60',
     to: '/boutique?category=harnais',
     category: 'harnais',
@@ -244,7 +244,7 @@ export default function HomePage() {
           </article>
           <figure className="overflow-hidden rounded-[28px] shadow-xl shadow-black/10">
             <img
-              src="/Images/Profile1.jpg"
+              src="/Images/Profile1.webp"
               alt="Univers Le Clos de la Reine"
               className="w-full h-full object-cover"
               loading="lazy"
@@ -256,7 +256,7 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 grid md:grid-cols-2 gap-10 items-center">
           <div className="overflow-hidden rounded-[28px] shadow-xl shadow-black/10 order-2 md:order-1 transition duration-300 ease-in-out hover:scale-[1.02]">
             <img
-              src="/Images/Profile2.jpg"
+              src="/Images/Profile2.webp"
               alt="Joanne, fondatrice"
               className="w-full h-full object-cover transition-transform duration-300 ease-in-out hover:scale-[1.02]"
               loading="lazy"

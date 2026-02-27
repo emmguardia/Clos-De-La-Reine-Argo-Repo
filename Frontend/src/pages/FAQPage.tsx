@@ -73,7 +73,7 @@ export default function FAQPage() {
       <div className="relative border-b border-black/5">
         <div className="absolute inset-0">
           <img
-            src="/Images/header2.jpg"
+            src="/Images/header2.webp"
             alt="Questions fréquentes"
             className="h-full w-full object-cover"
             loading="lazy"

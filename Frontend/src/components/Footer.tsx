@@ -6,7 +6,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div>
             <div className="flex items-center space-x-2 mb-4">
-              <img src="/Images/Logo.png" alt="Logo" className="w-10 h-10" />
+              <img src="/Images/Logo.webp" alt="Logo" className="w-10 h-10" />
               <span className="text-xl font-light text-gray-900">Le Clos de la Reine</span>
             </div>
             <p className="text-gray-600 font-light text-sm">

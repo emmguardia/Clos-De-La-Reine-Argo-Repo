@@ -64,7 +64,7 @@ export default function ContactPage() {
       <div className="relative border-b border-black/5">
         <div className="absolute inset-0">
           <img
-            src="/Images/header2.jpg"
+            src="/Images/header2.webp"
             alt="Contactez-nous"
             className="h-full w-full object-cover"
             loading="lazy"

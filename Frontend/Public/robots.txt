@@ -1,0 +1,14 @@
+# Le Clos de la Reine - robots.txt
+User-agent: *
+Allow: /
+
+# Zones privées / admin
+Disallow: /admin
+Disallow: /admin/
+Disallow: /checkout
+Disallow: /commande/
+Disallow: /profil
+Disallow: /stats
+
+# Sitemap
+Sitemap: https://leclosdelareine.com/sitemap.xml

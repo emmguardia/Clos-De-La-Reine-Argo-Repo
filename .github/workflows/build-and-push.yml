@@ -262,9 +262,9 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Helm values already up to date, skip commit"
           } else {
-            git pull --rebase origin ${{ github.ref_name }}
             git commit -m "chore(helm): pin images to digest $tag [skip ci]"
-            git push
+            git pull --rebase origin ${{ github.ref_name }}
+            git push origin ${{ github.ref_name }}
             if ($LASTEXITCODE -ne 0) {
               Write-Error "git push a échoué."
               exit 1

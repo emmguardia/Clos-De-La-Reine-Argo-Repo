@@ -31,6 +31,63 @@ export function getCachedProducts(): Product[] | null {
   return null;
 }
 
+export async function fetchProductsMinimal(): Promise<Product[]> {
+  try {
+    const response = await fetch(`${API_URL}/api/products?minimal=1`);
+    if (!response.ok) throw new Error('Erreur lors de la récupération des produits');
+    const products = await safeJsonResponse(response, []);
+    return products.map((p: Record<string, unknown>) => ({
+      id: (p.id ?? p._id) as number,
+      name: p.name as string,
+      price: p.price as number,
+      image: p.image as string,
+      secondImage: undefined as string | undefined,
+      additionalImages: [] as string[],
+      category: p.category as ProductCategory,
+      collection: p.collection as string,
+      color: p.color as string | string[],
+      sizes: (p.sizes as string[]) || [],
+      surcharge1m20: (p.surcharge1m20 as number | null | undefined) ?? null,
+      surchargeSurMesure: (p.surchargeSurMesure as number | null | undefined) ?? null,
+      isNew: (p.isNew as boolean) || false,
+      briefDescription: (p.briefDescription as string) || undefined
+    }));
+  } catch (err) {
+    console.error('Erreur lors du chargement des produits:', err);
+    return [];
+  }
+}
+
+export async function fetchProductById(id: number): Promise<Product | null> {
+  try {
+    const response = await fetch(`${API_URL}/api/products/${id}`);
+    if (!response.ok) return null;
+    const p = await safeJsonResponse(response, null) as Record<string, unknown> | null;
+    if (!p) return null;
+    const cat = p.category as string;
+    const sizes = (p.sizes as string[] | undefined)?.length ? (p.sizes as string[]) : (cat === 'laisses' ? ['1m', '1m20'] : ['XS', 'S', 'M', 'L', 'XL']);
+    return {
+      id: (p.id ?? p._id) as number,
+      name: p.name as string,
+      price: p.price as number,
+      image: p.image as string,
+      secondImage: p.secondImage as string | undefined,
+      additionalImages: (p.additionalImages as string[] | undefined) || [],
+      category: p.category as ProductCategory,
+      collection: p.collection as string,
+      color: p.color as string | string[],
+      sizes,
+      surcharge1m20: (p.surcharge1m20 as number | null | undefined) ?? null,
+      surchargeSurMesure: (p.surchargeSurMesure as number | null | undefined) ?? null,
+      isNew: (p.isNew as boolean) || false,
+      briefDescription: (p.briefDescription as string) || undefined
+    };
+  } catch (err) {
+    console.error('Erreur fetchProductById:', err);
+    return null;
+  }
+}
+
 export async function fetchProducts(): Promise<Product[]> {
   const now = Date.now();
   if (productsCache.data && productsCache.expires > now) {

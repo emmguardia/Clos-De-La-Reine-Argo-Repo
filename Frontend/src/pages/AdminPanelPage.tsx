@@ -1,7 +1,8 @@
 import { Package, FolderOpen, BarChart3, Image as ImageIcon, Plus, Edit, Trash2, Search, X, Save, ShoppingBag, HelpCircle, LogOut, Tag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { useProducts } from '../hooks/useProducts';
+import { useProductsForAdmin } from '../hooks/useProductsForAdmin';
+import { fetchProductById } from '../data/products';
 import type { Product } from '../data/products';
 import ImageUpload from '../components/ImageUpload';
 import Pagination from '../components/Pagination';
@@ -21,7 +22,7 @@ interface GalleryItem {
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
 export default function AdminPanelPage() {
-  const { products, loading } = useProducts();
+  const { products, loading } = useProductsForAdmin();
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -264,22 +265,24 @@ export default function AdminPanelPage() {
     setShowAddForm(false);
   };
 
-  const handleEdit = (product: Product) => {
-    setEditingProduct(product);
+  const handleEdit = async (product: Product) => {
+    const full = await fetchProductById(product.id);
+    const p = full ?? product;
+    setEditingProduct(p);
     setFormData({
-      name: product.name,
-      price: product.price.toString(),
-      category: product.category,
-      collection: product.collection,
-      color: Array.isArray(product.color) ? product.color.join(', ') : product.color,
-      image: product.image,
-      secondImage: product.secondImage || '',
-      isNew: product.isNew || false,
-      briefDescription: product.briefDescription || '',
-      surcharge1m20: product.surcharge1m20 != null ? String(product.surcharge1m20).replace('.', ',') : '',
-      surchargeSurMesure: product.surchargeSurMesure != null ? String(product.surchargeSurMesure).replace('.', ',') : ''
+      name: p.name,
+      price: p.price.toString(),
+      category: p.category,
+      collection: p.collection,
+      color: Array.isArray(p.color) ? p.color.join(', ') : p.color,
+      image: p.image,
+      secondImage: p.secondImage || '',
+      isNew: p.isNew || false,
+      briefDescription: p.briefDescription || '',
+      surcharge1m20: p.surcharge1m20 != null ? String(p.surcharge1m20).replace('.', ',') : '',
+      surchargeSurMesure: p.surchargeSurMesure != null ? String(p.surchargeSurMesure).replace('.', ',') : ''
     });
-    setAdditionalImages(product.additionalImages || []);
+    setAdditionalImages(p.additionalImages || []);
     setShowAddForm(true);
   };
 
@@ -741,6 +744,7 @@ export default function AdminPanelPage() {
                           <img
                             src={product.image}
                             alt={product.name}
+                            loading="lazy"
                             className="w-16 h-16 object-cover rounded-lg"
                             onError={(e) => {
                               (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="64" height="64"%3E%3Crect width="64" height="64" fill="%23e5e7eb"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%239ca3af" font-size="12"%3EImage%3C/text%3E%3C/svg%3E';
@@ -917,6 +921,7 @@ export default function AdminPanelPage() {
                                 <img
                                   src={item.data}
                                   alt={item.name}
+                                  loading="lazy"
                                   className="w-full h-24 object-cover rounded-lg"
                                 />
                                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
@@ -1005,6 +1010,7 @@ export default function AdminPanelPage() {
                                 <img
                                   src={item.data}
                                   alt={item.name}
+                                  loading="lazy"
                                   className="w-full h-24 object-cover rounded-lg"
                                 />
                                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">

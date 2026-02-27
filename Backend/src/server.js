@@ -518,17 +518,16 @@ app.delete('/api/auth/me', authenticateToken, async (req, res) => {
 
 app.get('/api/products', async (req, res) => {
   try {
+    const minimal = req.query.minimal === '1' || req.query.minimal === 'true';
     const products = await db.collection('products').find({}).toArray();
     const formattedProducts = products.map(product => {
       const cat = product.category;
       const sizes = product.sizes?.length ? product.sizes : (cat === 'laisses' ? ['1m', '1m20'] : (cat === 'colliers' || cat === 'harnais') ? ['XS', 'S', 'M', 'L', 'XL'] : []);
-      return {
+      const base = {
         id: product.id || product._id?.toString() || product._id,
         name: product.name,
         price: product.price,
         image: product.image,
-        secondImage: product.secondImage,
-        additionalImages: product.additionalImages || [],
         category: product.category,
         collection: product.collection,
         color: product.color,
@@ -538,6 +537,8 @@ app.get('/api/products', async (req, res) => {
         isNew: product.isNew || false,
         briefDescription: product.briefDescription || undefined
       };
+      if (minimal) return base;
+      return { ...base, secondImage: product.secondImage, additionalImages: product.additionalImages || [] };
     });
     res.json(formattedProducts);
   } catch (error) {

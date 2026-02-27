@@ -19,8 +19,8 @@ interface FeaturedProduct {
 }
 const featuredProducts: FeaturedProduct[] = [
   {
-    id: 'collier_tartan_beige',
-    title: 'collier tartan beige',
+    id: '1',
+    title: 'Collier tartan beige',
     subtitle: 'Collier et laisse assortis, bleu profond',
     price: '27€',
     badge: 'Collier phare',
@@ -31,7 +31,7 @@ const featuredProducts: FeaturedProduct[] = [
     collection: 'Back to School',
   },
   {
-    id: 'laisse_tartan_beige',
+    id: '2',
     title: 'Laisse tartan beige',
     subtitle: 'Tressage atelier, mousqueton inox, teinte moka',
     price: '37€',
@@ -43,7 +43,7 @@ const featuredProducts: FeaturedProduct[] = [
     collection: 'Back to School',
   },
   {
-    id: 'harnais_tartan_beige ',
+    id: '3 ',
     title: 'Harnais tartan beige',
     subtitle: 'Mesh respirant, sangles sable, ergonomie douce',
     price: '47€',

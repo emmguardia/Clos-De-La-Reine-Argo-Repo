@@ -18,6 +18,9 @@
     "express-rate-limit": "^8.2.1",
     "stripe": "^17.4.0"
   },
+  "devDependencies": {
+    "minimatch": "10.2.3"
+  },
   "overrides": {
     "rimraf": "^5.0.5",
     "tar": ">=7.5.8",

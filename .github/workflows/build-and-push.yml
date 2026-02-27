@@ -155,6 +155,12 @@ jobs:
         with:
           driver: docker
 
+      - name: Prune Docker build cache
+        shell: powershell
+        run: |
+          docker builder prune -af 2>$null
+          Write-Host "Build cache pruned"
+
       - name: Build backend (dist/)
         shell: powershell
         run: |
@@ -179,6 +185,7 @@ jobs:
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
           no-cache: true
+          pull: true
 
       - name: Trivy scan (backend)
         shell: powershell
@@ -213,6 +220,7 @@ jobs:
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
           no-cache: true
+          pull: true
 
       - name: Trivy scan (frontend)
         shell: powershell

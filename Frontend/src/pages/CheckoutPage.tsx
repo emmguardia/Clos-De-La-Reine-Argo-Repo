@@ -4,7 +4,7 @@ import { useCart } from '../hooks/useCart';
 import { useProducts } from '../hooks/useProducts';
 import { ArrowLeft, CheckCircle, Package, CreditCard, Truck, User, Heart, ArrowRight } from 'lucide-react';
 import { dogBreeds } from '../data/dogBreeds';
-import { sanitizeInput, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJsonParse, safeJsonResponse } from '../utils/security';
+import { sanitizeInput, sanitizeDescription, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJsonParse, safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 const SHIPPING_LA_POSTE = 5.9;
@@ -325,7 +325,7 @@ export default function CheckoutPage() {
                           required
                           value={formData.firstName}
                           onChange={(e) => {
-                            setFormData({ ...formData, firstName: sanitizeInput(e.target.value).slice(0, 50) });
+                            setFormData({ ...formData, firstName: sanitizeDescription(e.target.value, 50) });
                             setAutoFilled({ ...autoFilled, firstName: false });
                           }}
                           className={`w-full px-4 py-3 border rounded-2xl transition-all focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent ${
@@ -342,7 +342,7 @@ export default function CheckoutPage() {
                           required
                           value={formData.lastName}
                           onChange={(e) => {
-                            setFormData({ ...formData, lastName: sanitizeInput(e.target.value).slice(0, 50) });
+                            setFormData({ ...formData, lastName: sanitizeDescription(e.target.value, 50) });
                             setAutoFilled({ ...autoFilled, lastName: false });
                           }}
                           className={`w-full px-4 py-3 border rounded-2xl transition-all focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent ${
@@ -418,7 +418,7 @@ export default function CheckoutPage() {
                           type="text"
                           required
                           value={dogInfo.breed}
-                          onChange={(e) => handleBreedChange(sanitizeInput(e.target.value).slice(0, 100))}
+                          onChange={(e) => handleBreedChange(sanitizeDescription(e.target.value, 100))}
                           onFocus={() => {
                             if (dogInfo.breed.length > 0) {
                               const filtered = dogBreeds.filter(breed =>
@@ -479,7 +479,7 @@ export default function CheckoutPage() {
                           <input
                             type="text"
                             value={dogInfo.tourDeCou}
-                            onChange={(e) => setDogInfo({ ...dogInfo, tourDeCou: sanitizeInput(e.target.value).slice(0, 10) })}
+                            onChange={(e) => setDogInfo({ ...dogInfo, tourDeCou: sanitizeDescription(e.target.value, 10) })}
                             placeholder="Ex: 28"
                             className="w-full px-4 py-3 border border-gray-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                           />
@@ -493,7 +493,7 @@ export default function CheckoutPage() {
                           <input
                             type="text"
                             value={dogInfo.tourDeTaille}
-                            onChange={(e) => setDogInfo({ ...dogInfo, tourDeTaille: sanitizeInput(e.target.value).slice(0, 10) })}
+                            onChange={(e) => setDogInfo({ ...dogInfo, tourDeTaille: sanitizeDescription(e.target.value, 10) })}
                             placeholder="Ex: 45"
                             className="w-full px-4 py-3 border border-gray-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                           />
@@ -537,7 +537,7 @@ export default function CheckoutPage() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Informations supplémentaires</label>
                         <textarea
                           value={additionalInfo}
-                          onChange={(e) => setAdditionalInfo(sanitizeInput(e.target.value).slice(0, 2000))}
+                          onChange={(e) => setAdditionalInfo(sanitizeDescription(e.target.value, 2000))}
                           placeholder="Informations supplémentaires sur votre chien ou votre commande..."
                           rows={4}
                           className="w-full px-4 py-3 border border-gray-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent resize-none"

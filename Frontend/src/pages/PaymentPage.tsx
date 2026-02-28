@@ -4,7 +4,7 @@ import { Lock, MapPin, CreditCard, ArrowLeft, Package, CheckCircle, Truck } from
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useProducts } from '../hooks/useProducts';
-import { sanitizeInput, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJsonResponse } from '../utils/security';
+import { sanitizeDescription, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 const ADRESSE_API = 'https://api-adresse.data.gouv.fr/search';
@@ -613,7 +613,7 @@ export default function PaymentPage() {
                           type="text"
                           required
                           value={shippingAddress.firstName}
-                          onChange={(e) => setShippingAddress({ ...shippingAddress, firstName: sanitizeInput(e.target.value).slice(0, 50) })}
+                          onChange={(e) => setShippingAddress({ ...shippingAddress, firstName: sanitizeDescription(e.target.value, 50) })}
                           className="w-full px-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                         />
                       </div>
@@ -623,7 +623,7 @@ export default function PaymentPage() {
                           type="text"
                           required
                           value={shippingAddress.lastName}
-                          onChange={(e) => setShippingAddress({ ...shippingAddress, lastName: sanitizeInput(e.target.value).slice(0, 50) })}
+                          onChange={(e) => setShippingAddress({ ...shippingAddress, lastName: sanitizeDescription(e.target.value, 50) })}
                           className="w-full px-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                         />
                       </div>
@@ -694,7 +694,7 @@ export default function PaymentPage() {
                           type="text"
                           required
                           value={shippingAddress.postalCode}
-                          onChange={(e) => setShippingAddress({ ...shippingAddress, postalCode: sanitizeInput(e.target.value).slice(0, 10) })}
+                          onChange={(e) => setShippingAddress({ ...shippingAddress, postalCode: sanitizeDescription(e.target.value, 10) })}
                           className="w-full px-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                         />
                       </div>
@@ -704,7 +704,7 @@ export default function PaymentPage() {
                           type="text"
                           required
                           value={shippingAddress.city}
-                          onChange={(e) => setShippingAddress({ ...shippingAddress, city: sanitizeInput(e.target.value).slice(0, 100) })}
+                          onChange={(e) => setShippingAddress({ ...shippingAddress, city: sanitizeDescription(e.target.value, 100) })}
                           className="w-full px-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                         />
                       </div>

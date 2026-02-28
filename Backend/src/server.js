@@ -4,7 +4,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
-import { sendNewContactNotificationEmail, sendContactConfirmationEmail, sendOrderConfirmationEmail, sendNewOrderNotificationEmail } from './utils/email.js';
+import { sendNewContactNotificationEmail, sendContactConfirmationEmail, sendOrderConfirmationEmail, sendNewOrderNotificationEmail, sendOrderValidatedEmail } from './utils/email.js';
 import { sendInvoiceEmail } from './utils/invoice.js';
 import Stripe from 'stripe';
 
@@ -1241,6 +1241,42 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
       { userId: req.user.userId },
       { $set: { items: [], updatedAt: new Date() } }
     );
+
+    try {
+      const user = await db.collection('users').findOne(
+        { _id: new ObjectId(req.user.userId) },
+        { projection: { email: 1, firstName: 1, lastName: 1 } }
+      );
+      const products = await db.collection('products').find({}).toArray();
+      const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
+      const ship = order.shippingAddress || {};
+      const itemsForEmail = (order.items || []).map(item => ({
+        name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
+        quantity: item.quantity,
+        price: item.price
+      }));
+      const shippingCost = order.shippingAmount != null ? Number(order.shippingAmount) : 5.9;
+      const dogInfoStr = order.dogInfo ? `Race: ${order.dogInfo.breed || ''}\nÂge: ${order.dogInfo.age || ''}${order.dogInfo.tourDeCou ? `\nTour de cou: ${order.dogInfo.tourDeCou}` : ''}${order.dogInfo.tourDeTaille ? `\nTour de taille: ${order.dogInfo.tourDeTaille}` : ''}` : '';
+      const orderData = {
+        orderNumber: orderNumber,
+        firstName: ship.firstName || user?.firstName || '',
+        lastName: ship.lastName || user?.lastName || '',
+        items: itemsForEmail,
+        totalAmount: Number(order.total),
+        shippingCost,
+        shippingAddress: ship,
+        customerName: [ship.firstName, ship.lastName].filter(Boolean).join(' ') || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Client'),
+        customerEmail: ship.email || user?.email || '',
+        customerPhone: ship.phone || '',
+        paymentMethod: 'En attente de validation',
+        dogInfo: dogInfoStr || undefined,
+        notes: order.notes || undefined
+      };
+      await sendNewOrderNotificationEmail(orderData);
+    } catch (emailErr) {
+      console.error('Erreur envoi email nouvelle commande (non-bloquant):', emailErr);
+    }
+
     res.status(201).json({ id: result.insertedId.toString(), orderNumber, ...order });
   } catch (error) {
     console.error('Erreur lors de la création de la commande:', error);
@@ -1350,6 +1386,41 @@ app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
     if (result.matchedCount === 0) {
       return res.status(404).json({ error: 'Commande non trouvée' });
     }
+
+    if (status === 'validated') {
+      try {
+        const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+        const user = await db.collection('users').findOne(
+          { _id: new ObjectId(updatedOrder.userId) },
+          { projection: { email: 1, firstName: 1, lastName: 1 } }
+        );
+        const products = await db.collection('products').find({}).toArray();
+        const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
+        const ship = updatedOrder.shippingAddress || {};
+        const itemsForEmail = (updatedOrder.items || []).map(item => ({
+          name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
+          quantity: item.quantity,
+          price: item.price
+        }));
+        const shippingCost = updatedOrder.shippingAmount != null ? Number(updatedOrder.shippingAmount) : 5.9;
+        const orderData = {
+          orderNumber: updatedOrder.orderNumber || updatedOrder._id.toString(),
+          firstName: ship.firstName || user?.firstName || '',
+          lastName: ship.lastName || user?.lastName || '',
+          items: itemsForEmail,
+          totalAmount: Number(updatedOrder.total),
+          shippingCost,
+          customerName: [ship.firstName, ship.lastName].filter(Boolean).join(' ') || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Client')
+        };
+        const clientEmail = ship.email || user?.email;
+        if (clientEmail) {
+          await sendOrderValidatedEmail(clientEmail, orderData);
+        }
+      } catch (emailErr) {
+        console.error('Erreur envoi email commande validée (non-bloquant):', emailErr);
+      }
+    }
+
     res.json({ message: 'Statut mis à jour', status });
   } catch (error) {
     console.error('Erreur lors de la mise à jour du statut:', error);
@@ -1382,6 +1453,35 @@ app.put('/api/orders/:id/counter-proposal', authenticateToken, async (req, res) 
         { _id: new ObjectId(req.params.id) },
         { $set: updateData }
       );
+      try {
+        const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+        const user = await db.collection('users').findOne(
+          { _id: new ObjectId(updatedOrder.userId) },
+          { projection: { email: 1, firstName: 1, lastName: 1 } }
+        );
+        const products = await db.collection('products').find({}).toArray();
+        const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
+        const ship = updatedOrder.shippingAddress || {};
+        const itemsForEmail = (updatedOrder.items || []).map(item => ({
+          name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
+          quantity: item.quantity,
+          price: item.price
+        }));
+        const shippingCost = updatedOrder.shippingAmount != null ? Number(updatedOrder.shippingAmount) : 5.9;
+        const orderData = {
+          orderNumber: updatedOrder.orderNumber || updatedOrder._id.toString(),
+          items: itemsForEmail,
+          totalAmount: Number(updatedOrder.total),
+          shippingCost,
+          customerName: [ship.firstName, ship.lastName].filter(Boolean).join(' ') || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Client')
+        };
+        const clientEmail = ship.email || user?.email;
+        if (clientEmail) {
+          await sendOrderValidatedEmail(clientEmail, orderData);
+        }
+      } catch (emailErr) {
+        console.error('Erreur envoi email commande validée (non-bloquant):', emailErr);
+      }
       res.json({ message: 'Contre-proposition acceptée', status: 'validated' });
     } else if (newProposal) {
       const updateData = {

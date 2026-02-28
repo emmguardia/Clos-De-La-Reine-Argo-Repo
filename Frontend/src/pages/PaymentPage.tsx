@@ -508,6 +508,8 @@ export default function PaymentPage() {
       body: JSON.stringify({ paymentIntentId, shippingAddress })
     });
     if (res.ok) {
+      localStorage.setItem('newOrderBadge', '1');
+      window.dispatchEvent(new Event('newOrderBadgeUpdated'));
       navigate(`/commande/${orderId}/merci`);
     } else {
       const data = await safeJsonResponse(res, { error: '' });

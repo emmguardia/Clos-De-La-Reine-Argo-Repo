@@ -91,6 +91,13 @@ export default function ProfilePage() {
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    if (activeTab === 'commandes') {
+      localStorage.removeItem('newOrderBadge');
+      window.dispatchEvent(new Event('newOrderBadgeUpdated'));
+    }
+  }, [activeTab]);
+
   const fetchOrders = async () => {
     setOrdersLoading(true);
     try {

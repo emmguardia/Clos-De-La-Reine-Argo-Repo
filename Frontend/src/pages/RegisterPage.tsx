@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { sanitizeInput, sanitizeEmail, safeJsonResponse } from '../utils/security';
+import { sanitizeDescription, sanitizeEmail, safeJsonResponse } from '../utils/security';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -26,7 +26,7 @@ export default function RegisterPage() {
     if (e.target.name === 'email') {
       sanitizedValue = sanitizeEmail(value) || value.slice(0, 255);
     } else if (e.target.name === 'firstName' || e.target.name === 'lastName') {
-      sanitizedValue = sanitizeInput(value).slice(0, 50);
+      sanitizedValue = sanitizeDescription(value, 50);
     } else if (e.target.name === 'password' || e.target.name === 'confirmPassword') {
       sanitizedValue = value.slice(0, 128);
     }

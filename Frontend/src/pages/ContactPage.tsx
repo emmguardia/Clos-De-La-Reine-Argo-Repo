@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { sanitizeInput, sanitizeEmail, sanitizeText } from '../utils/security';
+import { sanitizeDescription, sanitizeEmail } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
@@ -49,9 +49,9 @@ export default function ContactPage() {
     if (e.target.name === 'email') {
       sanitizedValue = sanitizeEmail(value) || value.slice(0, 255);
     } else if (e.target.name === 'name' || e.target.name === 'subject') {
-      sanitizedValue = sanitizeInput(value).slice(0, 100);
+      sanitizedValue = sanitizeDescription(value, 100);
     } else if (e.target.name === 'message') {
-      sanitizedValue = sanitizeText(value, 2000);
+      sanitizedValue = sanitizeDescription(value, 2000);
     }
     
     setFormData({

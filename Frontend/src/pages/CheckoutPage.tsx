@@ -190,6 +190,8 @@ export default function CheckoutPage() {
       }
 
       window.dispatchEvent(new Event('cartUpdated'));
+      localStorage.setItem('newOrderBadge', '1');
+      window.dispatchEvent(new Event('newOrderBadgeUpdated'));
       navigate('/profil?tab=commandes');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la création de la commande');

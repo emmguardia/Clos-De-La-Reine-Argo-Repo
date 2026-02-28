@@ -1,4 +1,4 @@
-import { ShoppingCart, Heart, User, Menu, ChevronDown } from 'lucide-react';
+import { ShoppingCart, Heart, User, Menu, ChevronDown, Package } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../hooks/useCart';
@@ -33,6 +33,13 @@ export default function Header() {
   });
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const [newOrderBadge, setNewOrderBadge] = useState(() => (localStorage.getItem('newOrderBadge') === '1' ? 1 : 0));
+
+  useEffect(() => {
+    const handler = () => setNewOrderBadge(localStorage.getItem('newOrderBadge') === '1' ? 1 : 0);
+    window.addEventListener('newOrderBadgeUpdated', handler);
+    return () => window.removeEventListener('newOrderBadgeUpdated', handler);
+  }, []);
 
   useEffect(() => {
     const handleCartUpdate = () => refreshCart();
@@ -139,8 +146,13 @@ export default function Header() {
               <div className="relative" ref={profileMenuRef}>
                 <button
                   onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                  className="flex items-center space-x-2 px-3 py-2 hover:bg-gray-50 rounded-2xl transition-all duration-200"
+                  className="flex items-center space-x-2 px-3 py-2 hover:bg-gray-50 rounded-2xl transition-all duration-200 relative"
                 >
+                  {newOrderBadge > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 bg-gray-900 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                      {newOrderBadge}
+                    </span>
+                  )}
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#f2dedd] to-[#e5f2eb] flex items-center justify-center">
                     <span className="text-sm font-medium text-gray-700">
                       {user.firstName.charAt(0).toUpperCase()}
@@ -156,10 +168,30 @@ export default function Header() {
                     <Link
                       to="/profil"
                       onClick={() => setIsProfileMenuOpen(false)}
-                      className="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors duration-200"
+                      className="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors duration-200 relative"
                     >
                       <div className="font-medium">Mon profil</div>
                       <div className="text-xs text-gray-500 mt-1 truncate">{user.email?.slice(0, 30) || ''}</div>
+                      {newOrderBadge > 0 && (
+                        <span className="absolute top-3 right-4 bg-gray-900 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                          {newOrderBadge}
+                        </span>
+                      )}
+                    </Link>
+                    <Link
+                      to="/profil?tab=commandes"
+                      onClick={() => setIsProfileMenuOpen(false)}
+                      className="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors duration-200 relative"
+                    >
+                      <div className="font-medium flex items-center gap-2">
+                        <Package className="w-4 h-4" />
+                        Commandes
+                        {newOrderBadge > 0 && (
+                          <span className="bg-gray-900 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                            {newOrderBadge}
+                          </span>
+                        )}
+                      </div>
                     </Link>
                     <div className="border-t border-gray-100 my-2"></div>
                     <button

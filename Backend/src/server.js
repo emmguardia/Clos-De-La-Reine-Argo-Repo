@@ -1,3 +1,4 @@
+import 'express-async-errors';
 import express from 'express';
 import cors from 'cors';
 import { MongoClient, ObjectId } from 'mongodb';
@@ -11,10 +12,12 @@ import Stripe from 'stripe';
 console.log('[BOOT] Démarrage du serveur...');
 
 process.on('uncaughtException', (err) => {
-  console.error('uncaughtException:', err);
+  console.error('[CRASH] uncaughtException:', err?.message || err, err?.stack);
+  process.exit(1);
 });
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('unhandledRejection:', reason);
+  console.error('[CRASH] unhandledRejection:', reason, promise);
+  process.exit(1);
 });
 
 const app = express();
@@ -2515,6 +2518,13 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
     res.json({ message: 'Paiement enregistré', status: 'paid' });
   } catch (error) {
     console.error('Erreur lors de l\'enregistrement du paiement:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+app.use((err, req, res, next) => {
+  console.error('[EXPRESS] Erreur non gérée:', err?.message || err, err?.stack);
+  if (!res.headersSent) {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });

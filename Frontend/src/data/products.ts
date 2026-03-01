@@ -31,6 +31,11 @@ export function getCachedProducts(): Product[] | null {
   return null;
 }
 
+export function invalidateProductsCache(): void {
+  productsCache.data = null;
+  productsCache.expires = 0;
+}
+
 export async function fetchProductsMinimal(): Promise<Product[]> {
   try {
     const response = await fetch(`${API_URL}/api/products?minimal=1`);
@@ -49,7 +54,7 @@ export async function fetchProductsMinimal(): Promise<Product[]> {
       sizes: (p.sizes as string[]) || [],
       surcharge1m20: (p.surcharge1m20 as number | null | undefined) ?? null,
       surchargeSurMesure: (p.surchargeSurMesure as number | null | undefined) ?? null,
-      isNew: (p.isNew as boolean) || false,
+      isNew: p.isNew === true || p.isNew === 'true',
       briefDescription: (p.briefDescription as string) || undefined
     }));
   } catch (err) {
@@ -79,7 +84,7 @@ export async function fetchProductById(id: number): Promise<Product | null> {
       sizes,
       surcharge1m20: (p.surcharge1m20 as number | null | undefined) ?? null,
       surchargeSurMesure: (p.surchargeSurMesure as number | null | undefined) ?? null,
-      isNew: (p.isNew as boolean) || false,
+      isNew: p.isNew === true || p.isNew === 'true',
       briefDescription: (p.briefDescription as string) || undefined
     };
   } catch (err) {
@@ -112,7 +117,7 @@ export async function fetchProducts(): Promise<Product[]> {
       sizes: (p.sizes as string[]) || [],
       surcharge1m20: (p.surcharge1m20 as number | null | undefined) ?? null,
       surchargeSurMesure: (p.surchargeSurMesure as number | null | undefined) ?? null,
-      isNew: (p.isNew as boolean) || false,
+      isNew: p.isNew === true || p.isNew === 'true',
       briefDescription: (p.briefDescription as string) || undefined
     }));
     productsCache.data = mapped;

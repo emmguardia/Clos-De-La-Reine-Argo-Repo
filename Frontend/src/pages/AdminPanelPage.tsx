@@ -2,6 +2,7 @@ import { Package, FolderOpen, BarChart3, Plus, Edit, Trash2, Search, X, Save, Sh
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useProductsForAdmin } from '../hooks/useProductsForAdmin';
+import { invalidateProductsCache } from '../data/products';
 import { fetchProductById } from '../data/products';
 import type { Product } from '../data/products';
 import ImageUpload from '../components/ImageUpload';
@@ -22,7 +23,7 @@ interface GalleryItem {
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
 export default function AdminPanelPage() {
-  const { products, loading } = useProductsForAdmin();
+  const { products, loading, refetch } = useProductsForAdmin();
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -295,6 +296,7 @@ export default function AdminPanelPage() {
   };
 
   const handleEdit = async (product: Product) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     const full = await fetchProductById(product.id);
     const p = full ?? product;
     setEditingProduct(p);
@@ -371,9 +373,10 @@ export default function AdminPanelPage() {
       }
 
       setFormSuccess(editingProduct ? 'Produit mis à jour avec succès' : 'Produit créé avec succès');
+      invalidateProductsCache();
       setTimeout(() => {
         resetForm();
-        window.location.reload();
+        refetch();
       }, 1500);
     } catch {
       setFormError(err instanceof Error ? err.message : 'Erreur lors de l\'opération');
@@ -408,8 +411,9 @@ export default function AdminPanelPage() {
         throw new Error('Erreur lors de la suppression du produit');
       }
 
-      window.location.reload();
-    } catch {
+      invalidateProductsCache();
+      refetch();
+    } catch (err) {
       alert(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     } finally {
       setDeleteLoading({ ...deleteLoading, [productId]: false });

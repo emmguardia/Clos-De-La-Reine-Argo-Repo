@@ -59,7 +59,7 @@ const featuredProducts: FeaturedProduct[] = [
 export default function HomePage() {
   const { products, loading } = useProducts();
   const newProducts = useMemo(
-    () => products.filter((p) => p.isNew === true).slice(0, 4),
+    () => products.filter((p) => Boolean(p.isNew)).slice(0, 4),
     [products]
   );
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);

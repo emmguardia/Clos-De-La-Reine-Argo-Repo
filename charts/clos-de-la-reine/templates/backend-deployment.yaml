@@ -109,22 +109,29 @@ spec:
         - name: secrets
           mountPath: /app/secrets
           readOnly: true
+        startupProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.backend.port }}
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 24
         livenessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.backend.port }}
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 5
+        readinessProbe:
           httpGet:
             path: /health
             port: {{ .Values.backend.port }}
           initialDelaySeconds: 30
           periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: {{ .Values.backend.port }}
-          initialDelaySeconds: 15
-          periodSeconds: 5
-          timeoutSeconds: 5
-          failureThreshold: 5
+          timeoutSeconds: 10
+          failureThreshold: 6
       volumes:
       - name: secrets
         secret:

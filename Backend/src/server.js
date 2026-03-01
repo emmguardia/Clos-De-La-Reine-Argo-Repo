@@ -8,6 +8,13 @@ import { sendNewContactNotificationEmail, sendContactConfirmationEmail, sendOrde
 import { sendInvoiceEmail } from './utils/invoice.js';
 import Stripe from 'stripe';
 
+process.on('uncaughtException', (err) => {
+  console.error('uncaughtException:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('unhandledRejection:', reason);
+});
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -93,7 +100,10 @@ async function connectToDatabase() {
   try {
     const host = MONGODB_HOST || 'localhost';
     const uri = MONGODB_URI || `mongodb://${MONGODB_USER}:${encodeURIComponent(MONGODB_PASSWORD)}@${host}:27017/${MONGODB_DB}?authSource=${MONGODB_DB}`;
-    client = new MongoClient(uri);
+    client = new MongoClient(uri, {
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 10000
+    });
     await client.connect();
     db = client.db(MONGODB_DB);
     console.log('✅ Connecté à MongoDB');
@@ -165,6 +175,12 @@ app.get('/health', (req, res) => {
 
 app.get('/api/config', (req, res) => {
   res.json({ stripePublishableKey: STRIPE_PUBLISHABLE_KEY || '' });
+});
+
+app.use('/api', (req, res, next) => {
+  if (req.path === '/config') return next();
+  if (!db) return res.status(503).json({ error: 'Service temporairement indisponible' });
+  next();
 });
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'closdelareine@gmail.com';
@@ -2501,9 +2517,9 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
   }
 });
 
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
   console.log(`🚀 Serveur démarré sur le port ${PORT}`);
-  await connectToDatabase();
+  connectToDatabase();
 });
 
 process.on('SIGTERM', async () => {

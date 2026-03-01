@@ -1,4 +1,4 @@
-import { Package, FolderOpen, BarChart3, Image as ImageIcon, Plus, Edit, Trash2, Search, X, Save, ShoppingBag, HelpCircle, LogOut, Tag, DollarSign } from 'lucide-react';
+import { Package, FolderOpen, BarChart3, Plus, Edit, Trash2, Search, X, Save, ShoppingBag, HelpCircle, LogOut, Tag, DollarSign } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useProductsForAdmin } from '../hooks/useProductsForAdmin';

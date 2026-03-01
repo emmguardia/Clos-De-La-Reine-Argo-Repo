@@ -1,4 +1,4 @@
-import { Package, FolderOpen, BarChart3, Image as ImageIcon, Plus, Edit, Trash2, Search, X, Save, ShoppingBag, HelpCircle, LogOut, Tag } from 'lucide-react';
+import { Package, FolderOpen, BarChart3, Image as ImageIcon, Plus, Edit, Trash2, Search, X, Save, ShoppingBag, HelpCircle, LogOut, Tag, DollarSign } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useProductsForAdmin } from '../hooks/useProductsForAdmin';
@@ -57,6 +57,7 @@ export default function AdminPanelPage() {
   const [currentPageClient, setCurrentPageClient] = useState(1);
   const [currentPageProducts, setCurrentPageProducts] = useState(1);
   const itemsPerPage = 6;
+  const [paymentStats, setPaymentStats] = useState<{ totalOrders: number; totalRevenue: number; monthlyOrders: number; monthlyRevenue: number } | null>(null);
   useEffect(() => {
     const adminToken = localStorage.getItem('adminToken');
     if (!adminToken) {
@@ -91,6 +92,7 @@ export default function AdminPanelPage() {
 
       fetchCollections();
       fetchGalleryItems();
+      fetchPaymentStats();
     } catch {
       localStorage.removeItem('adminToken');
       window.location.href = '/admin/login';
@@ -112,6 +114,33 @@ export default function AdminPanelPage() {
       }
     } catch (err) {
       console.error('Erreur:', err);
+    }
+  };
+
+  const fetchPaymentStats = async () => {
+    try {
+      const adminToken = localStorage.getItem('adminToken');
+      if (!adminToken) return;
+      const response = await fetch(`${API_URL}/api/stats`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      if (response.ok) {
+        const data = await safeJsonResponse(response, null);
+        if (data && typeof data === 'object') {
+          setPaymentStats({
+            totalOrders: (data as { totalOrders?: number }).totalOrders ?? 0,
+            totalRevenue: (data as { totalRevenue?: number }).totalRevenue ?? 0,
+            monthlyOrders: (data as { monthlyOrders?: number }).monthlyOrders ?? 0,
+            monthlyRevenue: (data as { monthlyRevenue?: number }).monthlyRevenue ?? 0
+          });
+        } else {
+          setPaymentStats({ totalOrders: 0, totalRevenue: 0, monthlyOrders: 0, monthlyRevenue: 0 });
+        }
+      } else {
+        setPaymentStats({ totalOrders: 0, totalRevenue: 0, monthlyOrders: 0, monthlyRevenue: 0 });
+      }
+    } catch {
+      setPaymentStats({ totalOrders: 0, totalRevenue: 0, monthlyOrders: 0, monthlyRevenue: 0 });
     }
   };
 
@@ -458,7 +487,25 @@ export default function AdminPanelPage() {
             </Link>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-2xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <ShoppingBag className="w-8 h-8 text-gray-600" />
+              <span className="text-2xl font-light text-gray-900">{paymentStats?.totalOrders ?? '...'}</span>
+            </div>
+            <p className="text-sm text-gray-600">Commandes payées</p>
+            <p className="text-xs text-gray-500 mt-1">Mis à jour après chaque paiement</p>
+          </div>
+          <div className="bg-white rounded-2xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <DollarSign className="w-8 h-8 text-gray-600" />
+              <span className="text-2xl font-light text-gray-900">
+                {paymentStats ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(paymentStats.totalRevenue) : '...'}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">Chiffre d'affaires total</p>
+            <p className="text-xs text-gray-500 mt-1">Mis à jour après chaque paiement</p>
+          </div>
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <Package className="w-8 h-8 text-gray-600" />
@@ -472,13 +519,6 @@ export default function AdminPanelPage() {
               <span className="text-2xl font-light text-gray-900">{loading ? '...' : collections.length}</span>
             </div>
             <p className="text-sm text-gray-600">Collections</p>
-          </div>
-          <div className="bg-white rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <ImageIcon className="w-8 h-8 text-gray-600" />
-              <span className="text-2xl font-light text-gray-900">{galleryLoading ? '...' : galleryItems.length}</span>
-            </div>
-            <p className="text-sm text-gray-600">Photos galerie</p>
           </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

@@ -1,7 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit, Trash2, Save, X, HelpCircle, ArrowLeft } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, HelpCircle, ArrowLeft, GripVertical } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { sanitizeInput, sanitizeText, safeJsonResponse } from '../utils/security';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { sanitizeInput, sanitizeDescription, safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
@@ -12,8 +29,78 @@ interface FAQItem {
   answer: string;
   order: number;
   categoryOrder?: number;
+  sortOrder?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+function SortableFAQRow({
+  faq,
+  onEdit,
+  onDelete
+}: {
+  faq: FAQItem;
+  onEdit: (faq: FAQItem) => void;
+  onDelete: (id: string) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: faq.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition
+  };
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${isDragging ? 'opacity-50 bg-gray-100' : ''}`}
+    >
+      <td className="py-4 px-4 w-10">
+        <button
+          type="button"
+          className="p-1.5 text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing touch-none"
+          {...attributes}
+          {...listeners}
+          aria-label="Glisser pour réordonner"
+        >
+          <GripVertical className="w-5 h-5" />
+        </button>
+      </td>
+      <td className="py-4 px-4">
+        <span className="font-medium text-gray-900">{faq.category}</span>
+      </td>
+      <td className="py-4 px-4">
+        <span className="text-gray-900">{faq.question}</span>
+      </td>
+      <td className="py-4 px-4">
+        <span className="text-sm text-gray-600 line-clamp-2">{faq.answer}</span>
+      </td>
+      <td className="py-4 px-4">
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => onEdit(faq)}
+            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <Edit className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => onDelete(faq.id)}
+            className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
 }
 
 export default function FAQAdminPage() {
@@ -73,8 +160,8 @@ export default function FAQAdminPage() {
       }
 
       const sanitizedCategory = sanitizeInput(formData.category).slice(0, 100);
-      const sanitizedQuestion = sanitizeText(formData.question, 500);
-      const sanitizedAnswer = sanitizeText(formData.answer, 5000);
+      const sanitizedQuestion = sanitizeDescription(formData.question, 500).trim();
+      const sanitizedAnswer = sanitizeDescription(formData.answer, 5000).trim();
 
       if (!sanitizedCategory || !sanitizedQuestion || !sanitizedAnswer) {
         setError('Tous les champs sont requis');
@@ -179,6 +266,39 @@ export default function FAQAdminPage() {
     setSuccess('');
   };
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = faqs.findIndex((f) => f.id === active.id);
+    const newIndex = faqs.findIndex((f) => f.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const newFaqs = arrayMove(faqs, oldIndex, newIndex);
+    setFaqs(newFaqs);
+    setSuccess('Ordre mis à jour');
+    try {
+      const token = localStorage.getItem('adminToken');
+      if (!token) return;
+      await fetch(`${API_URL}/api/faq/reorder`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          items: newFaqs.map((f, i) => ({ id: f.id, sortOrder: i }))
+        })
+      });
+    } catch {
+      setError('Erreur lors de la mise à jour de l\'ordre');
+      fetchFAQs();
+    }
+  };
+
   const categories = Array.from(new Set(faqs.map((f: FAQItem) => f.category))).sort();
 
   if (loading) {
@@ -258,7 +378,7 @@ export default function FAQAdminPage() {
                     type="text"
                     required
                     value={formData.question}
-                    onChange={(e) => setFormData({ ...formData, question: sanitizeText(e.target.value, 500) })}
+                    onChange={(e) => setFormData({ ...formData, question: sanitizeDescription(e.target.value, 500) })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                     placeholder="Votre question..."
                   />
@@ -268,38 +388,13 @@ export default function FAQAdminPage() {
                   <textarea
                     required
                     value={formData.answer}
-                    onChange={(e) => setFormData({ ...formData, answer: sanitizeText(e.target.value, 5000) })}
+                    onChange={(e) => setFormData({ ...formData, answer: sanitizeDescription(e.target.value, 5000) })}
                     rows={5}
                     className="w-full px-4 py-2 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent resize-none"
                     placeholder="Votre réponse..."
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Ordre dans la catégorie</label>
-                    <input
-                      type="number"
-                      value={formData.order}
-                      onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) || 0 })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                      min="0"
-                      placeholder="0"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Ordre de cette question dans sa catégorie</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Ordre de la catégorie</label>
-                    <input
-                      type="number"
-                      value={formData.categoryOrder}
-                      onChange={(e) => setFormData({ ...formData, categoryOrder: parseInt(e.target.value) || 0 })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                      min="0"
-                      placeholder="0"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Ordre d'affichage de la catégorie</p>
-                  </div>
-                </div>
+                <p className="text-xs text-gray-500">Glissez les lignes dans la liste pour modifier l&apos;ordre d&apos;affichage.</p>
                 <div className="flex gap-3">
                   <button
                     type="submit"
@@ -328,51 +423,36 @@ export default function FAQAdminPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-4 px-4 text-sm font-medium text-gray-900">Catégorie</th>
-                    <th className="text-left py-4 px-4 text-sm font-medium text-gray-900">Question</th>
-                    <th className="text-left py-4 px-4 text-sm font-medium text-gray-900">Réponse</th>
-                    <th className="text-left py-4 px-4 text-sm font-medium text-gray-900">Ordre</th>
-                    <th className="text-right py-4 px-4 text-sm font-medium text-gray-900">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {faqs.map((faq: FAQItem) => (
-                    <tr key={faq.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                      <td className="py-4 px-4">
-                        <span className="font-medium text-gray-900">{faq.category}</span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-gray-900">{faq.question}</span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-sm text-gray-600 line-clamp-2">{faq.answer}</span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-sm text-gray-600">{faq.order}</span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleEdit(faq)}
-                            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(faq.id)}
-                            className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
+              <p className="text-sm text-gray-500 mb-4">Glissez l&apos;icône ⋮⋮ pour réordonner les questions</p>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="w-10 py-4 px-4" />
+                      <th className="text-left py-4 px-4 text-sm font-medium text-gray-900">Catégorie</th>
+                      <th className="text-left py-4 px-4 text-sm font-medium text-gray-900">Question</th>
+                      <th className="text-left py-4 px-4 text-sm font-medium text-gray-900">Réponse</th>
+                      <th className="text-right py-4 px-4 text-sm font-medium text-gray-900">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    <SortableContext items={faqs.map((f) => f.id)} strategy={verticalListSortingStrategy}>
+                      {faqs.map((faq: FAQItem) => (
+                        <SortableFAQRow
+                          key={faq.id}
+                          faq={faq}
+                          onEdit={handleEdit}
+                          onDelete={handleDelete}
+                        />
+                      ))}
+                    </SortableContext>
+                  </tbody>
+                </table>
+              </DndContext>
             </div>
           )}
         </div>

@@ -103,7 +103,7 @@ export default function StatsPage() {
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-light text-gray-900 mb-2">Statistiques</h1>
-            <p className="text-gray-600">Analyse des ventes et performances</p>
+            <p className="text-gray-600">Analyse des ventes et performances — basées uniquement sur les commandes payées</p>
           </div>
           <Link
             to="/admin"
@@ -125,7 +125,7 @@ export default function StatsPage() {
             </div>
             <p className="text-3xl font-light text-gray-900 mb-1">{formatCurrency(stats.monthlyRevenue)}</p>
             <p className="text-sm text-gray-600">Chiffre d'affaires (mois en cours)</p>
-            <p className={`text-xs mt-2 ${revenueChange.color}`}>
+            <p className={`text-xs mt-2 ${revenueChange.color}`} title="Évolution du CA du mois en cours par rapport au mois précédent">
               {revenueChange.text} vs mois dernier
             </p>
           </div>
@@ -140,7 +140,7 @@ export default function StatsPage() {
             </div>
             <p className="text-3xl font-light text-gray-900 mb-1">{stats.monthlyOrders}</p>
             <p className="text-sm text-gray-600">Commandes (mois en cours)</p>
-            <p className={`text-xs mt-2 ${ordersChange.color}`}>
+            <p className={`text-xs mt-2 ${ordersChange.color}`} title="Évolution du nombre de commandes du mois en cours par rapport au mois précédent">
               {ordersChange.text} vs mois dernier
             </p>
           </div>
@@ -155,7 +155,7 @@ export default function StatsPage() {
             </div>
             <p className="text-3xl font-light text-gray-900 mb-1">{formatCurrency(stats.monthlyAverageOrderValue)}</p>
             <p className="text-sm text-gray-600">Panier moyen (mois en cours)</p>
-            <p className={`text-xs mt-2 ${avgOrderChange.color}`}>
+            <p className={`text-xs mt-2 ${avgOrderChange.color}`} title="Évolution du panier moyen du mois en cours par rapport au mois précédent">
               {avgOrderChange.text} vs mois dernier
             </p>
           </div>
@@ -243,6 +243,7 @@ export default function StatsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             <h3 className="text-xl font-light text-gray-900 mb-6">Ventes par collection</h3>
+            <p className="text-xs text-gray-500 mb-4">CA par collection (produits des commandes payées)</p>
             <div className="space-y-4">
               {Object.keys(stats.collectionStats).length === 0 ? (
                 <p className="text-sm text-gray-500">Aucune donnée disponible</p>
@@ -273,6 +274,7 @@ export default function StatsPage() {
           </div>
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             <h3 className="text-xl font-light text-gray-900 mb-6">Ventes par catégorie</h3>
+            <p className="text-xs text-gray-500 mb-4">CA par catégorie (colliers, laisses, harnais)</p>
             <div className="space-y-4">
               {Object.keys(stats.categoryStats).length === 0 ? (
                 <p className="text-sm text-gray-500">Aucune donnée disponible</p>

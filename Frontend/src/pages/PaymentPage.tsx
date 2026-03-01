@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Lock, MapPin, CreditCard, ArrowLeft, Package, CheckCircle, Truck } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { trackEvent } from '../utils/analytics';
 import { useProducts } from '../hooks/useProducts';
 import { sanitizeDescription, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJsonResponse } from '../utils/security';
 
@@ -513,6 +514,7 @@ export default function PaymentPage() {
       navigate(`/commande/${orderId}/merci`);
     } else {
       const data = await safeJsonResponse(res, { error: '' });
+      trackEvent('payment_error', { order_id: orderId!, error: (data.error || '').substring(0, 50) });
       setError(data.error || 'Erreur lors de la confirmation du paiement.');
     }
   }, [orderId, shippingAddress, navigate]);

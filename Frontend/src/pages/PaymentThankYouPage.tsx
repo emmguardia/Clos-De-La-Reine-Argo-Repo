@@ -1,9 +1,15 @@
+import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Package, CheckCircle, CreditCard, Truck, Mail, Box, Calendar, ArrowLeft } from 'lucide-react';
+import { trackEvent } from '../utils/analytics';
 
 export default function PaymentThankYouPage() {
   const navigate = useNavigate();
   const { orderId } = useParams();
+
+  useEffect(() => {
+    if (orderId) trackEvent('payment_thankyou_view', { order_id: orderId });
+  }, [orderId]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb] py-12 px-4">

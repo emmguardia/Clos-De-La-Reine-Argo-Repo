@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import { trackEvent } from '../utils/analytics';
 import { sanitizeDescription, sanitizeEmail, safeJsonResponse } from '../utils/security';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
@@ -67,6 +68,7 @@ export default function RegisterPage() {
       }
 
       if (data.token && typeof data.token === 'string' && data.user) {
+        trackEvent('register_success', {});
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify({
           id: String(data.user.id || ''),
@@ -80,7 +82,8 @@ export default function RegisterPage() {
         throw new Error('Données de réponse invalides');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur lors de l\'inscription');
+      trackEvent('register_error', {});
+      setError(err instanceof Error ? err.message : "Erreur lors de l'inscription");
     } finally {
       setLoading(false);
     }

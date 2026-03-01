@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../hooks/useCart';
+import { trackEvent } from '../utils/analytics';
 import { useProducts } from '../hooks/useProducts';
 import { Trash2, Plus, Minus } from 'lucide-react';
 
@@ -106,7 +107,10 @@ export default function CartPage() {
                   <div className="flex flex-col items-end justify-between">
                     <p className="font-medium">{(item.unitPrice * item.quantity).toFixed(2)} €</p>
                     <button
-                      onClick={() => removeFromCart(item.id, item.size)}
+                      onClick={() => {
+                      trackEvent('cart_remove_item', { product_id: item.id, product_name: item.name, quantity: item.quantity });
+                      removeFromCart(item.id, item.size);
+                    }}
                       className="p-2 text-red-600 hover:bg-red-50 rounded"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -120,7 +124,10 @@ export default function CartPage() {
                   <span>{total.toFixed(2)} €</span>
                 </div>
                 <button
-                  onClick={() => navigate('/checkout')}
+                  onClick={() => {
+                  trackEvent('checkout_start', { item_count: cartProducts.length, total: total.toFixed(2) });
+                  navigate('/checkout');
+                }}
                   className="w-full bg-gray-900 text-white py-3 rounded-lg hover:bg-gray-800 transition-colors"
                 >
                   Passer la commande

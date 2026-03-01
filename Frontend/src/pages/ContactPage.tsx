@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { sanitizeDescription, sanitizeEmail } from '../utils/security';
+import { trackEvent } from '../utils/analytics';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
 export default function ContactPage() {
+  const formStartTracked = useRef(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -14,10 +16,24 @@ export default function ContactPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    const form = document.querySelector('form');
+    if (!form) return;
+    const onFormInteraction = () => {
+      if (!formStartTracked.current) {
+        formStartTracked.current = true;
+        trackEvent('contact_form_start', { page: 'contact' });
+      }
+    };
+    form.addEventListener('focusin', onFormInteraction);
+    return () => form.removeEventListener('focusin', onFormInteraction);
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+    trackEvent('contact_form_submit_click', { page: 'contact', subject: formData.subject });
     try {
       const response = await fetch(`${API_URL}/api/contact`, {
         method: 'POST',
@@ -31,12 +47,14 @@ export default function ContactPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (response.ok && data.success) {
+        trackEvent('contact_form_success', { page: 'contact', subject: formData.subject });
         setSuccess(true);
         setFormData({ name: '', email: '', subject: '', message: '' });
       } else {
         setError(data.error || 'Erreur lors de l\'envoi. Réessayez.');
       }
     } catch {
+      trackEvent('contact_form_error', { page: 'contact' });
       setError('Erreur de connexion. Réessayez.');
     } finally {
       setLoading(false);
@@ -89,7 +107,11 @@ export default function ContactPage() {
               <div className="space-y-4 text-gray-600">
                 <div>
                   <p className="font-medium text-gray-900 mb-1">Email</p>
-                  <a href="mailto:contact@closdelareine.fr" className="hover:text-gray-900 transition-colors">
+                  <a
+                    href="mailto:closdelareine@gmail.com"
+                    className="hover:text-gray-900 transition-colors"
+                    onClick={() => trackEvent('contact_email_click', { source: 'contact_page' })}
+                  >
                     closdelareine@gmail.com
                   </a>
                 </div>

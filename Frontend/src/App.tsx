@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
+import { trackEvent } from './utils/analytics';
 import Header from './components/Header';
 import CartToast from './components/CartToast';
 import Footer from './components/Footer';
@@ -35,10 +36,20 @@ function ScrollToTop() {
   return null;
 }
 
+function PageViewTracker() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const page = pathname === '/' ? 'accueil' : pathname.replace(/^\//, '').replace(/\//g, '_');
+    trackEvent('page_view', { page, path: pathname });
+  }, [pathname]);
+  return null;
+}
+
 function App() {
   return (
     <div className="min-h-screen bg-white">
       <ScrollToTop />
+      <PageViewTracker />
       <Header />
       <CartToast />
       <Routes>

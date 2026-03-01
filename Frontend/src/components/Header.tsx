@@ -1,6 +1,7 @@
 import { ShoppingCart, Heart, User, Menu, ChevronDown, Package } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { trackEvent } from '../utils/analytics';
 import { useCart } from '../hooks/useCart';
 import { useFavorites } from '../hooks/useFavorites';
 
@@ -107,7 +108,7 @@ export default function Header() {
     <header className="sticky top-0 bg-white/85 backdrop-blur-md z-50 border-b border-black/5 transition-all duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <Link to="/" className="flex items-center space-x-3 group cursor-pointer">
+          <Link to="/" className="flex items-center space-x-3 group cursor-pointer" onClick={() => trackEvent('header_logo_click', { source: 'header' })}>
             <img src="/Images/Logo.webp" alt="Logo" className="w-10 h-10" />
             <span className="text-xl font-light tracking-wide">Le Clos De La Reine</span>
           </Link>
@@ -116,11 +117,11 @@ export default function Header() {
               Accueil
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gray-900 group-hover:w-full transition-all duration-300"></span>
             </Link>
-            <Link to="/boutique" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 relative group">
+            <Link to="/boutique" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 relative group" onClick={() => trackEvent('nav_click', { link: 'boutique', source: 'header' })}>
               Boutique
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gray-900 group-hover:w-full transition-all duration-300"></span>
             </Link>
-            <Link to="/contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 relative group">
+            <Link to="/contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 relative group" onClick={() => trackEvent('nav_click', { link: 'contact', source: 'header' })}>
               Contact
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gray-900 group-hover:w-full transition-all duration-300"></span>
             </Link>
@@ -134,7 +135,7 @@ export default function Header() {
             </Link>
           </nav>
           <div className="flex items-center space-x-4">
-            <Link to="/favoris" className="relative p-2 hover:bg-gray-50 rounded-full transition-all duration-200 transform hover:scale-110">
+            <Link to="/favoris" className="relative p-2 hover:bg-gray-50 rounded-full transition-all duration-200 transform hover:scale-110" onClick={() => trackEvent('header_favoris_click', { source: 'header' })}>
               <Heart className="w-5 h-5 text-gray-600" />
               {favoritesCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
@@ -196,6 +197,7 @@ export default function Header() {
                     <div className="border-t border-gray-100 my-2"></div>
                     <button
                       onClick={() => {
+                        trackEvent('logout', { source: 'header' });
                         localStorage.removeItem('token');
                         localStorage.removeItem('user');
                         setIsProfileMenuOpen(false);
@@ -213,7 +215,7 @@ export default function Header() {
                 <User className="w-5 h-5 text-gray-600" />
               </Link>
             )}
-            <Link to="/panier" className="relative p-2 hover:bg-gray-50 rounded-full transition-all duration-200 transform hover:scale-110">
+            <Link to="/panier" className="relative p-2 hover:bg-gray-50 rounded-full transition-all duration-200 transform hover:scale-110" onClick={() => trackEvent('header_panier_click', { source: 'header', cart_count: cartCount })}>
               <ShoppingCart className="w-5 h-5 text-gray-600" />
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">

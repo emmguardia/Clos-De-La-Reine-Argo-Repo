@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import { trackEvent } from '../utils/analytics';
 import { sanitizeEmail, safeJsonResponse } from '../utils/security';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
@@ -53,6 +54,7 @@ export default function LoginPage() {
       }
 
       if (data.token && typeof data.token === 'string' && data.user) {
+        trackEvent('login_success', {});
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify({
           id: String(data.user.id || ''),
@@ -66,6 +68,7 @@ export default function LoginPage() {
         throw new Error('Données de réponse invalides');
       }
     } catch (err) {
+      trackEvent('login_error', {});
       setError(err instanceof Error ? err.message : 'Erreur lors de la connexion');
     } finally {
       setLoading(false);

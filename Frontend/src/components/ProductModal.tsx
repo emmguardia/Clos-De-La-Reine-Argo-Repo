@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Product } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
 import { useCart } from '../hooks/useCart';
+import { trackEvent } from '../utils/analytics';
 
 interface ProductModalProps {
   product: Product | null;
@@ -76,6 +77,13 @@ function ProductModalBody({
     if (needsSizeSelection && !selectedSize) return;
     setAdding(true);
     await addToCart(product.id, 1, needsSizeSelection ? selectedSize : undefined, product.name);
+    trackEvent('add_to_cart', {
+      product_id: product.id,
+      product_name: product.name,
+      quantity: 1,
+      size: needsSizeSelection ? selectedSize : undefined,
+      source: 'product_modal',
+    });
     await new Promise((r) => setTimeout(r, 300));
     onClose();
   };
@@ -239,7 +247,12 @@ function ProductModalBody({
                   <div className="mt-3">
                     <button
                       type="button"
-                      onClick={() => setGuideOpen((o) => !o)}
+                      onClick={() => {
+                      setGuideOpen((o) => {
+                        if (!o) trackEvent('size_guide_open', { product_id: product.id, category: product.category });
+                        return !o;
+                      });
+                    }}
                       className="text-xs font-medium cursor-pointer flex items-center gap-1.5 opacity-80 hover:opacity-100 w-full text-left transition-opacity duration-200"
                       style={{ color: 'var(--ink)' }}
                     >
@@ -312,8 +325,13 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
   const favorite = product ? isFavorite(product.id) : false;
   const handleFavoriteClick = async () => {
     if (!product) return;
-    if (favorite) await removeFavorite(product.id);
-    else await addFavorite(product.id);
+    if (favorite) {
+      await removeFavorite(product.id);
+      trackEvent('favorite_remove', { product_id: product.id, product_name: product.name, source: 'modal' });
+    } else {
+      await addFavorite(product.id);
+      trackEvent('favorite_add', { product_id: product.id, product_name: product.name, source: 'modal' });
+    }
   };
   if (!isOpen || !product) return null;
   return (

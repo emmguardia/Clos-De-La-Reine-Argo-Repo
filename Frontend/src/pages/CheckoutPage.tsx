@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../hooks/useCart';
+import { trackEvent } from '../utils/analytics';
 import { useProducts } from '../hooks/useProducts';
 import { ArrowLeft, CheckCircle, Package, CreditCard, Truck, User, Heart, ArrowRight } from 'lucide-react';
 import { dogBreeds } from '../data/dogBreeds';
@@ -139,6 +140,7 @@ export default function CheckoutPage() {
 
   const handleNextStep = () => {
     if (canProceedToStep2) {
+      trackEvent('checkout_step_complete', { step: 1, total_items: cartProducts.length });
       setCurrentStep(2);
     }
   };
@@ -189,11 +191,17 @@ export default function CheckoutPage() {
         throw new Error(data.error || 'Erreur lors de la création de la commande');
       }
 
+      trackEvent('order_created', {
+        total: total.toFixed(2),
+        item_count: cartProducts.length,
+        has_sur_mesure: dogInfo.surMesureCollier || dogInfo.surMesureHarnais,
+      });
       window.dispatchEvent(new Event('cartUpdated'));
       localStorage.setItem('newOrderBadge', '1');
       window.dispatchEvent(new Event('newOrderBadgeUpdated'));
       navigate('/profil?tab=commandes');
     } catch (err) {
+      trackEvent('order_error', { error: err instanceof Error ? err.message : 'unknown' });
       setError(err instanceof Error ? err.message : 'Erreur lors de la création de la commande');
     } finally {
       setSubmitting(false);

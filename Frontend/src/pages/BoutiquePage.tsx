@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ProductCard from '../components/ProductCard';
+import { trackEvent } from '../utils/analytics';
 import ProductModal from '../components/ProductModal';
 import Pagination from '../components/Pagination';
 import { useProducts } from '../hooks/useProducts';
@@ -62,6 +63,7 @@ export default function BoutiquePage() {
     setSelectedCollection('all');
     setSelectedColor('all');
     setCurrentPage(1);
+    trackEvent('boutique_filter_category', { category: category === 'all' ? 'tous' : category });
     if (category === 'all') {
       setSearchParams({});
     } else {
@@ -120,7 +122,11 @@ export default function BoutiquePage() {
                 <button
                   key={col}
                   type="button"
-                  onClick={() => { setSelectedCollection(col); setCurrentPage(1); }}
+                  onClick={() => {
+                    setSelectedCollection(col);
+                    setCurrentPage(1);
+                    trackEvent('boutique_filter_collection', { collection: col });
+                  }}
                   className={`px-3 py-2 rounded-full text-sm transition-colors cursor-pointer ${
                     selectedCollection === col 
                       ? 'bg-gray-900 text-white' 
@@ -138,7 +144,11 @@ export default function BoutiquePage() {
                 <button
                   key={color}
                   type="button"
-                  onClick={() => { setSelectedColor(color); setCurrentPage(1); }}
+                  onClick={() => {
+                    setSelectedColor(color);
+                    setCurrentPage(1);
+                    trackEvent('boutique_filter_color', { color });
+                  }}
                   className={`px-3 py-2 rounded-full text-sm transition-colors cursor-pointer ${
                     selectedColor === color 
                       ? 'bg-gray-900 text-white' 
@@ -157,6 +167,7 @@ export default function BoutiquePage() {
                 setSelectedCollection('all');
                 setSelectedColor('all');
                 setCurrentPage(1);
+                trackEvent('boutique_filter_reset', {});
               }}
               className="mt-2 px-4 py-2 rounded-full bg-gray-900 text-white text-sm hover:bg-gray-800 transition-colors w-fit cursor-pointer"
             >

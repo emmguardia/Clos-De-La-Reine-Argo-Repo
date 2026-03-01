@@ -2,6 +2,7 @@ import { Heart, ShoppingCart } from 'lucide-react';
 import type { Product } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
 import { useCart } from '../hooks/useCart';
+import { trackEvent } from '../utils/analytics';
 interface ProductCardProps {
   product: Product;
   showCollection?: boolean;
@@ -18,8 +19,10 @@ export default function ProductCard({ product, showCollection = true, compact = 
     e.stopPropagation();
     if (favorite) {
       removeFavorite(product.id);
+      trackEvent('favorite_remove', { product_id: product.id, product_name: product.name, category: product.category });
     } else {
       addFavorite(product.id);
+      trackEvent('favorite_add', { product_id: product.id, product_name: product.name, category: product.category });
     }
   };
 
@@ -28,15 +31,22 @@ export default function ProductCard({ product, showCollection = true, compact = 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (needsSize && onProductClick) {
+      trackEvent('product_click_add_cart', { product_id: product.id, product_name: product.name, needs_size: true });
       onProductClick(product);
     } else {
       addToCart(product.id, 1);
+      trackEvent('add_to_cart', { product_id: product.id, product_name: product.name, quantity: 1, source: 'product_card' });
     }
   };
   return (
     <div 
       className={`group bg-white rounded-3xl overflow-hidden shadow-sm shadow-black/5 hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 animate-fadeIn cursor-pointer ${compact ? 'h-full' : ''}`}
-      onClick={() => onProductClick && onProductClick(product)}
+      onClick={() => {
+        if (onProductClick) {
+          trackEvent('product_click', { product_id: product.id, product_name: product.name, category: product.category });
+          onProductClick(product);
+        }
+      }}
     >
       <div className={`${compact ? 'h-52' : 'h-56'} relative overflow-hidden`}>
         <img

@@ -9,6 +9,7 @@ const __dirname = dirname(__filename);
 const JWT_INVOICE_PRIVATE_KEY_PATH = process.env.JWT_INVOICE_PRIVATE_KEY_PATH || '/app/secrets/jwt_invoice_private_key.pem';
 const INVOICE_SERVICE_URL = process.env.INVOICE_SERVICE_URL || 'http://invoice-service.invoice-service.svc.cluster.local:8080';
 const PROJECT = 'clos-de-la-reine';
+const COMPTA_EMAIL = 'closdelareine@gmail.com';
 
 function generateInvoiceServiceToken(privateKey) {
   try {
@@ -37,23 +38,26 @@ export async function sendInvoiceEmail(clientEmail, orderData) {
       return { success: false, error: 'Clé JWT Invoice manquante' };
     }
     const token = generateInvoiceServiceToken(privateKey);
-    const response = await fetch(`${INVOICE_SERVICE_URL}/api/v1/generate-and-send`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        project: PROJECT,
-        order_data: orderData,
-        to_email: clientEmail,
-      }),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: response.statusText }));
-      throw new Error(err.error || err.details || 'Invoice-Service error');
+    const recipients = [...new Set([clientEmail, COMPTA_EMAIL].filter(Boolean))];
+    for (const toEmail of recipients) {
+      const response = await fetch(`${INVOICE_SERVICE_URL}/api/v1/generate-and-send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          project: PROJECT,
+          order_data: orderData,
+          to_email: toEmail,
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(err.error || err.details || 'Invoice-Service error');
+      }
+      console.log('✅ [INVOICE] Facture envoyée à', toEmail);
     }
-    console.log('✅ [INVOICE] Facture envoyée à', clientEmail);
     return { success: true };
   } catch (e) {
     const cause = e.cause ? ` (cause: ${e.cause.code || e.cause.message || e.cause})` : '';

@@ -2474,6 +2474,7 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
         paymentMethod: 'Stripe'
       };
       try {
+        // Facture envoyée au client (email livraison prioritaire, sinon email compte)
         const clientEmail = ship.email || user?.email;
         if (clientEmail) {
           await sendOrderConfirmationEmail(clientEmail, orderData);

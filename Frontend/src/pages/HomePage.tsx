@@ -281,6 +281,30 @@ export default function HomePage() {
               <span>• Production raisonnée, ajustée avec précision</span>
               <span>• Collections pensées pour durer</span>
             </div>
+            <div className="pt-6 mt-6 border-t border-gray-200/60">
+              <p className="text-gray-600 leading-relaxed">
+                Vendôme est entré dans ma vie à un moment où j'en avais profondément besoin : il est devenu à la fois mon moteur et mon pilier. Au-delà de sa beauté évidente, il est d'une douceur infinie, drôle, lumineux au quotidien, et il m'accompagne chaque jour dans la création et l'élaboration des produits que propose Le Clos de la Reine.
+                Il vient de l'élevage du{' '}
+                <a
+                  href="https://dudomainedesrevesbleus.chiens-de-france.com/cocker-spaniel-anglais"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-gray-900 font-medium underline underline-offset-2 hover:text-gray-700 transition-colors"
+                >
+                  domaine des rêves bleus
+                  <span className="text-xs">↗</span>
+                </a>
+                .
+              </p>
+              <a
+                href="https://dudomainedesrevesbleus.chiens-de-france.com/cocker-spaniel-anglais"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-full border border-gray-300 text-sm text-gray-800 hover:border-gray-900 hover:bg-gray-50 transition-colors"
+              >
+                Voir le site de l'élevage
+              </a>
+            </div>
           </div>
         </div>
       </section>

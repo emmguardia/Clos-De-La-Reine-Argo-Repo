@@ -29,12 +29,9 @@ export function useFavorites() {
       });
       if (response.ok) {
         const data = await safeJsonResponse(response, []);
-        const productsResponse = await fetch(`${API_URL}/api/products`);
-        if (productsResponse.ok) {
-          const products = await safeJsonResponse(productsResponse, []);
-          const existingProductIds = products
-            .map((p: { id?: number; _id?: number }) => p.id ?? p._id)
-            .filter((id): id is number => id != null);
+        const idsResponse = await fetch(`${API_URL}/api/products/ids`);
+        if (idsResponse.ok) {
+          const { ids: existingProductIds } = await safeJsonResponse(idsResponse, { ids: [] }) as { ids: number[] };
           const validFavorites = data.filter((id: number) => 
             Number.isInteger(id) && id > 0 && existingProductIds.includes(id)
           );

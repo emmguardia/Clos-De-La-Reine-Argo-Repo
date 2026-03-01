@@ -74,6 +74,7 @@ export default function GalleryPage() {
                   >
                     <img
                       src={item.data}
+                      loading="lazy"
                       alt={item.name}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                     />
@@ -107,6 +108,7 @@ export default function GalleryPage() {
                   >
                     <img
                       src={item.data}
+                      loading="lazy"
                       alt={item.name}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                     />

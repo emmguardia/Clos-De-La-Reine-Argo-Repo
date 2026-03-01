@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { trackEvent } from '../utils/analytics';
-import { useProducts } from '../hooks/useProducts';
+import { useFeaturedProducts } from '../hooks/useFeaturedProducts';
 import ProductCard from '../components/ProductCard';
 import ProductModal from '../components/ProductModal';
 import type { ProductCategory, Product } from '../data/products';
@@ -57,11 +57,7 @@ const featuredProducts: FeaturedProduct[] = [
   },
 ];
 export default function HomePage() {
-  const { products, loading } = useProducts();
-  const newProducts = useMemo(
-    () => products.filter((p) => Boolean(p.isNew)).slice(0, 4),
-    [products]
-  );
+  const { products: newProducts, loading } = useFeaturedProducts(4);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   return (
@@ -153,9 +149,9 @@ export default function HomePage() {
                 <div className="absolute inset-0">
                   <img
                     src={product.image}
+                    loading="lazy"
                     alt={product.title}
                     className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    loading="lazy"
                   />
                   <div
                     className={`absolute inset-0 bg-gradient-to-br ${product.tone} opacity-60`}

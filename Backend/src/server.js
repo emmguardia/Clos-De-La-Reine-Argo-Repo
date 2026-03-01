@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import cors from 'cors';
 import { MongoClient, ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
@@ -33,6 +34,7 @@ const stripe = STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.startsWith('sk_')
   ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-11-20.acacia' })
   : null;
 
+app.use(compression());
 app.set('trust proxy', 1);
 app.use(cors({
   origin: process.env.FRONTEND_URL || '*',
@@ -100,6 +102,13 @@ const ADMIN_JWT_EXPIRATION = '8h';
 let client;
 let db;
 
+async function getProductMapByIds(productIds) {
+  if (!productIds || productIds.length === 0) return {};
+  const ids = [...new Set(productIds.filter(Boolean))];
+  const products = await db.collection('products').find({ id: { $in: ids } }, { projection: { id: 1, name: 1, collection: 1, category: 1 } }).toArray();
+  return Object.fromEntries((products || []).map(p => [p.id, p]));
+}
+
 async function connectToDatabase() {
   try {
     const host = MONGODB_HOST || 'localhost';
@@ -110,6 +119,11 @@ async function connectToDatabase() {
     });
     await client.connect();
     db = client.db(MONGODB_DB);
+    const productsCol = db.collection('products');
+    await productsCol.createIndex({ id: 1 }).catch(() => {});
+    await productsCol.createIndex({ category: 1 }).catch(() => {});
+    await productsCol.createIndex({ collection: 1 }).catch(() => {});
+    await productsCol.createIndex({ isNew: 1 }).catch(() => {});
     console.log('✅ Connecté à MongoDB');
   } catch (error) {
     console.error('❌ Erreur de connexion MongoDB:', error);
@@ -178,6 +192,7 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=300');
   res.json({ stripePublishableKey: STRIPE_PUBLISHABLE_KEY || '' });
 });
 
@@ -538,8 +553,44 @@ app.delete('/api/auth/me', authenticateToken, async (req, res) => {
 
 app.get('/api/products', async (req, res) => {
   try {
-    const minimal = req.query.minimal === '1' || req.query.minimal === 'true';
-    const products = await db.collection('products').find({}).toArray();
+    const minimal = req.query.minimal !== '0' && (req.query.minimal === '1' || req.query.minimal === 'true' || !req.query.minimal);
+    const idsParam = req.query.ids;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 24));
+    const skip = idsParam ? 0 : (page - 1) * limit;
+    const category = req.query.category;
+    const collection = req.query.collection;
+    const color = req.query.color;
+    const isNew = req.query.isNew === '1' || req.query.isNew === 'true';
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const includeFilters = req.query.includeFilters === '1' || req.query.includeFilters === 'true';
+
+    let filter = {};
+    if (idsParam && typeof idsParam === 'string') {
+      const ids = idsParam.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+      if (ids.length > 0) filter = { id: { $in: ids } };
+    } else {
+      if (category) filter.category = category;
+      if (collection) filter.collection = collection;
+      if (color) filter.$or = [{ color: color }, { color: { $in: [color] } }];
+      if (isNew) filter.isNew = true;
+      if (search) {
+        const searchFilter = { $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { collection: { $regex: search, $options: 'i' } }
+        ]};
+        filter = Object.keys(filter).length > 0 ? { $and: [filter, searchFilter] } : searchFilter;
+      }
+    }
+
+    const projection = minimal ? { secondImage: 0, additionalImages: 0 } : {};
+    const filterForMeta = category ? { category } : {};
+    const [products, total, metaProducts] = await Promise.all([
+      db.collection('products').find(filter, { projection }).skip(skip).limit(idsParam ? 500 : limit).toArray(),
+      idsParam ? Promise.resolve(0) : db.collection('products').countDocuments(filter),
+      (includeFilters && page === 1 && !idsParam) ? db.collection('products').find(filterForMeta, { projection: { collection: 1, color: 1 } }).toArray() : Promise.resolve(null)
+    ]);
+
     const formattedProducts = products.map(product => {
       const cat = product.category;
       const sizes = product.sizes?.length ? product.sizes : (cat === 'laisses' ? ['1m', '1m20'] : (cat === 'colliers' || cat === 'harnais') ? ['XS', 'S', 'M', 'L', 'XL'] : []);
@@ -560,9 +611,45 @@ app.get('/api/products', async (req, res) => {
       if (minimal) return base;
       return { ...base, secondImage: product.secondImage, additionalImages: product.additionalImages || [] };
     });
-    res.json(formattedProducts);
+
+    if (idsParam) {
+      res.json(formattedProducts);
+    } else {
+      const payload = { products: formattedProducts, total };
+      if (metaProducts) {
+        payload.collections = [...new Set(metaProducts.map(p => p.collection).filter(Boolean))].sort();
+        payload.colors = [...new Set(metaProducts.flatMap(p => Array.isArray(p.color) ? p.color : [p.color]).filter(Boolean))].sort();
+      }
+      res.json(payload);
+    }
   } catch (error) {
     console.error('Erreur lors de la récupération des produits:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+app.get('/api/products/filters', async (req, res) => {
+  try {
+    const category = req.query.category;
+    const filter = category ? { category } : {};
+    const products = await db.collection('products').find(filter, { projection: { collection: 1, color: 1 } }).toArray();
+    const collections = [...new Set(products.map(p => p.collection).filter(Boolean))].sort();
+    const colors = [...new Set(products.flatMap(p => Array.isArray(p.color) ? p.color : [p.color]).filter(Boolean))].sort();
+    res.json({ collections, colors });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des filtres:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+app.get('/api/products/ids', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=300');
+    const products = await db.collection('products').find({}, { projection: { id: 1, _id: 0 } }).toArray();
+    const ids = products.map(p => p.id ?? p._id).filter(Boolean);
+    res.json({ ids });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des IDs:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
@@ -588,10 +675,8 @@ app.post('/api/products', authenticateAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Champs requis manquants' });
     }
 
-    const products = await db.collection('products').find({}).toArray();
-    const maxId = products.length > 0 
-      ? Math.max(...products.map(p => p.id || 0))
-      : 0;
+    const maxDoc = await db.collection('products').find({}).sort({ id: -1 }).limit(1).toArray();
+    const maxId = maxDoc.length > 0 ? (maxDoc[0].id || 0) : 0;
 
     const sizes = category === 'laisses' ? ['1m', '1m20'] : (category === 'colliers' || category === 'harnais') ? ['XS', 'S', 'M', 'L', 'XL'] : [];
     const product = {
@@ -1294,8 +1379,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         { _id: new ObjectId(req.user.userId) },
         { projection: { email: 1, firstName: 1, lastName: 1 } }
       );
-      const products = await db.collection('products').find({}).toArray();
-      const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
+      const productMap = await getProductMapByIds((order.items || []).map(i => i.productId));
       const ship = order.shippingAddress || {};
       const itemsForEmail = (order.items || []).map(item => ({
         name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
@@ -1444,8 +1528,7 @@ app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
           { _id: new ObjectId(updatedOrder.userId) },
           { projection: { email: 1, firstName: 1, lastName: 1 } }
         );
-        const products = await db.collection('products').find({}).toArray();
-        const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
+        const productMap = await getProductMapByIds((updatedOrder.items || []).map(i => i.productId));
         const ship = updatedOrder.shippingAddress || {};
         const itemsForEmail = (updatedOrder.items || []).map(item => ({
           name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
@@ -1514,8 +1597,7 @@ app.put('/api/orders/:id/counter-proposal', authenticateToken, async (req, res) 
           { _id: new ObjectId(updatedOrder.userId) },
           { projection: { email: 1, firstName: 1, lastName: 1 } }
         );
-        const products = await db.collection('products').find({}).toArray();
-        const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
+        const productMap = await getProductMapByIds((updatedOrder.items || []).map(i => i.productId));
         const ship = updatedOrder.shippingAddress || {};
         const itemsForEmail = (updatedOrder.items || []).map(item => ({
           name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
@@ -1942,8 +2024,7 @@ async function insertPaymentStat(order) {
     const existing = await db.collection('payment_stats').findOne({ orderId: order._id });
     if (existing) return;
 
-    const products = await db.collection('products').find({}).toArray();
-    const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
+    const productMap = await getProductMapByIds((order.items || []).map(i => i.productId));
 
     const date = order.paymentInfo?.paidAt || order.updatedAt || order.createdAt || new Date();
     const totalAmount = Number(order.total) || 0;
@@ -2414,8 +2495,7 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
         { _id: new ObjectId(updatedOrder.userId) },
         { projection: { email: 1, firstName: 1, lastName: 1 } }
       );
-      const products = await db.collection('products').find({}).toArray();
-      const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
+      const productMap = await getProductMapByIds((updatedOrder.items || []).map(i => i.productId));
       const ship = updatedOrder.shippingAddress || {};
       const itemsForEmail = (updatedOrder.items || []).map(item => ({
         name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,

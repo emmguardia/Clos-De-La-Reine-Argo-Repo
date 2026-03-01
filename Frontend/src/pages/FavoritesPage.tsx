@@ -1,18 +1,25 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import ProductCard from '../components/ProductCard';
 import ProductModal from '../components/ProductModal';
-import { useProducts } from '../hooks/useProducts';
+import { useProductsByIds } from '../hooks/useProductsByIds';
 import { useFavorites } from '../hooks/useFavorites';
+import { fetchProductsPaginated } from '../data/products';
 import type { Product } from '../data/products';
 
 export default function FavoritesPage() {
-  const { products, loading } = useProducts();
   const { favorites, loading: favoritesLoading } = useFavorites();
-  const favoriteProducts = useMemo(
-    () => products.filter(p => favorites.includes(p.id)),
-    [products, favorites]
-  );
+  const { products: favoriteProducts, loading: productsLoading } = useProductsByIds(favorites);
+  const [suggestions, setSuggestions] = useState<Product[]>([]);
+  useEffect(() => {
+    if (favorites.length > 0) {
+      fetchProductsPaginated({ limit: 10 }).then(({ products }) => {
+        setSuggestions(products.filter(p => !favorites.includes(p.id)).slice(0, 3));
+      }).catch(() => setSuggestions([]));
+    } else {
+      setSuggestions([]);
+    }
+  }, [favorites.join(',')]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   return (
@@ -45,7 +52,7 @@ export default function FavoritesPage() {
             </Link>
           </div>
         </div>
-        {loading || favoritesLoading ? (
+        {productsLoading || favoritesLoading ? (
           <div className="rounded-[28px] border border-black/5 bg-white/80 backdrop-blur-sm p-10 text-center shadow-sm">
             <p className="text-lg text-gray-700">Chargement des favoris...</p>
           </div>
@@ -83,10 +90,7 @@ export default function FavoritesPage() {
               <div className="h-px w-16 bg-gray-900" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {products
-                .filter(p => !favoriteProducts.some(fp => fp.id === p.id))
-                .slice(0, 3)
-                .map((product) => (
+              {suggestions.map((product) => (
                   <ProductCard 
                     key={product.id} 
                     product={product} 

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../hooks/useCart';
 import { trackEvent } from '../utils/analytics';
-import { useProducts } from '../hooks/useProducts';
+import { useProductsByIds } from '../hooks/useProductsByIds';
 import { ArrowLeft, CheckCircle, Package, CreditCard, Truck, User, Heart, ArrowRight } from 'lucide-react';
 import { dogBreeds } from '../data/dogBreeds';
 import { sanitizeInput, sanitizeDescription, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJsonParse, safeJsonResponse } from '../utils/security';
@@ -14,7 +14,8 @@ const FRAIS_TAUX = 0.019;
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const { items, loading: cartLoading } = useCart();
-  const { products, loading: productsLoading } = useProducts();
+  const productIds = items.map(i => i.productId);
+  const { getProduct, loading: productsLoading } = useProductsByIds(productIds);
   const [currentStep, setCurrentStep] = useState<1 | 2>(1);
   const [formData, setFormData] = useState({
     firstName: '',
@@ -117,11 +118,11 @@ export default function CheckoutPage() {
     setShowBreedSuggestions(false);
   };
 
-  const hasCollier = items.some(i => products.find(p => p.id === i.productId)?.category === 'colliers');
-  const hasHarnais = items.some(i => products.find(p => p.id === i.productId)?.category === 'harnais');
+  const hasCollier = items.some(i => getProduct(i.productId)?.category === 'colliers');
+  const hasHarnais = items.some(i => getProduct(i.productId)?.category === 'harnais');
 
   const cartProducts = items.map(item => {
-    const product = products.find(p => p.id === item.productId);
+    const product = getProduct(item.productId);
     if (!product) return null;
     let unitPrice = product.price;
     if (product.category === 'laisses' && item.size === '1m20' && (product.surcharge1m20 ?? 0) > 0) unitPrice += (product.surcharge1m20 ?? 0);
@@ -582,7 +583,7 @@ export default function CheckoutPage() {
               <div className="space-y-4 mb-6">
                 {cartProducts.map(item => (
                   <div key={`${item.id}-${item.size || ''}`} className="flex gap-4">
-                    <img src={item.image} alt={item.name} className="w-16 h-16 object-cover rounded-2xl" />
+                    <img src={item.image} alt={item.name} loading="lazy" className="w-16 h-16 object-cover rounded-2xl" />
                     <div className="flex-1">
                       <p className="font-medium text-gray-900">{item.name}</p>
                       <p className="text-sm text-gray-600">

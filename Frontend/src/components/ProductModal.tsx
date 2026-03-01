@@ -113,6 +113,7 @@ function ProductModalBody({
               {images[currentIndex] ? (
                 <img
                   key={`${product.id}-${currentIndex}`}
+                  loading="lazy"
                   src={images[currentIndex]}
                   alt={`${product.name} - Image ${currentIndex + 1}`}
                   className="absolute inset-0 w-full h-full object-cover animate-imageFade"

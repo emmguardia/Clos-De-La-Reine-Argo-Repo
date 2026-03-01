@@ -103,7 +103,7 @@ export default function StatsPage() {
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-light text-gray-900 mb-2">Statistiques</h1>
-            <p className="text-gray-600">Analyse des ventes et performances — basées uniquement sur les commandes payées</p>
+            <p className="text-gray-600">Analyse des ventes — enregistrée à chaque paiement réussi</p>
           </div>
           <Link
             to="/admin"

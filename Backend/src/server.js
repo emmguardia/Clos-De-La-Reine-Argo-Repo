@@ -1406,6 +1406,9 @@ app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
       }
       updateData.counterProposal = null;
     }
+    if (status === 'paid') {
+      updateData.paymentInfo = { method: 'admin', paidAt: new Date(), ...(order.paymentInfo || {}) };
+    }
     const result = await db.collection('orders').updateOne(
       { _id: new ObjectId(req.params.id) },
       { $set: updateData }
@@ -1446,6 +1449,11 @@ app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
       } catch (emailErr) {
         console.error('Erreur envoi email commande validée (non-bloquant):', emailErr);
       }
+    }
+
+    if (status === 'paid') {
+      const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+      await insertPaymentStat(updatedOrder);
     }
 
     res.json({ message: 'Statut mis à jour', status });
@@ -1806,10 +1814,8 @@ app.get('/api/admin/verify', authenticateAdmin, async (req, res) => {
 
 app.get('/api/stats', authenticateAdmin, async (req, res) => {
   try {
-    // Stats calculées en temps réel depuis les commandes payées uniquement
-    const paidOrders = await db.collection('orders').find({ status: 'paid' }).toArray();
-    const products = await db.collection('products').find({}).toArray();
-    const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
+    // Stats lues depuis la table payment_stats (remplie à chaque paiement réussi)
+    const records = await db.collection('payment_stats').find({}).sort({ date: 1 }).toArray();
 
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -1823,10 +1829,9 @@ app.get('/api/stats', authenticateAdmin, async (req, res) => {
     const collectionStats = {};
     const categoryStats = {};
 
-    for (const order of paidOrders) {
-      const orderTotal = Number(order.total) || 0;
-      const orderDate = order.updatedAt || order.createdAt || order.paymentInfo?.paidAt;
-      const d = orderDate ? new Date(orderDate) : new Date();
+    for (const rec of records) {
+      const orderTotal = Number(rec.totalAmount) || 0;
+      const d = rec.date ? new Date(rec.date) : new Date();
 
       totalRevenue += orderTotal;
 
@@ -1842,30 +1847,23 @@ app.get('/api/stats', authenticateAdmin, async (req, res) => {
       dailyStatsMap[dayKey].revenue += orderTotal;
       dailyStatsMap[dayKey].orders += 1;
 
-      for (const item of order.items || []) {
-        const product = productMap[item.productId];
-        if (product) {
-          const collection = product.collection || 'Autre';
-          const category = product.category || 'Autre';
-          const itemTotal = (item.price || 0) * (item.quantity || 1);
-          collectionStats[collection] = (collectionStats[collection] || 0) + itemTotal;
-          categoryStats[category] = (categoryStats[category] || 0) + itemTotal;
-        }
+      for (const item of rec.items || []) {
+        const collection = item.collection || 'Autre';
+        const category = item.category || 'Autre';
+        const itemTotal = item.itemTotal || 0;
+        collectionStats[collection] = (collectionStats[collection] || 0) + itemTotal;
+        categoryStats[category] = (categoryStats[category] || 0) + itemTotal;
       }
     }
 
-    const totalOrders = paidOrders.length;
-    const monthlyOrders = paidOrders.filter(o => {
-      const d = o.updatedAt || o.createdAt || o.paymentInfo?.paidAt;
-      if (!d) return false;
-      const m = new Date(d);
-      return m.getFullYear() === now.getFullYear() && m.getMonth() === now.getMonth();
+    const totalOrders = records.length;
+    const monthlyOrders = records.filter(r => {
+      const d = r.date ? new Date(r.date) : new Date();
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     }).length;
-    const lastMonthOrders = paidOrders.filter(o => {
-      const d = o.updatedAt || o.createdAt || o.paymentInfo?.paidAt;
-      if (!d) return false;
-      const m = new Date(d);
-      return m >= lastMonthStart && m <= lastMonthEnd;
+    const lastMonthOrders = records.filter(r => {
+      const d = r.date ? new Date(r.date) : new Date();
+      return d >= lastMonthStart && d <= lastMonthEnd;
     }).length;
 
     const monthlyAverageOrderValue = monthlyOrders > 0 ? monthlyRevenue / monthlyOrders : 0;
@@ -1915,138 +1913,40 @@ app.get('/api/stats', authenticateAdmin, async (req, res) => {
   }
 });
 
-async function updateStats(order) {
+async function insertPaymentStat(order) {
   try {
     if (!db) {
-      console.error('❌ [STATS] DB non initialisée');
+      console.error('❌ [PAYMENT_STATS] DB non initialisée');
       return;
     }
-
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-
-    const orderTotal = order.total || 0;
-    const orderItems = order.items || [];
+    const existing = await db.collection('payment_stats').findOne({ orderId: order._id });
+    if (existing) return;
 
     const products = await db.collection('products').find({}).toArray();
-    const productMap = {};
-    products.forEach(p => {
-      productMap[p.id] = p;
-    });
+    const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
 
-    const collectionStats = {};
-    const categoryStats = {};
-
-    orderItems.forEach(item => {
+    const date = order.paymentInfo?.paidAt || order.updatedAt || order.createdAt || new Date();
+    const totalAmount = Number(order.total) || 0;
+    const items = (order.items || []).map(item => {
       const product = productMap[item.productId];
-      if (product) {
-        const collection = product.collection || 'Autre';
-        const category = product.category || 'Autre';
-        const itemTotal = (item.price || 0) * (item.quantity || 1);
-
-        collectionStats[collection] = (collectionStats[collection] || 0) + itemTotal;
-        categoryStats[category] = (categoryStats[category] || 0) + itemTotal;
-      }
+      const collection = product?.collection || 'Autre';
+      const category = product?.category || 'Autre';
+      const quantity = item.quantity || 1;
+      const price = item.price || 0;
+      const itemTotal = price * quantity;
+      return { productId: item.productId, collection, category, quantity, price, itemTotal };
     });
 
-    const statsDoc = await db.collection('stats').findOne({});
-    
-    if (!statsDoc) {
-      const newStats = {
-        totalRevenue: orderTotal,
-        totalOrders: 1,
-        averageOrderValue: orderTotal,
-        dailyStats: [{
-          date: today,
-          revenue: orderTotal,
-          orders: 1
-        }],
-        monthlyStats: [{
-          month: monthStart,
-          revenue: orderTotal,
-          orders: 1
-        }],
-        collectionStats: collectionStats,
-        categoryStats: categoryStats,
-        lastUpdated: now
-      };
-      await db.collection('stats').insertOne(newStats);
-    } else {
-      const updateData = {
-        totalRevenue: (statsDoc.totalRevenue || 0) + orderTotal,
-        totalOrders: (statsDoc.totalOrders || 0) + 1,
-        lastUpdated: now
-      };
-
-      updateData.averageOrderValue = updateData.totalRevenue / updateData.totalOrders;
-
-      const dailyStat = statsDoc.dailyStats?.find(d => {
-        if (!d.date) return false;
-        const dDate = d.date instanceof Date ? d.date : new Date(d.date);
-        dDate.setHours(0, 0, 0, 0);
-        const todayCopy = new Date(today);
-        todayCopy.setHours(0, 0, 0, 0);
-        return dDate.getTime() === todayCopy.getTime();
-      });
-
-      if (dailyStat) {
-        dailyStat.revenue = (dailyStat.revenue || 0) + orderTotal;
-        dailyStat.orders = (dailyStat.orders || 0) + 1;
-      } else {
-        if (!statsDoc.dailyStats) statsDoc.dailyStats = [];
-        statsDoc.dailyStats.push({
-          date: today,
-          revenue: orderTotal,
-          orders: 1
-        });
-      }
-
-      const monthlyStat = statsDoc.monthlyStats?.find(m => {
-        if (!m.month) return false;
-        const mDate = m.month instanceof Date ? m.month : new Date(m.month);
-        mDate.setHours(0, 0, 0, 0);
-        const monthStartCopy = new Date(monthStart);
-        monthStartCopy.setHours(0, 0, 0, 0);
-        return mDate.getTime() === monthStartCopy.getTime();
-      });
-
-      if (monthlyStat) {
-        monthlyStat.revenue = (monthlyStat.revenue || 0) + orderTotal;
-        monthlyStat.orders = (monthlyStat.orders || 0) + 1;
-      } else {
-        if (!statsDoc.monthlyStats) statsDoc.monthlyStats = [];
-        statsDoc.monthlyStats.push({
-          month: monthStart,
-          revenue: orderTotal,
-          orders: 1
-        });
-      }
-
-      Object.keys(collectionStats).forEach(collection => {
-        if (!statsDoc.collectionStats) statsDoc.collectionStats = {};
-        statsDoc.collectionStats[collection] = (statsDoc.collectionStats[collection] || 0) + collectionStats[collection];
-      });
-
-      Object.keys(categoryStats).forEach(category => {
-        if (!statsDoc.categoryStats) statsDoc.categoryStats = {};
-        statsDoc.categoryStats[category] = (statsDoc.categoryStats[category] || 0) + categoryStats[category];
-      });
-
-      updateData.dailyStats = statsDoc.dailyStats;
-      updateData.monthlyStats = statsDoc.monthlyStats;
-      updateData.collectionStats = statsDoc.collectionStats;
-      updateData.categoryStats = statsDoc.categoryStats;
-
-      await db.collection('stats').updateOne(
-        {},
-        { $set: updateData }
-      );
-    }
+    await db.collection('payment_stats').insertOne({
+      orderId: order._id,
+      date: new Date(date),
+      totalAmount,
+      items,
+      createdAt: new Date()
+    });
+    console.log('✅ [PAYMENT_STATS] Enregistrement ajouté pour commande', order._id.toString());
   } catch (error) {
-    console.error('Erreur lors de la mise à jour des stats:', error);
+    console.error('Erreur lors de l\'insertion payment_stats:', error);
   }
 }
 
@@ -2488,7 +2388,7 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
         { $set: updateData }
       );
       const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
-      await updateStats(updatedOrder);
+      await insertPaymentStat(updatedOrder);
 
       const user = await db.collection('users').findOne(
         { _id: new ObjectId(updatedOrder.userId) },
@@ -2592,7 +2492,7 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
     );
 
     const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
-    await updateStats(updatedOrder);
+    await insertPaymentStat(updatedOrder);
 
     res.json({ message: 'Paiement enregistré', status: 'paid' });
   } catch (error) {

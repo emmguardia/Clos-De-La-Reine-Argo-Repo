@@ -8,6 +8,8 @@ import { sendNewContactNotificationEmail, sendContactConfirmationEmail, sendOrde
 import { sendInvoiceEmail } from './utils/invoice.js';
 import Stripe from 'stripe';
 
+console.log('[BOOT] Démarrage du serveur...');
+
 process.on('uncaughtException', (err) => {
   console.error('uncaughtException:', err);
 });
@@ -2517,10 +2519,16 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Serveur démarré sur le port ${PORT}`);
-  connectToDatabase();
-});
+console.log('[BOOT] Écoute sur le port', PORT);
+try {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Serveur démarré sur le port ${PORT}`);
+    connectToDatabase();
+  });
+} catch (err) {
+  console.error('[BOOT] Erreur au démarrage:', err);
+  process.exit(1);
+}
 
 process.on('SIGTERM', async () => {
   if (client) {

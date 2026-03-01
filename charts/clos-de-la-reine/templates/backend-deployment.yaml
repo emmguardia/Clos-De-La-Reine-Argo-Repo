@@ -113,10 +113,10 @@ spec:
           httpGet:
             path: /health
             port: {{ .Values.backend.port }}
-          initialDelaySeconds: 5
-          periodSeconds: 3
-          timeoutSeconds: 5
-          failureThreshold: 20
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 10
+          failureThreshold: 24
         livenessProbe:
           httpGet:
             path: /health

@@ -52,6 +52,7 @@ export default function ProductCard({ product, showCollection = true, compact = 
         <img
           src={product.image}
           alt={product.name}
+          loading="lazy"
           className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/10" />

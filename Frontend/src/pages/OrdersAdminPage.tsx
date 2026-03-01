@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Check, X, Truck, MessageSquare, Package, Filter, Search, User, Calendar, Trash2, AlertCircle, Clock, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useProducts } from '../hooks/useProducts';
+import { useProductsByIds } from '../hooks/useProductsByIds';
+import { useProductsListForAdmin } from '../hooks/useProductsListForAdmin';
 import { safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
@@ -36,7 +37,12 @@ interface Order {
 export default function OrdersAdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const { products } = useProducts();
+  const productIdsFromOrders = orders.flatMap(o => [
+    ...o.items.map(i => i.productId),
+    ...(o.counterProposal?.items?.map(i => i.productId) ?? [])
+  ]);
+  const { getProduct } = useProductsByIds([...new Set(productIdsFromOrders)]);
+  const { products } = useProductsListForAdmin();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [action, setAction] = useState<'accept' | 'reject' | 'counter' | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -344,7 +350,7 @@ export default function OrdersAdminPage() {
   };
 
   const getProductName = (productId: number) => {
-    const product = products.find(p => p.id === productId);
+    const product = getProduct(productId);
     return product ? product.name : `Produit #${productId}`;
   };
 

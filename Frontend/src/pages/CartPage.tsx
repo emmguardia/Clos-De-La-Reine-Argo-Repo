@@ -1,13 +1,14 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../hooks/useCart';
 import { trackEvent } from '../utils/analytics';
-import { useProducts } from '../hooks/useProducts';
+import { useProductsByIds } from '../hooks/useProductsByIds';
 import { Trash2, Plus, Minus } from 'lucide-react';
 
 export default function CartPage() {
   const navigate = useNavigate();
   const { items, loading, updateQuantity, removeFromCart } = useCart();
-  const { products } = useProducts();
+  const productIds = items.map(i => i.productId);
+  const { getProduct, loading: productsLoading } = useProductsByIds(productIds);
   const formatSize = (size?: string) => {
     if (!size) return '';
     if (size === '1m20') return '1,20 m';
@@ -16,7 +17,7 @@ export default function CartPage() {
   };
 
   const cartProducts = items.map(item => {
-    const product = products.find(p => p.id === item.productId);
+    const product = getProduct(item.productId);
     if (!product) return null;
     const surcharge = product.category === 'laisses' && item.size === '1m20' && (product.surcharge1m20 ?? 0) > 0 ? (product.surcharge1m20 ?? 0) : 0;
     return { ...product, quantity: item.quantity, size: item.size, unitPrice: product.price + surcharge };
@@ -24,7 +25,7 @@ export default function CartPage() {
 
   const total = cartProducts.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
 
-  if (loading) {
+  if (loading || productsLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb] flex items-center justify-center">
         <p className="text-gray-600">Chargement du panier...</p>
@@ -72,7 +73,7 @@ export default function CartPage() {
                 const isSameItem = (p: typeof item) => p.id === item.id && (p.size || '') === (item.size || '');
                 return (
                 <div key={itemKey} className="flex gap-4 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
-                  <img src={item.image} alt={item.name} className="w-20 h-20 object-cover rounded-lg" />
+                  <img src={item.image} alt={item.name} loading="lazy" className="w-20 h-20 object-cover rounded-lg" />
                   <div className="flex-1">
                     <h3 className="font-medium text-gray-900">{item.name}</h3>
                     <p className="text-sm text-gray-600">

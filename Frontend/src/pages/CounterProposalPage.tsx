@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Check, X, MessageSquare } from 'lucide-react';
-import { useProducts } from '../hooks/useProducts';
+import { useProductsByIds } from '../hooks/useProductsByIds';
+import { useProductsListForAdmin } from '../hooks/useProductsListForAdmin';
 import { safeJsonResponse, getTokenFromStorage } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
@@ -18,7 +19,9 @@ interface CounterOrder {
 export default function CounterProposalPage() {
   const navigate = useNavigate();
   const { orderId, action } = useParams();
-  const { products } = useProducts();
+  const orderProductIds = order ? [...order.items.map(i => i.productId), ...(order.counterProposal?.items?.map(i => i.productId) ?? [])] : [];
+  const { getProduct } = useProductsByIds([...new Set(orderProductIds)]);
+  const { products } = useProductsListForAdmin();
   const [order, setOrder] = useState<CounterOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -150,7 +153,7 @@ export default function CounterProposalPage() {
   };
 
   const getProductName = (productId: number) => {
-    const product = products.find(p => p.id === productId);
+    const product = getProduct(productId);
     return product ? product.name : `Produit #${productId}`;
   };
 

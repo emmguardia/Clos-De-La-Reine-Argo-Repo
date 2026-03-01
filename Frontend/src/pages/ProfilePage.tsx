@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { ComponentType } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { User, Package, History, LogOut, Download, Trash2, Edit2, Save, X, CreditCard, CheckCircle, XCircle, Clock, Check, MessageSquare, XOctagon, Truck } from 'lucide-react';
-import { useProducts } from '../hooks/useProducts';
+import { useProductsByIds } from '../hooks/useProductsByIds';
 import { safeJsonResponse, safeJsonParse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
@@ -32,7 +32,8 @@ interface Order {
 export default function ProfilePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { products } = useProducts();
+  const productIds = orders.flatMap(o => o.items.map(i => i.productId));
+  const { getProduct } = useProductsByIds([...new Set(productIds)]);
   const [user, setUser] = useState<UserData | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -134,7 +135,7 @@ export default function ProfilePage() {
   };
 
   const getProductName = (productId: number) => {
-    const product = products.find(p => p.id === productId);
+    const product = getProduct(productId);
     return product ? product.name : `Produit #${productId}`;
   };
 

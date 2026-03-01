@@ -8,7 +8,6 @@ import type { Product } from '../data/products';
 import ImageUpload from '../components/ImageUpload';
 import Pagination from '../components/Pagination';
 
-const PRODUCTS_PER_PAGE = 10;
 import { sanitizeInput, sanitizeDescription, safeJsonResponse } from '../utils/security';
 
 interface GalleryItem {
@@ -23,7 +22,7 @@ interface GalleryItem {
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
 export default function AdminPanelPage() {
-  const { products, loading, refetch } = useProductsForAdmin();
+  const { products, total, page, totalPages, loading, refetch, goToPage } = useProductsForAdmin(searchTerm);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,7 +55,6 @@ export default function AdminPanelPage() {
   const [galleryDeleteLoading, setGalleryDeleteLoading] = useState<Record<string, boolean>>({});
   const [currentPagePro, setCurrentPagePro] = useState(1);
   const [currentPageClient, setCurrentPageClient] = useState(1);
-  const [currentPageProducts, setCurrentPageProducts] = useState(1);
   const itemsPerPage = 6;
   const [paymentStats, setPaymentStats] = useState<{ totalOrders: number; totalRevenue: number; monthlyOrders: number; monthlyRevenue: number } | null>(null);
   useEffect(() => {
@@ -69,9 +67,6 @@ export default function AdminPanelPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    setCurrentPageProducts(1);
-  }, [searchTerm]);
 
   const verifyAdminToken = async () => {
     try {
@@ -420,15 +415,7 @@ export default function AdminPanelPage() {
     }
   };
 
-  const filteredProducts = products.filter(p =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.collection.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const paginatedProducts = filteredProducts.slice(
-    (currentPageProducts - 1) * PRODUCTS_PER_PAGE,
-    currentPageProducts * PRODUCTS_PER_PAGE
-  );
-  const totalPagesProducts = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
+  const paginatedProducts = products;
 
   const handleLogout = () => {
     if (confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
@@ -513,7 +500,7 @@ export default function AdminPanelPage() {
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <Package className="w-8 h-8 text-gray-600" />
-              <span className="text-2xl font-light text-gray-900">{loading ? '...' : products.length}</span>
+              <span className="text-2xl font-light text-gray-900">{loading ? '...' : total}</span>
             </div>
             <p className="text-sm text-gray-600">Produits</p>
           </div>
@@ -787,6 +774,7 @@ export default function AdminPanelPage() {
                         <div className="flex items-center gap-4">
                           <img
                             src={product.image}
+                            loading="lazy"
                             alt={product.name}
                             loading="lazy"
                             className="w-16 h-16 object-cover rounded-lg"
@@ -826,9 +814,9 @@ export default function AdminPanelPage() {
                       </div>
                     ))}
                     <Pagination
-                      currentPage={currentPageProducts}
-                      totalPages={totalPagesProducts}
-                      onPageChange={setCurrentPageProducts}
+                      currentPage={page}
+                      totalPages={totalPages}
+                      onPageChange={goToPage}
                       className="mt-6"
                     />
                   </div>
@@ -858,7 +846,7 @@ export default function AdminPanelPage() {
                         <h3 className="font-medium text-gray-900">{collection}</h3>
                       </div>
                       <p className="text-sm text-gray-600">
-                        {products.filter(p => p.collection === collection).length} produits
+                        produits
                       </p>
                     </div>
                   ))}

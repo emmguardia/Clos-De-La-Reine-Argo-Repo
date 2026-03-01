@@ -4,7 +4,7 @@ import { Lock, MapPin, CreditCard, ArrowLeft, Package, CheckCircle, Truck } from
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { trackEvent } from '../utils/analytics';
-import { useProducts } from '../hooks/useProducts';
+import { useProductsByIds } from '../hooks/useProductsByIds';
 import { sanitizeDescription, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
@@ -116,8 +116,9 @@ export default function PaymentPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { orderId } = useParams();
-  const { products } = useProducts();
   const [order, setOrder] = useState<PaymentOrder | null>(null);
+  const productIds = order?.items?.map(i => i.productId) ?? [];
+  const { getProduct } = useProductsByIds(productIds);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -496,7 +497,7 @@ export default function PaymentPage() {
   };
 
   const getProductName = (productId: number) => {
-    const product = products.find(p => p.id === productId);
+    const product = getProduct(productId);
     return product ? product.name : `Produit #${productId}`;
   };
 

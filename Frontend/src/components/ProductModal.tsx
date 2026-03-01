@@ -1,6 +1,7 @@
 import { X, ChevronLeft, ChevronRight, Heart, ShoppingCart, ChevronDown, Check } from 'lucide-react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Product } from '../data/products';
+import { fetchProductById } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
 import { useCart } from '../hooks/useCart';
 import { trackEvent } from '../utils/analytics';
@@ -322,7 +323,21 @@ function ProductModalBody({
 export default function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
   const { isFavorite, addFavorite, removeFavorite } = useFavorites();
   const { addToCart } = useCart();
-  const images = useMemo(() => getImages(product), [product]);
+  const [fullProduct, setFullProduct] = useState<Product | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !product) {
+      setFullProduct(null);
+      return;
+    }
+    setFullProduct(null);
+    fetchProductById(product.id)
+      .then((p) => setFullProduct(p ?? product))
+      .catch(() => setFullProduct(product));
+  }, [isOpen, product?.id]);
+
+  const displayProduct = fullProduct ?? product;
+  const images = useMemo(() => getImages(displayProduct), [displayProduct]);
   const favorite = product ? isFavorite(product.id) : false;
   const handleFavoriteClick = async () => {
     if (!product) return;
@@ -338,7 +353,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
   return (
     <ProductModalBody
       key={product.id}
-      product={product}
+      product={displayProduct}
       images={images}
       onClose={onClose}
       favorite={favorite}

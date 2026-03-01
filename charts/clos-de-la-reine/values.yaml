@@ -14,7 +14,7 @@ imagePullSecrets:
 
 # Backend (Node)
 backend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:7bcae4abe1313d0c8eb781aa89206acbcb2547e0e558ed099a74fbe469cfb3bb
+  image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:ccecb155df5024df9617bdbca211a228c406c260c76cddc7d3b2e5d5564100f1
   imagePullPolicy: IfNotPresent
   replicas: 1
   strategy:
@@ -48,7 +48,7 @@ backend:
 
 # Frontend (nginx)
 frontend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:c25eb29fe05f92389117200f64706db861c04766d8620e8fb2b32a35c78f9739
+  image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:ad93208058d0cf65bd91df7d840950634c9a7093c0fdebaaecc0e71bd7cc6c9a
   replicas: 1
   strategy:
     rollingUpdate:

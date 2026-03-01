@@ -19,10 +19,10 @@ interface CounterOrder {
 export default function CounterProposalPage() {
   const navigate = useNavigate();
   const { orderId, action } = useParams();
+  const [order, setOrder] = useState<CounterOrder | null>(null);
   const orderProductIds = order ? [...order.items.map(i => i.productId), ...(order.counterProposal?.items?.map(i => i.productId) ?? [])] : [];
   const { getProduct } = useProductsByIds([...new Set(orderProductIds)]);
   const { products } = useProductsListForAdmin();
-  const [order, setOrder] = useState<CounterOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -64,8 +64,8 @@ export default function CounterProposalPage() {
         console.error('Erreur lors de la récupération des commandes');
         navigate('/profil?tab=commandes');
       }
-    } catch {
-      console.error('Erreur:', error);
+    } catch (err) {
+      console.error('Erreur:', err);
       navigate('/profil?tab=commandes');
     } finally {
       setLoading(false);
@@ -73,7 +73,7 @@ export default function CounterProposalPage() {
   };
 
   const handleAccept = async () => {
-    if (!order.counterProposal) {
+    if (!order?.counterProposal) {
       setError('Aucune contre-proposition disponible à accepter');
       return;
     }

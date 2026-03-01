@@ -43,6 +43,11 @@ export function invalidateProductsCache(): void {
   productsCache.expires = 0;
 }
 
+export function getCachedProducts(): Product[] | null {
+  if (productsCache.data && productsCache.expires > Date.now()) return productsCache.data;
+  return null;
+}
+
 const productsCache: { data: Product[] | null; expires: number } = { data: null, expires: 0 };
 const CACHE_TTL_MS = 60_000;
 
@@ -80,7 +85,7 @@ export async function fetchProductsPaginated(params: {
   const products = (data as { products?: unknown[] }).products ?? [];
   const total = (data as { total?: number }).total ?? 0;
   const result: ProductsPageWithFilters = {
-    products: products.map((p: Record<string, unknown>) => mapProduct({ ...p, secondImage: undefined, additionalImages: [] })),
+    products: (products as Record<string, unknown>[]).map((p) => mapProduct({ ...p, secondImage: undefined, additionalImages: [] })),
     total
   };
   if ((data as { collections?: string[] }).collections) result.collections = (data as { collections?: string[] }).collections;
@@ -97,7 +102,7 @@ export async function fetchProductsMinimalPaginated(page = 1, limit = 20, search
   const products = (data as { products?: unknown[] }).products ?? [];
   const total = (data as { total?: number }).total ?? 0;
   return {
-    products: products.map((p: Record<string, unknown>) => mapProduct({ ...p, secondImage: undefined, additionalImages: [] })),
+    products: (products as Record<string, unknown>[]).map((p) => mapProduct({ ...p, secondImage: undefined, additionalImages: [] })),
     total
   };
 }

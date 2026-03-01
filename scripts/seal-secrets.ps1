@@ -5,15 +5,18 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 $SecretsPlain = Join-Path $RepoRoot "charts\clos-de-la-reine\secrets\clos-secrets.yaml"
 $SealedTemplate = Join-Path $RepoRoot "charts\clos-de-la-reine\templates\sealed-secret.yaml"
-$Cert = if ($env:CERT) { $env:CERT } else { Join-Path $RepoRoot "pub-cert.pem" }
+$Cert = if ($env:CERT) { $env:CERT } else {
+  $pubCert = Join-Path $RepoRoot "pub-cert.pem"
+  $certPem = Join-Path $RepoRoot "cert.pem"
+  if (Test-Path $pubCert) { $pubCert } elseif (Test-Path $certPem) { $certPem } else { $pubCert }
+}
 
 if (-not (Test-Path $SecretsPlain)) {
   Write-Error "Fichier non trouvé: $SecretsPlain"
   exit 1
 }
 if (-not (Test-Path $Cert)) {
-  Write-Error "Certificat non trouvé: $Cert"
-  Write-Host "Définis `$env:CERT=chemin\vers\pub-cert.pem si besoin"
+  Write-Error "Certificat non trouvé. Place pub-cert.pem ou cert.pem à la racine du repo, ou définis `$env:CERT=chemin\vers\cert.pem"
   exit 1
 }
 

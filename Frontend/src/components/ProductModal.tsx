@@ -350,10 +350,11 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
     }
   };
   if (!isOpen || !product) return null;
+  const productToShow = displayProduct ?? product;
   return (
     <ProductModalBody
       key={product.id}
-      product={displayProduct}
+      product={productToShow}
       images={images}
       onClose={onClose}
       favorite={favorite}

@@ -32,10 +32,10 @@ interface Order {
 export default function ProfilePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const productIds = orders.flatMap(o => o.items.map(i => i.productId));
-  const { getProduct } = useProductsByIds([...new Set(productIds)]);
   const [user, setUser] = useState<UserData | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const productIds = orders.flatMap(o => o.items.map(i => i.productId));
+  const { getProduct } = useProductsByIds([...new Set(productIds)]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const activeTabParam = searchParams.get('tab');
   const validTabs = ['informations', 'commandes', 'historique'];

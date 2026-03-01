@@ -50,15 +50,13 @@ export default function FAQPage() {
     });
   };
 
-  const categories = Array.from(new Set(faqs.map(f => f.category))).map(cat => {
-    const categoryFaqs = faqs.filter(f => f.category === cat);
-    const categoryOrder = categoryFaqs[0]?.categoryOrder || 0;
-    return { name: cat, order: categoryOrder };
-  }).sort((a, b) => a.order - b.order).map(c => c.name);
-  
+  const categories: string[] = [];
+  for (const f of faqs) {
+    if (!categories.includes(f.category)) categories.push(f.category);
+  }
   const faqsByCategory = categories.map(category => ({
     title: category,
-    items: faqs.filter(f => f.category === category).sort((a, b) => a.order - b.order)
+    items: faqs.filter(f => f.category === category)
   }));
 
   if (loading) {

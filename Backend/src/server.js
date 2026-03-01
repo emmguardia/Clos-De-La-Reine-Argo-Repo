@@ -875,7 +875,9 @@ app.delete('/api/collections/:id', authenticateAdmin, async (req, res) => {
 
 app.get('/api/faq', async (req, res) => {
   try {
-    const faqs = await db.collection('faq').find({}).sort({ categoryOrder: 1, category: 1, order: 1 }).toArray();
+    const faqs = await db.collection('faq').find({}).toArray();
+    faqs.sort((a, b) => (a.sortOrder ?? 999999) - (b.sortOrder ?? 999999));
+    let sortIdx = 0;
     res.json(faqs.map(faq => ({
       id: faq._id.toString(),
       category: faq.category,
@@ -883,6 +885,7 @@ app.get('/api/faq', async (req, res) => {
       answer: faq.answer,
       order: faq.order || 0,
       categoryOrder: faq.categoryOrder || 0,
+      sortOrder: faq.sortOrder ?? sortIdx++,
       createdAt: faq.createdAt,
       updatedAt: faq.updatedAt
     })));
@@ -904,12 +907,15 @@ app.post('/api/faq', authenticateAdmin, async (req, res) => {
     if (!answer || answer.trim().length < 1 || answer.trim().length > 5000) {
       return res.status(400).json({ error: 'Réponse requise (1-5000 caractères)' });
     }
+    const maxSort = await db.collection('faq').find({}).sort({ sortOrder: -1 }).limit(1).toArray();
+    const nextSortOrder = (maxSort[0]?.sortOrder ?? -1) + 1;
     const faqItem = {
       category: category.trim(),
       question: question.trim(),
       answer: answer.trim(),
       order: order || 0,
       categoryOrder: categoryOrder || 0,
+      sortOrder: nextSortOrder,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -951,6 +957,27 @@ app.put('/api/faq/:id', authenticateAdmin, async (req, res) => {
     res.json({ message: 'FAQ mise à jour' });
   } catch (error) {
     console.error('Erreur lors de la mise à jour de la FAQ:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+app.patch('/api/faq/reorder', authenticateAdmin, async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items requis (tableau [{ id, sortOrder }])' });
+    }
+    for (const it of items) {
+      const { id, sortOrder } = it;
+      if (!id || typeof sortOrder !== 'number') continue;
+      await db.collection('faq').updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { sortOrder, updatedAt: new Date() } }
+      );
+    }
+    res.json({ message: 'Ordre mis à jour' });
+  } catch (error) {
+    console.error('Erreur lors du réordonnancement FAQ:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
@@ -1779,92 +1806,108 @@ app.get('/api/admin/verify', authenticateAdmin, async (req, res) => {
 
 app.get('/api/stats', authenticateAdmin, async (req, res) => {
   try {
-    const statsDoc = await db.collection('stats').findOne({});
-    
+    // Stats calculées en temps réel depuis les commandes payées uniquement
+    const paidOrders = await db.collection('orders').find({ status: 'paid' }).toArray();
+    const products = await db.collection('products').find({}).toArray();
+    const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
+
     const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+
+    let totalRevenue = 0;
+    let monthlyRevenue = 0;
+    let lastMonthRevenue = 0;
+    const dailyStatsMap = {};
+    const collectionStats = {};
+    const categoryStats = {};
+
+    for (const order of paidOrders) {
+      const orderTotal = Number(order.total) || 0;
+      const orderDate = order.updatedAt || order.createdAt || order.paymentInfo?.paidAt;
+      const d = orderDate ? new Date(orderDate) : new Date();
+
+      totalRevenue += orderTotal;
+
+      const dMonthStart = new Date(d.getFullYear(), d.getMonth(), 1);
+      if (dMonthStart.getTime() === monthStart.getTime()) {
+        monthlyRevenue += orderTotal;
+      } else if (d >= lastMonthStart && d <= lastMonthEnd) {
+        lastMonthRevenue += orderTotal;
+      }
+
+      const dayKey = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      if (!dailyStatsMap[dayKey]) dailyStatsMap[dayKey] = { revenue: 0, orders: 0 };
+      dailyStatsMap[dayKey].revenue += orderTotal;
+      dailyStatsMap[dayKey].orders += 1;
+
+      for (const item of order.items || []) {
+        const product = productMap[item.productId];
+        if (product) {
+          const collection = product.collection || 'Autre';
+          const category = product.category || 'Autre';
+          const itemTotal = (item.price || 0) * (item.quantity || 1);
+          collectionStats[collection] = (collectionStats[collection] || 0) + itemTotal;
+          categoryStats[category] = (categoryStats[category] || 0) + itemTotal;
+        }
+      }
+    }
+
+    const totalOrders = paidOrders.length;
+    const monthlyOrders = paidOrders.filter(o => {
+      const d = o.updatedAt || o.createdAt || o.paymentInfo?.paidAt;
+      if (!d) return false;
+      const m = new Date(d);
+      return m.getFullYear() === now.getFullYear() && m.getMonth() === now.getMonth();
+    }).length;
+    const lastMonthOrders = paidOrders.filter(o => {
+      const d = o.updatedAt || o.createdAt || o.paymentInfo?.paidAt;
+      if (!d) return false;
+      const m = new Date(d);
+      return m >= lastMonthStart && m <= lastMonthEnd;
+    }).length;
+
+    const monthlyAverageOrderValue = monthlyOrders > 0 ? monthlyRevenue / monthlyOrders : 0;
+    const lastMonthAverageOrderValue = lastMonthOrders > 0 ? lastMonthRevenue / lastMonthOrders : 0;
+
+    const revenueChange = lastMonthRevenue > 0
+      ? ((monthlyRevenue - lastMonthRevenue) / lastMonthRevenue) * 100
+      : (monthlyRevenue > 0 ? 100 : 0);
+    const ordersChange = lastMonthOrders > 0
+      ? ((monthlyOrders - lastMonthOrders) / lastMonthOrders) * 100
+      : (monthlyOrders > 0 ? 100 : 0);
+    const averageOrderValueChange = lastMonthAverageOrderValue > 0
+      ? ((monthlyAverageOrderValue - lastMonthAverageOrderValue) / lastMonthAverageOrderValue) * 100
+      : (monthlyAverageOrderValue > 0 ? 100 : 0);
+
     const last7Days = [];
     for (let i = 6; i >= 0; i--) {
       const date = new Date(now);
       date.setDate(date.getDate() - i);
       date.setHours(0, 0, 0, 0);
-      
-      const dayStat = statsDoc?.dailyStats?.find(d => {
-        if (!d.date) return false;
-        const dDate = new Date(d.date);
-        dDate.setHours(0, 0, 0, 0);
-        return dDate.getTime() === date.getTime();
-      });
-
+      const dayKey = date.getTime();
+      const dayStat = dailyStatsMap[dayKey] || { revenue: 0, orders: 0 };
       const dayName = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][date.getDay()];
-      last7Days.push({
-        date: dayName,
-        revenue: dayStat?.revenue || 0,
-        orders: dayStat?.orders || 0
-      });
+      last7Days.push({ date: dayName, revenue: dayStat.revenue, orders: dayStat.orders });
     }
-    
-    if (!statsDoc) {
-      return res.json({
-        totalRevenue: 0,
-        totalOrders: 0,
-        averageOrderValue: 0,
-        monthlyRevenue: 0,
-        monthlyOrders: 0,
-        monthlyAverageOrderValue: 0,
-        lastMonthRevenue: 0,
-        lastMonthOrders: 0,
-        lastMonthAverageOrderValue: 0,
-        revenueChange: 0,
-        ordersChange: 0,
-        averageOrderValueChange: 0,
-        dailyStats: last7Days,
-        collectionStats: {},
-        categoryStats: {}
-      });
-    }
-
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-
-    const monthlyStat = statsDoc.monthlyStats?.find(m => 
-      m.month && new Date(m.month).getTime() === monthStart.getTime()
-    ) || { revenue: 0, orders: 0 };
-
-    const lastMonthlyStat = statsDoc.monthlyStats?.find(m => {
-      const mDate = new Date(m.month);
-      return mDate.getTime() >= lastMonthStart.getTime() && mDate.getTime() <= lastMonthEnd.getTime();
-    }) || { revenue: 0, orders: 0 };
-
-    const monthlyAverageOrderValue = monthlyStat.orders > 0 ? monthlyStat.revenue / monthlyStat.orders : 0;
-    const lastMonthAverageOrderValue = lastMonthlyStat.orders > 0 ? lastMonthlyStat.revenue / lastMonthlyStat.orders : 0;
-
-    const revenueChange = lastMonthlyStat.revenue > 0 
-      ? ((monthlyStat.revenue - lastMonthlyStat.revenue) / lastMonthlyStat.revenue) * 100 
-      : 0;
-    const ordersChange = lastMonthlyStat.orders > 0 
-      ? ((monthlyStat.orders - lastMonthlyStat.orders) / lastMonthlyStat.orders) * 100 
-      : 0;
-    const averageOrderValueChange = lastMonthAverageOrderValue > 0 
-      ? ((monthlyAverageOrderValue - lastMonthAverageOrderValue) / lastMonthAverageOrderValue) * 100 
-      : 0;
 
     res.json({
-      totalRevenue: statsDoc.totalRevenue || 0,
-      totalOrders: statsDoc.totalOrders || 0,
-      averageOrderValue: statsDoc.averageOrderValue || 0,
-      monthlyRevenue: monthlyStat.revenue || 0,
-      monthlyOrders: monthlyStat.orders || 0,
-      monthlyAverageOrderValue: monthlyAverageOrderValue,
-      lastMonthRevenue: lastMonthlyStat.revenue || 0,
-      lastMonthOrders: lastMonthlyStat.orders || 0,
-      lastMonthAverageOrderValue: lastMonthAverageOrderValue,
+      totalRevenue,
+      totalOrders,
+      averageOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
+      monthlyRevenue,
+      monthlyOrders,
+      monthlyAverageOrderValue,
+      lastMonthRevenue,
+      lastMonthOrders,
+      lastMonthAverageOrderValue,
       revenueChange: Math.round(revenueChange * 10) / 10,
       ordersChange: Math.round(ordersChange * 10) / 10,
       averageOrderValueChange: Math.round(averageOrderValueChange * 10) / 10,
       dailyStats: last7Days,
-      collectionStats: statsDoc.collectionStats || {},
-      categoryStats: statsDoc.categoryStats || {}
+      collectionStats,
+      categoryStats
     });
   } catch (error) {
     console.error('Erreur lors de la récupération des stats:', error);

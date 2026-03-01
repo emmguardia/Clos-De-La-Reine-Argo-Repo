@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fetchProductsMinimalPaginated, type Product } from '../data/products';
 
-const PRODUCTS_PER_PAGE = 20;
+const PRODUCTS_PER_PAGE = 6;
 
 export function useProductsForAdmin(searchTerm = '') {
   const [products, setProducts] = useState<Product[]>([]);

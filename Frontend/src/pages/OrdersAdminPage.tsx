@@ -13,7 +13,7 @@ interface Order {
   user: { email: string; firstName: string; lastName: string } | null;
   items: Array<{ productId: number; quantity: number; price: number }>;
   shippingAddress: Record<string, unknown>;
-  dogInfo: {
+  dogInfo?: {
     breed: string;
     age: string;
     size?: string;
@@ -418,14 +418,14 @@ export default function OrdersAdminPage() {
             <div className="bg-gray-50 rounded-2xl p-4">
               <h4 className="font-medium text-gray-900 mb-3">Adresse de livraison</h4>
               <div className="text-sm text-gray-600">
-                <p>{order.shippingAddress.firstName} {order.shippingAddress.lastName}</p>
-                <p>{order.shippingAddress.email}</p>
-                <p>{order.shippingAddress.phone}</p>
-                {order.shippingAddress.address && (
+                <p>{String((order.shippingAddress as Record<string, string>).firstName ?? '')} {String((order.shippingAddress as Record<string, string>).lastName ?? '')}</p>
+                <p>{String((order.shippingAddress as Record<string, string>).email ?? '')}</p>
+                <p>{String((order.shippingAddress as Record<string, string>).phone ?? '')}</p>
+                {(order.shippingAddress as Record<string, string>).address && (
                   <>
-                    <p>{order.shippingAddress.address}</p>
-                    <p>{order.shippingAddress.postalCode} {order.shippingAddress.city}</p>
-                    <p>{order.shippingAddress.country}</p>
+                    <p>{(order.shippingAddress as Record<string, string>).address}</p>
+                    <p>{(order.shippingAddress as Record<string, string>).postalCode} {(order.shippingAddress as Record<string, string>).city}</p>
+                    <p>{(order.shippingAddress as Record<string, string>).country}</p>
                   </>
                 )}
               </div>
@@ -468,7 +468,7 @@ export default function OrdersAdminPage() {
         {order.paymentInfo && (
           <div className="mb-4 p-3 bg-green-50 rounded-lg">
             <p className="text-sm text-green-800">
-              <strong>Paiement effectué</strong> - {new Date(order.paymentInfo.paidAt).toLocaleDateString('fr-FR')}
+              <strong>Paiement effectué</strong> - {order.paymentInfo.paidAt ? new Date(order.paymentInfo.paidAt).toLocaleDateString('fr-FR') : 'N/A'}
             </p>
           </div>
         )}

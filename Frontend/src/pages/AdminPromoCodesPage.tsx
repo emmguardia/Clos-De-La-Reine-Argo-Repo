@@ -97,8 +97,8 @@ export default function AdminPromoCodesPage() {
 
       const data = await safeJsonResponse(response, []) as PromoCode[];
       setPromoCodes(data);
-    } catch {
-      console.error('Erreur:', error);
+    } catch (err) {
+      console.error('Erreur:', err);
     } finally {
       setLoading(false);
     }
@@ -209,8 +209,8 @@ export default function AdminPromoCodesPage() {
       setTimeout(() => {
         resetForm();
       }, 1500);
-    } catch {
-      setFormError(error instanceof Error ? error.message : 'Erreur lors de l\'enregistrement');
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement');
     } finally {
       setFormLoading(false);
     }
@@ -244,8 +244,8 @@ export default function AdminPromoCodesPage() {
       }
 
       await fetchPromoCodes();
-    } catch {
-      alert(error instanceof Error ? error.message : 'Erreur lors de la suppression');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     } finally {
       setDeleteLoading({ ...deleteLoading, [id]: false });
     }

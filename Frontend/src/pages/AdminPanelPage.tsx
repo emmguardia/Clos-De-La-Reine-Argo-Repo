@@ -22,10 +22,10 @@ interface GalleryItem {
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
 export default function AdminPanelPage() {
+  const [searchTerm, setSearchTerm] = useState('');
   const { products, total, page, totalPages, loading, refetch, goToPage } = useProductsForAdmin(searchTerm);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
   const [collections, setCollections] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     name: '',
@@ -373,7 +373,7 @@ export default function AdminPanelPage() {
         resetForm();
         refetch();
       }, 1500);
-    } catch {
+    } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Erreur lors de l\'opération');
     } finally {
       setFormLoading(false);
@@ -765,7 +765,7 @@ export default function AdminPanelPage() {
                 <h3 className="text-xl font-light text-gray-900 mb-4">Liste des produits</h3>
                 {loading ? (
                   <div className="text-center py-8 text-gray-500">Chargement des produits...</div>
-                ) : filteredProducts.length === 0 ? (
+                ) : paginatedProducts.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">Aucun produit trouvé</div>
                 ) : (
                   <div className="space-y-4">
@@ -776,7 +776,6 @@ export default function AdminPanelPage() {
                             src={product.image}
                             loading="lazy"
                             alt={product.name}
-                            loading="lazy"
                             className="w-16 h-16 object-cover rounded-lg"
                             onError={(e) => {
                               (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="64" height="64"%3E%3Crect width="64" height="64" fill="%23e5e7eb"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%239ca3af" font-size="12"%3EImage%3C/text%3E%3C/svg%3E';

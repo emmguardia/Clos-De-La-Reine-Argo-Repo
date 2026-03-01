@@ -162,6 +162,8 @@ export default function PaymentPage() {
         const orders = await safeJsonResponse(response, []) as Array<{
           id: string;
           status?: string;
+          total: number;
+          items: OrderItem[];
           shippingAddress?: Record<string, string>;
         }>;
         const foundOrder = orders.find((o) => o.id === orderId);
@@ -170,7 +172,12 @@ export default function PaymentPage() {
             navigate('/profil?tab=commandes');
             return;
           }
-          setOrder(foundOrder);
+          setOrder({
+            id: foundOrder.id,
+            total: foundOrder.total,
+            items: foundOrder.items,
+            shippingAddress: foundOrder.shippingAddress
+          });
           if (foundOrder.shippingAddress) {
             setShippingAddress({
               firstName: foundOrder.shippingAddress.firstName || '',
@@ -399,7 +406,7 @@ export default function PaymentPage() {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok || cancelled) return;
-        const data = await safeJsonResponse(res, {});
+        const data = await safeJsonResponse(res, {}) as { clientSecret?: string };
         if (data.clientSecret) {
           setClientSecret(data.clientSecret);
           try {
@@ -743,7 +750,7 @@ export default function PaymentPage() {
                           total={order.total}
                           onConfirmSuccess={handlePaymentConfirmed}
                           onError={setError}
-                          canPay={canPay}
+                          canPay={!!canPay}
                         />
                         {effectiveStripeKey.startsWith('pk_test_') && (
                           <p className="mt-4 text-xs text-gray-500">

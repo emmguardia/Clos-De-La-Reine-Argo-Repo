@@ -1,3 +1,5 @@
+import { trackEvent } from '../utils/analytics';
+
 interface PaginationProps {
   currentPage: number;
   totalPages: number;
@@ -31,7 +33,10 @@ export default function Pagination({ currentPage, totalPages, onPageChange, clas
           <button
             key={page}
             type="button"
-            onClick={() => onPageChange(page)}
+            onClick={() => {
+            trackEvent('boutique_pagination', { page, total_pages: totalPages });
+            onPageChange(page);
+          }}
             className={`min-w-[2.5rem] h-10 px-2 rounded-full text-sm transition-colors ${
               currentPage === page
                 ? 'bg-gray-900 text-white'

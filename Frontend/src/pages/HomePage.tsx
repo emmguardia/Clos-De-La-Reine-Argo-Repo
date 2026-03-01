@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useState, useMemo } from 'react';
+import { trackEvent } from '../utils/analytics';
 import { useProducts } from '../hooks/useProducts';
 import ProductCard from '../components/ProductCard';
 import ProductModal from '../components/ProductModal';
@@ -92,12 +93,14 @@ export default function HomePage() {
               <a
                 href="#pieces-phares"
                 className="bg-gray-900 text-white px-8 py-3 rounded-full hover:bg-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg shadow-gray-900/10"
+                onClick={() => trackEvent('hero_cta_click', { cta: 'decouvrir_collection', source: 'home' })}
               >
                 Découvrir la collection
               </a>
               <a
                 href="#nouveautes"
                 className="px-8 py-3 rounded-full border border-gray-300 text-gray-900 hover:border-gray-600 hover:text-gray-900 transition-all duration-300"
+                onClick={() => trackEvent('hero_cta_click', { cta: 'nouveautes', source: 'home' })}
               >
                 Nouveautés
               </a>
@@ -134,6 +137,7 @@ export default function HomePage() {
             <Link
               to="/boutique"
               className="self-start sm:self-auto px-5 py-2 rounded-full border border-gray-300 text-sm text-gray-800 hover:border-gray-900 transition-colors"
+              onClick={() => trackEvent('home_section_click', { section: 'pieces_phares', action: 'voir_tout' })}
             >
               Voir tout
             </Link>
@@ -175,6 +179,7 @@ export default function HomePage() {
                       <Link
                         to={product.to}
                         className={`rounded-full bg-gray-900 text-white font-medium hover:bg-gray-800 transition-all duration-200 shadow-lg ${index === 0 ? 'px-4 py-2 text-sm' : 'px-3 py-1.5 text-xs'}`}
+                        onClick={() => trackEvent('home_featured_click', { product: product.title, category: product.category })}
                       >
                         Découvrir
                       </Link>
@@ -201,6 +206,7 @@ export default function HomePage() {
             <Link
               to="/boutique"
               className="self-start sm:self-auto px-5 py-2 rounded-full border border-gray-300 text-sm text-gray-800 hover:border-gray-900 transition-colors"
+              onClick={() => trackEvent('home_section_click', { section: 'nouveautes', action: 'voir_tout' })}
             >
               Voir tout
             </Link>

@@ -269,8 +269,8 @@ export default function HomePage() {
             <p className="uppercase tracking-[0.28em] text-xs text-gray-500">Fondatrice</p>
             <h2 className="text-3xl font-light text-gray-900">Joanne — œil couture, esprit atelier</h2>
             <p className="text-gray-600 leading-relaxed">
-              Cavalière, maman et sensible à la beauté dans ses moindres détails, Joanne imagine des lignes raffinées dédiées à l'élégance canine, portées par l'exigence et la sincérité.
-              Chaque pièce est conçue en série limitée, avec des matières sélectionnées avec soin, des finitions précises et une attention constante au confort comme à l'émotion.
+              Cavalière, maman et sensible à la beauté dans ses moindres détails, Joanne imagine des lignes raffinées, dédiées à l'élégance canine, portées par l'exigence et la sincérité.
+              Chaque pièce est conçue en série limitée, avec des matières sélectionnées avec soin, des finitions précises et une attention constante portée au confort comme à l'émotion.
               Le Clos de la Reine privilégie une production mesurée, guidée par l'écoute et les retours, afin de proposer des créations justes, durables et intemporelles.
             </p>
             <div className="flex flex-col gap-2 text-sm text-gray-700">
@@ -280,7 +280,7 @@ export default function HomePage() {
             </div>
             <div className="pt-6 mt-6 border-t border-gray-200/60">
               <p className="text-gray-600 leading-relaxed">
-                Vendôme est entré dans ma vie à un moment où j'en avais profondément besoin : il est devenu à la fois mon moteur et mon pilier. Au-delà de sa beauté évidente, il est d'une douceur infinie, drôle, lumineux au quotidien, et il m'accompagne chaque jour dans la création et l'élaboration des produits que propose Le Clos de la Reine.
+                Vendôme a vu le jour au moment où j'en avais profondément besoin : il est devenu à la fois mon moteur et mon pilier. Au-delà de sa beauté évidente, il est d'une douceur infinie, drôle, lumineux au quotidien, et il m'accompagne chaque jour dans la création et l'élaboration des produits que propose Le Clos de la Reine.
                 Il vient de l'élevage du{' '}
                 <a
                   href="https://dudomainedesrevesbleus.chiens-de-france.com/cocker-spaniel-anglais"

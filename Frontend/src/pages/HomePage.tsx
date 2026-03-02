@@ -127,7 +127,7 @@ export default function HomePage() {
                 Pièces phares
               </h2>
               <p className="text-gray-900 mt-3 max-w-xl">
-                Découvrez notre dernière collection Noblesse.
+                Découvrez notre dernière collection phares Back to School.
               </p>
             </div>
             <Link

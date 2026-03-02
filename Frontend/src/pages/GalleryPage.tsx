@@ -59,7 +59,7 @@ export default function GalleryPage() {
           <section className="mb-16">
             <div className="mb-8">
               <h2 className="text-3xl font-light text-gray-900 mb-2">Professionnelle</h2>
-              <p className="text-gray-600">Nos créations et photos de studio</p>
+              <p className="text-gray-600">Nos créations et séances photo</p>
             </div>
             <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 mb-8">
               {professionalImages.map((item, index) => {

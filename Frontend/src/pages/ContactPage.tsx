@@ -126,8 +126,8 @@ export default function ContactPage() {
               <h3 className="text-lg font-light text-gray-900 mb-3">Le Clos de la Reine</h3>
               <p className="text-gray-600 text-sm leading-relaxed">
                 Une maison française qui imagine colliers, laisses et harnais au croisement de
-                l'élégance épurée et de la fonctionnalité. Matières douces, finitions sellier,
-                palette crème, rose poudré et vert clair pour sublimer vos compagnons et votre intérieur.
+                l'élégance épurée et de la fonctionnalité. Matières douces,
+                détails soignés, palette crème, rose poudré et vert clair pour sublimer vos compagnons.
               </p>
             </div>
           </div>

@@ -21,7 +21,7 @@ interface FeaturedProduct {
 const featuredProducts: FeaturedProduct[] = [
   {
     id: '1',
-    title: 'Collier tartan beige',
+    title: 'Collier tartan bleu',
     subtitle: 'Collier et laisse assortis, bleu profond',
     price: '27€',
     badge: 'Collier phare',
@@ -34,7 +34,7 @@ const featuredProducts: FeaturedProduct[] = [
   {
     id: '2',
     title: 'Laisse tartan beige',
-    subtitle: 'Tressage atelier, mousqueton inox, teinte moka',
+    subtitle: 'Tissu écossais beige, boucle dorée élégante, finition soignée.',
     price: '37€',
     badge: 'Laisse phare',
     image: '/Images/Collier_BTS1.webp',
@@ -46,7 +46,7 @@ const featuredProducts: FeaturedProduct[] = [
   {
     id: '3 ',
     title: 'Harnais tartan beige',
-    subtitle: 'Mesh respirant, sangles sable, ergonomie douce',
+    subtitle: 'Matières douces et respirantes, coupe ergonomique',
     price: '47€',
     badge: 'Harnais phare',
     image: '/Images/Back_to_school_3.webp',
@@ -104,7 +104,7 @@ export default function HomePage() {
             <div className="flex items-center gap-6 text-sm text-gray-500 animate-fadeIn-delay-3">
               <div className="flex items-center gap-2">
                 <span className="block h-px w-10 bg-gray-400" />
-                Passions & Esthétisme
+                Passion & Esthétisme
               </div>
               <div className="flex items-center gap-2">
                 <span className="block h-px w-10 bg-gray-400" />
@@ -127,7 +127,7 @@ export default function HomePage() {
                 Pièces phares
               </h2>
               <p className="text-gray-900 mt-3 max-w-xl">
-                Découvrez notre dernière collection Back to School.
+                Découvrez notre dernière collection Noblesse.
               </p>
             </div>
             <Link
@@ -240,8 +240,8 @@ export default function HomePage() {
              vert clair pour sublimer vos compagnons et votre intérieur.
             </p>
             <ul className="flex gap-4 text-sm text-gray-700 list-none">
-              <li className="px-4 py-2 rounded-full bg-[#f8f4ef]">Finitions sellier</li>
-              <li className="px-4 py-2 rounded-full bg-[#e5f2eb]">Cuirs végétaux</li>
+              <li className="px-4 py-2 rounded-full bg-[#f8f4ef]">Détails soignés</li>
+              <li className="px-4 py-2 rounded-full bg-[#e5f2eb]">Tissus élégants</li>
               <li className="px-4 py-2 rounded-full bg-[#f2dedd]">Production atelier</li>
             </ul>
           </article>
@@ -280,8 +280,8 @@ export default function HomePage() {
             </div>
             <div className="pt-6 mt-6 border-t border-gray-200/60">
               <p className="text-gray-600 leading-relaxed">
-                Vendôme a vu le jour au moment où j'en avais profondément besoin : il est devenu à la fois mon moteur et mon pilier. Au-delà de sa beauté évidente, il est d'une douceur infinie, drôle, lumineux au quotidien, et il m'accompagne chaque jour dans la création et l'élaboration des produits que propose Le Clos de la Reine.
-                Il vient de l'élevage du{' '}
+              Vendôme est arrivé dans ma vie au moment où j'en avais profondément besoin : il est devenu à la fois mon moteur et mon pilier. Au-delà de sa beauté évidente, il est d'une douceur infinie, drôle, lumineux au quotidien, et il m'accompagne chaque jour dans la création et l'élaboration des produits que propose Le Clos de la Reine.
+                Vendôme a vu le jour à l’élevage du {' '}
                 <a
                   href="https://dudomainedesrevesbleus.chiens-de-france.com/cocker-spaniel-anglais"
                   target="_blank"

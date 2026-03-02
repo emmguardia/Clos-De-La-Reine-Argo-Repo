@@ -77,7 +77,11 @@ export default function ProductCard({ product, showCollection = true, compact = 
           )}
         </div>
         <p className="text-sm text-gray-500">
-          Couleur {Array.isArray(product.color) ? product.color.join(', ') : product.color} · Tailles {product.sizes.length > 1
+          Couleur {Array.isArray(product.color)
+            ? product.color.length <= 2
+              ? product.color.join(' et ')
+              : product.color.slice(0, -1).join(', ') + ' et ' + product.color[product.color.length - 1]
+            : product.color} · Tailles {product.sizes.length > 1
             ? (product.category === 'laisses' ? `${product.sizes[0]} et ${product.sizes[1]}` : `du ${product.sizes[0]} au ${product.sizes[product.sizes.length - 1]}`)
             : product.sizes[0]}
         </p>

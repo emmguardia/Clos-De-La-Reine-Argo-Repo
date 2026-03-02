@@ -55,8 +55,11 @@ export default function MentionsLegalesPage() {
             <p>
               Conformément à l&apos;article L.612-1 du Code de la consommation, en cas de litige, le client peut recourir gratuitement au médiateur de la consommation.
             </p>
-            <p className="p-3 bg-gray-100 border border-gray-200 rounded-lg italic text-gray-600">
-              Coordonnées du médiateur de la consommation : à compléter lors de l&apos;adhésion à un médiateur référencé (obligatoire pour tout vendeur à des particuliers).
+            <p className="p-3 bg-gray-100 border border-gray-200 rounded-lg text-gray-700">
+              <strong>Médiation de la consommation FEVAD</strong><br />
+              Fédération du e-commerce et de la vente à distance<br />
+              Site : <a href="https://www.mediateurfevad.fr" target="_blank" rel="noopener noreferrer" className="text-gray-900 underline hover:text-gray-700">www.mediateurfevad.fr</a><br />
+              Adresse : 60 rue La Boétie, 75008 Paris
             </p>
           </section>
 

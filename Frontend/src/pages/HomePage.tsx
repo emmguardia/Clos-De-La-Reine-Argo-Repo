@@ -234,9 +234,10 @@ export default function HomePage() {
             <p className="uppercase tracking-[0.28em] text-xs text-gray-500">Maison</p>
             <h2 className="text-3xl font-light text-gray-900">Le Clos de la Reine</h2>
             <p className="text-gray-600 leading-relaxed">
-              Une maison française qui imagine colliers, laisses et harnais au croisement du
-              élégance et de la fonctionnalité. Matières douces, finitions sellier,
-              palette crème, rose poudré et vert clair pour sublimer vos compagnons et votre intérieur.
+            Une maison française qui imagine colliers, laisses et harnais au 
+            croisement de l'élégance et de la fonctionnalité. 
+            Matières douces, finitions soignées, palette crème, rose poudré et
+             vert clair pour sublimer vos compagnons et votre intérieur.
             </p>
             <ul className="flex gap-4 text-sm text-gray-700 list-none">
               <li className="px-4 py-2 rounded-full bg-[#f8f4ef]">Finitions sellier</li>

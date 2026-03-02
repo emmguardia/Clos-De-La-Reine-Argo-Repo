@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { safeJsonResponse } from '../utils/security';
+import Pagination from '../components/Pagination';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
+const ITEMS_PER_PAGE = 12;
 
 interface GalleryItem {
   id: string;
@@ -15,6 +17,8 @@ export default function GalleryPage() {
   const [professionalImages, setProfessionalImages] = useState<GalleryItem[]>([]);
   const [clientImages, setClientImages] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pagePro, setPagePro] = useState(1);
+  const [pageClient, setPageClient] = useState(1);
 
   useEffect(() => {
     fetchGallery();
@@ -37,6 +41,11 @@ export default function GalleryPage() {
     }
   };
 
+  const paginatedPro = professionalImages.slice((pagePro - 1) * ITEMS_PER_PAGE, pagePro * ITEMS_PER_PAGE);
+  const paginatedClient = clientImages.slice((pageClient - 1) * ITEMS_PER_PAGE, pageClient * ITEMS_PER_PAGE);
+  const totalPagesPro = Math.ceil(professionalImages.length / ITEMS_PER_PAGE);
+  const totalPagesClient = Math.ceil(clientImages.length / ITEMS_PER_PAGE);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -54,6 +63,15 @@ export default function GalleryPage() {
             Joanne imagine et supervise chaque direction artistique — des lieux aux décors — pour façonner un univers fidèle à l'esprit du Clos de la Reine.
             Depuis les débuts, le regard d'Émilie Zangarrelli et son équipe en capte l'essence et en révèle toute la subtilité.
           </p>
+          <a
+            href="https://studiozangarelli.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 rounded-full border border-gray-300 text-sm text-gray-800 hover:border-gray-900 hover:bg-gray-50 transition-colors"
+          >
+            Studio Zangarelli
+            <span className="text-xs">↗</span>
+          </a>
         </div>
         {professionalImages.length > 0 && (
           <section className="mb-16">
@@ -62,7 +80,7 @@ export default function GalleryPage() {
               <p className="text-gray-600">Nos créations et séances photo</p>
             </div>
             <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 mb-8">
-              {professionalImages.map((item, index) => {
+              {paginatedPro.map((item, index) => {
                 const sizes = ['tall', 'wide', 'normal'];
                 const size = sizes[index % sizes.length];
                 return (
@@ -87,6 +105,12 @@ export default function GalleryPage() {
                 );
               })}
             </div>
+            <Pagination
+              currentPage={pagePro}
+              totalPages={totalPagesPro}
+              onPageChange={setPagePro}
+              className="mt-6"
+            />
           </section>
         )}
         {clientImages.length > 0 && (
@@ -95,15 +119,15 @@ export default function GalleryPage() {
               <h2 className="text-3xl font-light text-gray-900 mb-2">Clients</h2>
               <p className="text-gray-600">Nos créations prennent tout leur sens lorsqu'elles accompagnent vos fidèles.</p>
             </div>
-            <div className="columns-2 sm:columns-3 lg:columns-4 gap-4 mb-8">
-              {clientImages.map((item, index) => {
+            <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 mb-8">
+              {paginatedClient.map((item, index) => {
                 const sizes = ['tall', 'wide', 'normal'];
                 const size = sizes[index % sizes.length];
                 return (
                   <div
                     key={item.id}
-                    className={`relative group overflow-hidden rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 mb-4 break-inside-avoid ${
-                      size === 'tall' ? 'h-72' : size === 'wide' ? 'h-48' : 'h-56'
+                    className={`relative group overflow-hidden rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 mb-6 break-inside-avoid ${
+                      size === 'tall' ? 'h-96' : size === 'wide' ? 'h-64' : 'h-80'
                     }`}
                   >
                     <img
@@ -121,6 +145,12 @@ export default function GalleryPage() {
                 );
               })}
             </div>
+            <Pagination
+              currentPage={pageClient}
+              totalPages={totalPagesClient}
+              onPageChange={setPageClient}
+              className="mt-6"
+            />
           </section>
         )}
         {professionalImages.length === 0 && clientImages.length === 0 && (

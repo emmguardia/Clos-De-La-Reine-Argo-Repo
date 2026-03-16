@@ -12,6 +12,10 @@ on:
       - main
       - master
       - develop
+  pull_request:
+    branches:
+      - main
+      - develop
   workflow_dispatch:
     inputs:
       branch:
@@ -87,6 +91,7 @@ jobs:
   build-and-push:
     name: Build and push
     needs: test
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

@@ -156,7 +156,7 @@ jobs:
 
       - name: Extract metadata (backend)
         id: meta-backend
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-back
           tags: |
@@ -184,7 +184,7 @@ jobs:
 
       - name: Extract metadata (frontend)
         id: meta-frontend
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-front
           tags: |

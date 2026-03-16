@@ -1,12 +1,19 @@
 # Valeurs pour l'environnement Dev/Staging (namespace clos-de-la-reine-dev)
 # Utilisé par ArgoCD Application "Clos de la Reine - Dev" (branche develop)
 # Les images sont mises à jour par la CI (digest) pour qu'ArgoCD détecte et déploie
-# En dev on n'utilise pas SealedSecret : le secret clos-secrets est créé à la main (copie du secret prod).
+#
+# SealedSecret Dev : exécute depuis charts/clos-de-la-reine :
+#   kubeseal --format yaml --namespace clos-de-la-reine-dev < secrets/clos-secrets.yaml
+# Copie le bloc spec.encryptedData de la sortie et colle-le ci-dessous.
+# Tant que encryptedData est vide, crée le secret à la main (legacy).
 
 namespace: clos-de-la-reine-dev
 
 sealedSecret:
-  enabled: false
+  enabled: true
+
+sealedSecretDev:
+  encryptedData: {}
 
 imagePullSecrets:
   - name: ghcr-secret

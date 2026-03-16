@@ -1,11 +1,9 @@
+# Alpine ~5MB vs Debian ~1GB : surface d'attaque réduite
 FROM node:20-alpine
 
 ENV NODE_ENV=production
 ENV NPM_CONFIG_LOGLEVEL=error
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
-
-# Mise à jour des paquets Alpine (correctifs sécurité)
-RUN apk update && apk upgrade --no-cache
 
 WORKDIR /app
 
@@ -46,7 +44,9 @@ RUN echo "update-notifier=false" > .npmrc && echo "loglevel=error" >> .npmrc
 
 COPY dist/package*.json ./
 
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit --no-fund --loglevel=error 2>&1 | grep -v "npm notice" || true; else npm install --omit=dev --no-audit --no-fund --loglevel=error 2>&1 | grep -v "npm notice" || true; fi \
+# apk upgrade juste avant npm ci : cache Docker optimisé + correctifs Alpine frais à chaque changement de deps
+RUN apk update && apk upgrade --no-cache \
+    && (if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit --no-fund --loglevel=error 2>&1 | grep -v "npm notice" || true; else npm install --omit=dev --no-audit --no-fund --loglevel=error 2>&1 | grep -v "npm notice" || true; fi) \
     && npm cache clean --force 2>/dev/null || true
 
 # Re-patch minimatch après npm ci (remplace par la version latest)

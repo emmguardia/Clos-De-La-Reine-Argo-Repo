@@ -334,7 +334,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
     fetchProductById(product.id)
       .then((p) => setFullProduct(p ?? product))
       .catch(() => setFullProduct(product));
-  }, [isOpen, product?.id]);
+  }, [isOpen, product]);
 
   const displayProduct = fullProduct ?? product;
   const images = useMemo(() => getImages(displayProduct), [displayProduct]);

@@ -20,7 +20,7 @@ export function useProductsByIds(ids: number[]) {
     } finally {
       setLoading(false);
     }
-  }, [ids.join(',')]);
+  }, [ids]);
 
   useEffect(() => {
     load();

@@ -19,7 +19,7 @@ export default function FavoritesPage() {
     } else {
       setSuggestions([]);
     }
-  }, [favorites.join(',')]);
+  }, [favorites]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   return (

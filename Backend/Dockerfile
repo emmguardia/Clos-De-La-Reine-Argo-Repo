@@ -1,5 +1,5 @@
 # Alpine ~5MB vs Debian ~1GB : surface d'attaque réduite
-FROM node:20-alpine
+FROM node:25-alpine
 
 ENV NODE_ENV=production
 ENV NPM_CONFIG_LOGLEVEL=error

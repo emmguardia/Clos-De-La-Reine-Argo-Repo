@@ -1,8 +1,37 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Upload, X, ImagePlus } from 'lucide-react';
 import { validateFileType, validateFileSize, safeJsonResponse, getSafeImageSrc } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
+
+/** Affiche une image via blob URL pour éviter le flux DOM XSS (CodeQL) - l'URL utilisateur ne va jamais dans img src */
+function SafeImagePreview({ url, className, alt }: { url: string; className?: string; alt?: string }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const blobRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!url) return;
+    let cancelled = false;
+    fetch(url, { mode: 'cors' })
+      .then((r) => r.blob())
+      .then((blob) => {
+        if (!cancelled) {
+          const u = URL.createObjectURL(blob);
+          blobRef.current = u;
+          setBlobUrl(u);
+        }
+      })
+      .catch(() => setBlobUrl(null));
+    return () => {
+      cancelled = true;
+      if (blobRef.current) {
+        URL.revokeObjectURL(blobRef.current);
+        blobRef.current = null;
+      }
+    };
+  }, [url]);
+  if (!blobUrl) return <div className={`${className || ''} bg-gray-100 animate-pulse`} />;
+  return <img src={blobUrl} alt={alt || 'Preview'} className={className} referrerPolicy="no-referrer" />;
+}
 
 interface ImageUploadProps {
   onImageUploaded: (imageUrl: string) => void;
@@ -101,8 +130,7 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Im
         const safeSrc = getSafeImageSrc(currentImage);
         return safeSrc ? (
         <div className="relative">
-          {/* codeql[js/xss-through-dom] safeSrc validated by getSafeImageSrc allowlist */}
-          <img src={safeSrc} alt="Preview" className="w-full h-48 object-cover rounded-lg" referrerPolicy="no-referrer" />
+          <SafeImagePreview url={safeSrc} className="w-full h-48 object-cover rounded-lg" />
           <div className="absolute top-2 right-2 flex gap-1">
             <button
               type="button"

@@ -36,10 +36,16 @@ const stripe = STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.startsWith('sk_')
 
 app.use(compression());
 app.set('trust proxy', 1);
-const corsOrigin = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? null : 'http://localhost:5173');
+const corsAllowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(s => s.trim()).filter(Boolean)
+  : (process.env.NODE_ENV === 'production' ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173']);
 app.use(cors({
-  origin: corsOrigin ?? false,
-  credentials: !!corsOrigin,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (corsAllowedOrigins.includes(origin)) return callback(null, origin);
+    callback(new Error('CORS not allowed'));
+  },
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));

@@ -327,10 +327,10 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
 
   useEffect(() => {
     if (!isOpen || !product) {
-      setFullProduct(null);
+      queueMicrotask(() => setFullProduct(null));
       return;
     }
-    setFullProduct(null);
+    queueMicrotask(() => setFullProduct(null));
     fetchProductById(product.id)
       .then((p) => setFullProduct(p ?? product))
       .catch(() => setFullProduct(product));

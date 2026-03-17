@@ -1,6 +1,6 @@
 # Stage 1: Build avec Node (overrides pour corriger les CVE)
 # Alpine ~5MB vs Debian ~1GB : surface d'attaque réduite
-FROM node:20-alpine AS builder
+FROM node:25-alpine AS builder
 
 WORKDIR /app
 

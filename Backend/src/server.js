@@ -96,6 +96,21 @@ const strictLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: { error: 'Trop de requêtes. Veuillez réessayer dans une minute.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+function escapeMongoRegex(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&').slice(0, 200);
+}
+
+app.use('/api', apiLimiter);
+
 const SALT_ROUNDS = 12;
 const ADMIN_JWT_EXPIRATION = '8h';
 
@@ -132,8 +147,13 @@ async function connectToDatabase() {
 }
 
 function validateEmail(email) {
-  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return re.test(email);
+  if (typeof email !== 'string' || email.length > 254) return false;
+  const atIdx = email.indexOf('@');
+  if (atIdx <= 0 || atIdx === email.length - 1) return false;
+  const local = email.slice(0, atIdx);
+  const domain = email.slice(atIdx + 1);
+  if (!local.length || !domain.includes('.')) return false;
+  return /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(local) && /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(domain);
 }
 
 function validatePassword(password) {
@@ -558,9 +578,13 @@ app.get('/api/products', async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 24));
     const skip = idsParam ? 0 : (page - 1) * limit;
-    const category = req.query.category;
-    const collection = req.query.collection;
-    const color = req.query.color;
+    const ALLOWED_CATEGORIES = ['colliers', 'harnais', 'laisses'];
+    const categoryRaw = req.query.category;
+    const category = (typeof categoryRaw === 'string' && ALLOWED_CATEGORIES.includes(categoryRaw)) ? categoryRaw : null;
+    const collectionRaw = req.query.collection;
+    const collection = (typeof collectionRaw === 'string' && !collectionRaw.includes('$') && !collectionRaw.includes('.')) ? collectionRaw.slice(0, 100) : null;
+    const colorRaw = req.query.color;
+    const color = (typeof colorRaw === 'string' && !colorRaw.includes('$') && !colorRaw.includes('.')) ? colorRaw.slice(0, 50) : null;
     const isNew = req.query.isNew === '1' || req.query.isNew === 'true';
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
     const includeFilters = req.query.includeFilters === '1' || req.query.includeFilters === 'true';
@@ -575,11 +599,14 @@ app.get('/api/products', async (req, res) => {
       if (color) filter.$or = [{ color: color }, { color: { $in: [color] } }];
       if (isNew) filter.isNew = true;
       if (search) {
-        const searchFilter = { $or: [
-          { name: { $regex: search, $options: 'i' } },
-          { collection: { $regex: search, $options: 'i' } }
-        ]};
-        filter = Object.keys(filter).length > 0 ? { $and: [filter, searchFilter] } : searchFilter;
+        const escaped = escapeMongoRegex(search);
+        if (escaped) {
+          const searchFilter = { $or: [
+            { name: { $regex: escaped, $options: 'i' } },
+            { collection: { $regex: escaped, $options: 'i' } }
+          ]};
+          filter = Object.keys(filter).length > 0 ? { $and: [filter, searchFilter] } : searchFilter;
+        }
       }
     }
 
@@ -630,7 +657,9 @@ app.get('/api/products', async (req, res) => {
 
 app.get('/api/products/filters', async (req, res) => {
   try {
-    const category = req.query.category;
+    const ALLOWED_CATEGORIES = ['colliers', 'harnais', 'laisses'];
+    const categoryRaw = req.query.category;
+    const category = (typeof categoryRaw === 'string' && ALLOWED_CATEGORIES.includes(categoryRaw)) ? categoryRaw : null;
     const filter = category ? { category } : {};
     const products = await db.collection('products').find(filter, { projection: { collection: 1, color: 1 } }).toArray();
     const collections = [...new Set(products.map(p => p.collection).filter(Boolean))].sort();

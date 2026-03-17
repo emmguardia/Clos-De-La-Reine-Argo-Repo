@@ -1,0 +1,44 @@
+name: ESLint
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  eslint:
+    name: Run eslint scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # On installe tes vraies dépendances d'abord pour qu'ESLint comprenne ton code
+      - name: Install Dependencies
+        run: npm install
+
+      # On installe juste le formateur SARIF pour GitHub
+      - name: Install SARIF Formatter
+        run: npm install @microsoft/eslint-formatter-sarif@3.1.0
+
+      - name: Run ESLint
+        env:
+          SARIF_ESLINT_IGNORE_SUPPRESSED: "true"
+        # On scanne tout le projet (.)
+        run: |
+          npx eslint . \
+          --ext .js,.jsx,.ts,.tsx \
+          --format @microsoft/eslint-formatter-sarif \
+          --output-file eslint-results.sarif
+        continue-on-error: true
+
+      - name: Upload analysis results to GitHub
+        uses: github/codeql-action/upload-sarif@v4 # Passage en v4 !
+        with:
+          sarif_file: eslint-results.sarif
+          wait-for-processing: true

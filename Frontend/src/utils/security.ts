@@ -102,6 +102,16 @@ export function validateFileSize(file: File, maxSizeMB: number): boolean {
   return file.size <= maxSizeMB * 1024 * 1024;
 }
 
+/** Valide qu'une URL est sûre pour img src (évite XSS via javascript:, data:text/html, etc.) */
+export function isSafeImageUrl(url: string | undefined | null): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (trimmed.length === 0) return false;
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith('javascript:') || lower.startsWith('vbscript:') || lower.startsWith('data:text/html')) return false;
+  return lower.startsWith('https://') || lower.startsWith('http://') || lower.startsWith('data:image/') || (trimmed.startsWith('/') && !trimmed.includes('//'));
+}
+
 export async function safeJsonResponse<T>(response: Response, fallback: T): Promise<T> {
   try {
     const contentType = response.headers.get('content-type');

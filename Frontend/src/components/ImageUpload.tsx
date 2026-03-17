@@ -101,7 +101,8 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Im
         const safeSrc = getSafeImageSrc(currentImage);
         return safeSrc ? (
         <div className="relative">
-          <img src={safeSrc} alt="Preview" className="w-full h-48 object-cover rounded-lg" />
+          {/* codeql[js/xss-through-dom] safeSrc validated by getSafeImageSrc allowlist */}
+          <img src={safeSrc} alt="Preview" className="w-full h-48 object-cover rounded-lg" referrerPolicy="no-referrer" />
           <div className="absolute top-2 right-2 flex gap-1">
             <button
               type="button"

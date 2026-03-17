@@ -7,7 +7,7 @@ export function useFeaturedProducts(limit = 4) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    queueMicrotask(() => setLoading(true));
     fetchFeaturedProducts(limit)
       .then(data => { if (!cancelled) setProducts(data); })
       .catch(() => { if (!cancelled) setProducts([]); })

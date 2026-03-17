@@ -17,7 +17,7 @@ export default function FavoritesPage() {
         setSuggestions(products.filter(p => !favorites.includes(p.id)).slice(0, 3));
       }).catch(() => setSuggestions([]));
     } else {
-      setSuggestions([]);
+      queueMicrotask(() => setSuggestions([]));
     }
   }, [favorites]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);

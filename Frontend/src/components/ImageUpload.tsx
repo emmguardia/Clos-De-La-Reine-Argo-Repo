@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Upload, X, ImagePlus } from 'lucide-react';
-import { validateFileType, validateFileSize, safeJsonResponse, isSafeImageUrl } from '../utils/security';
+import { validateFileType, validateFileSize, safeJsonResponse, getSafeImageSrc } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
@@ -97,9 +97,11 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Im
         aria-hidden
       />
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      {currentImage && isSafeImageUrl(currentImage) ? (
+      {(() => {
+        const safeSrc = getSafeImageSrc(currentImage);
+        return safeSrc ? (
         <div className="relative">
-          <img src={currentImage} alt="Preview" className="w-full h-48 object-cover rounded-lg" />
+          <img src={safeSrc} alt="Preview" className="w-full h-48 object-cover rounded-lg" />
           <div className="absolute top-2 right-2 flex gap-1">
             <button
               type="button"
@@ -137,7 +139,8 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Im
           <span className="text-sm text-gray-600">Cliquez pour uploader</span>
           {uploading && <p className="text-sm text-gray-500 mt-2">Upload en cours...</p>}
         </div>
-      )}
+      );
+})()}
       {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
   );

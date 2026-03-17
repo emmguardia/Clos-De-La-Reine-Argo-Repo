@@ -36,9 +36,10 @@ const stripe = STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.startsWith('sk_')
 
 app.use(compression());
 app.set('trust proxy', 1);
+const corsOrigin = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? null : 'http://localhost:5173');
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
-  credentials: true,
+  origin: corsOrigin ?? false,
+  credentials: !!corsOrigin,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));

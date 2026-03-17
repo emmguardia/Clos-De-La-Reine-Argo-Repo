@@ -60,7 +60,6 @@ function StripePaymentForm({
     try {
       try {
         sessionStorage.setItem(`payment_address_${orderId}`, JSON.stringify(shippingAddress));
-        sessionStorage.setItem(`stripe_redirect_${orderId}`, Date.now().toString());
       } catch {
         /* ignore */
       }
@@ -270,51 +269,28 @@ export default function PaymentPage() {
     return () => { cancelled = true; };
   }, []);
 
+  const [clientSecretFromUrl, setClientSecretFromUrl] = useState<string | null>(null);
   const [paymentIntentFromHash, setPaymentIntentFromHash] = useState<string | null>(null);
   useEffect(() => {
-    const hash = typeof window !== 'undefined' ? window.location.hash?.replace(/^#/, '') : '';
+    if (typeof window === 'undefined') return;
+    const fromSearch = searchParams.get('payment_intent_client_secret');
+    if (fromSearch && fromSearch.includes('_secret_')) {
+      setClientSecretFromUrl(fromSearch);
+      return;
+    }
+    const hash = window.location.hash?.replace(/^#/, '') || '';
     if (hash) {
       const params = new URLSearchParams(hash);
+      const secret = params.get('payment_intent_client_secret');
       const pi = params.get('payment_intent');
+      if (secret && secret.includes('_secret_')) setClientSecretFromUrl(secret);
       if (pi) setPaymentIntentFromHash(pi);
     }
-  }, []);
-  const paymentIntentIdFromStorage = useMemo(() => {
-    if (!orderId || typeof window === 'undefined') return null;
-    try {
-      const raw = sessionStorage.getItem(`payment_client_secret_${orderId}`);
-      if (raw && raw.includes('_secret_')) {
-        const id = raw.split('_secret_')[0];
-        if (id && id.startsWith('pi_')) return id;
-      }
-    } catch {
-      /* ignore */
-    }
-    return null;
-  }, [orderId]);
+  }, [searchParams]);
   const paymentIntentIdFromUrl = searchParams.get('payment_intent') || paymentIntentFromHash;
-  const paymentIntentId = paymentIntentIdFromUrl || paymentIntentIdFromStorage;
-  const hasReturnFromStripeFlag = useMemo(() => {
-    if (!orderId) return false;
-    try {
-      const raw = sessionStorage.getItem(`stripe_redirect_${orderId}`);
-      if (raw) {
-        const t = parseInt(raw, 10);
-        if (!Number.isNaN(t) && Date.now() - t < 15 * 60 * 1000) return true;
-      }
-      const timeRaw = sessionStorage.getItem(`payment_client_secret_time_${orderId}`);
-      if (timeRaw) {
-        const t = parseInt(timeRaw, 10);
-        if (!Number.isNaN(t) && Date.now() - t < 5 * 60 * 1000) return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  }, [orderId]);
-  const isReturnFromStripeRedirect = Boolean(
-    paymentIntentIdFromUrl || (paymentIntentIdFromStorage && !clientSecret && hasReturnFromStripeFlag)
-  );
+  const paymentIntentId = paymentIntentIdFromUrl;
+  const isReturnFromStripeRedirect = Boolean(paymentIntentIdFromUrl);
+  const effectiveClientSecret = clientSecretFromUrl || clientSecret;
   const paymentConfirmationDone = useRef(false);
   useEffect(() => {
     if (!orderId || !paymentIntentId || !isReturnFromStripeRedirect) return;
@@ -328,9 +304,6 @@ export default function PaymentPage() {
     paymentConfirmationDone.current = true;
     try {
       sessionStorage.setItem(sentKey, '1');
-      sessionStorage.removeItem(`payment_client_secret_${orderId}`);
-      sessionStorage.removeItem(`payment_client_secret_time_${orderId}`);
-      sessionStorage.removeItem(`stripe_redirect_${orderId}`);
     } catch {
       /* ignore */
     }
@@ -394,8 +367,15 @@ export default function PaymentPage() {
     })();
   }, [orderId, paymentIntentId, isReturnFromStripeRedirect, navigate, setSearchParams]);
 
+  const hasClientSecretInUrl = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const s = new URLSearchParams(window.location.search).get('payment_intent_client_secret');
+    if (s?.includes('_secret_')) return true;
+    const h = window.location.hash?.replace(/^#/, '') || '';
+    return !!new URLSearchParams(h).get('payment_intent_client_secret');
+  }, []);
   useEffect(() => {
-    if (!orderId || !effectiveStripeKey || !order) return;
+    if (!orderId || !effectiveStripeKey || !order || clientSecretFromUrl || hasClientSecretInUrl) return;
     const token = getTokenFromStorage();
     if (!token) return;
     let cancelled = false;
@@ -409,19 +389,13 @@ export default function PaymentPage() {
         const data = await safeJsonResponse(res, {}) as { clientSecret?: string };
         if (data.clientSecret) {
           setClientSecret(data.clientSecret);
-          try {
-            sessionStorage.setItem(`payment_client_secret_${orderId}`, data.clientSecret);
-            sessionStorage.setItem(`payment_client_secret_time_${orderId}`, Date.now().toString());
-          } catch {
-            /* ignore */
-          }
         }
       } catch {
         if (!cancelled) setError('Impossible de préparer le paiement.');
       }
     })();
     return () => { cancelled = true; };
-  }, [orderId, order, effectiveStripeKey]);
+  }, [orderId, order, effectiveStripeKey, clientSecretFromUrl, hasClientSecretInUrl]);
 
   useEffect(() => {
     if (!addressQuery.trim() || addressQuery.length < 3) {
@@ -470,7 +444,7 @@ export default function PaymentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!effectiveStripeKey || !clientSecret) return;
+    if (!effectiveStripeKey || !effectiveClientSecret) return;
     setError('');
     setSubmitting(true);
     try {
@@ -738,14 +712,14 @@ export default function PaymentPage() {
                     <h2 className="text-2xl font-light text-gray-900">Paiement sécurisé (Stripe)</h2>
                   </div>
 
-                  {effectiveStripeKey && clientSecret ? (
+                  {effectiveStripeKey && effectiveClientSecret ? (
                       <Elements
                         stripe={stripePromise}
-                        options={{ clientSecret, appearance: { theme: 'stripe', variables: { borderRadius: '12px' } } }}
+                        options={{ clientSecret: effectiveClientSecret, appearance: { theme: 'stripe', variables: { borderRadius: '12px' } } }}
                       >
                         <StripePaymentForm
                           orderId={orderId!}
-                          clientSecret={clientSecret}
+                          clientSecret={effectiveClientSecret}
                           shippingAddress={shippingAddress}
                           total={order.total}
                           onConfirmSuccess={handlePaymentConfirmed}
@@ -774,7 +748,7 @@ export default function PaymentPage() {
                       </div>
                     )}
 
-                  {!(effectiveStripeKey && clientSecret) && (
+                  {!(effectiveStripeKey && effectiveClientSecret) && (
                     <div className="flex gap-4 mt-6">
                       <button
                         type="button"

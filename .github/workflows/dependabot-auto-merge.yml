@@ -1,8 +1,7 @@
 # Auto-merge des PR Dependabot quand les tests passent
 # 1. Dependabot ouvre une PR
 # 2. Les tests (build-and-push) s'exécutent sur la PR
-# 3. Ce workflow approuve et active l'auto-merge
-# 4. GitHub merge automatiquement quand tous les checks sont verts
+# 3. Cette action merge automatiquement quand tous les checks sont verts
 
 name: Dependabot Auto-Merge
 
@@ -21,16 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]'
     steps:
-      - name: Fetch Dependabot metadata
-        id: metadata
-        uses: dependabot/fetch-metadata@v2
+      - name: Dependabot Auto Merge
+        uses: ahmadnassri/action-dependabot-auto-merge@v2.6.6
         with:
-          github-token: '${{ secrets.GITHUB_TOKEN }}'
-
-      - name: Approve and enable auto-merge
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-        run: |
-          gh pr review "$PR_URL" --approve
-          gh pr merge "$PR_URL" --auto
+          github-token: ${{ secrets.GITHUB_TOKEN }}

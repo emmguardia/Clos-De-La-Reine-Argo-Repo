@@ -17,6 +17,16 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
+    # Regroupe la stack ESLint dans une seule PR quand plusieurs de ces paquets ont une MAJ le même cycle
+    # (évite une PR « @eslint/js 10 » seule alors qu’il faut aussi eslint 10 + plugins). Pas d’ignore : tu vois toujours les PR.
+    groups:
+      frontend-eslint:
+        patterns:
+          - "eslint"
+          - "@eslint/js"
+          - "typescript-eslint"
+          - "eslint-plugin-react-hooks"
+          - "eslint-plugin-react-refresh"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"

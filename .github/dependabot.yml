@@ -1,50 +1,51 @@
 # Dependabot : détection des vulnérabilités et mises à jour de dépendances
-# Crée des PR automatiquement → merge manuel ou auto-merge (Settings > General > Allow auto-merge)
+#
+# Regroupement par dependency-type → au plus 2 PR npm par dossier (prod / dev) par cycle,
+# au lieu d’une PR par paquet. open-pull-requests-limit évite d’empiler trop de PR ouvertes.
 
 version: 2
 updates:
-  # npm Backend
   - package-ecosystem: "npm"
     directory: "/Backend"
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
+    groups:
+      backend-production:
+        dependency-type: production
+      backend-development:
+        dependency-type: development
 
   - package-ecosystem: "npm"
     directory: "/Frontend"
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
-    # Regroupe la stack ESLint dans une seule PR quand plusieurs de ces paquets ont une MAJ le même cycle
-    # (évite une PR « @eslint/js 10 » seule alors qu’il faut aussi eslint 10 + plugins). Pas d’ignore : tu vois toujours les PR.
+    open-pull-requests-limit: 2
     groups:
-      frontend-eslint:
-        patterns:
-          - "eslint"
-          - "@eslint/js"
-          - "typescript-eslint"
-          - "eslint-plugin-react-hooks"
-          - "eslint-plugin-react-refresh"
+      frontend-production:
+        dependency-type: production
+      frontend-development:
+        dependency-type: development
 
-  # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
 
-  # Docker (Dockerfiles)
   - package-ecosystem: "docker"
     directory: "/Backend"
     schedule:
       interval: "weekly"
       day: "monday"
+    open-pull-requests-limit: 2
 
   - package-ecosystem: "docker"
     directory: "/Frontend"
     schedule:
       interval: "weekly"
       day: "monday"
+    open-pull-requests-limit: 2

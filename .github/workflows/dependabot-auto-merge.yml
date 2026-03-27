@@ -1,18 +1,25 @@
-# Auto-merge des PR Dependabot quand les tests passent
-# 1. Dependabot ouvre une PR
-# 2. Les tests (build-and-push) s'exécutent sur la PR
-# 3. Cette action merge automatiquement quand tous les checks sont verts
+# Auto-merge des PR Dependabot quand les checks sont verts
+#
+# Pourquoi ça bloquait avant :
+# - Les workflows déclenchés par dependabot[bot] ont un GITHUB_TOKEN « fork-like » (souvent read-only)
+#   sauf si tu élèves explicitement les permissions : https://docs.github.com/en/code-security/dependabot/troubleshooting-dependabot/troubleshooting-dependabot-on-github-actions
+# - contents:read empêche toute fusion / auto-merge via l’API
+# - L’option repo « Allow auto-merge » ne suffit pas : il faut qu’un job appelle l’API (gh pr merge --auto) ou active l’auto-merge
+#
+# Branch protection : si « Require approvals » est activé, l’étape approve ci-dessous compte comme review du bot.
+# Si tu exiges un humain, ajoute une exception pour dependabot[bot] dans les règles de branche.
 
 name: Dependabot Auto-Merge
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize]
     branches:
       - main
       - develop
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -20,7 +27,23 @@ jobs:
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]'
     steps:
-      - name: Dependabot Auto Merge
-        uses: ahmadnassri/action-dependabot-auto-merge@v2.6.6
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Pas de merge auto des majors (revue manuelle)
+      - name: Approve PR (patch / minor)
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge (patch / minor)
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --merge "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

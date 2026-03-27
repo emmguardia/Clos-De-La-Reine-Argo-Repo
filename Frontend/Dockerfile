@@ -4,10 +4,10 @@ FROM node:25-alpine AS builder
 
 WORKDIR /app
 
-# apk upgrade juste avant npm ci : cache optimisé + correctifs Alpine frais à chaque changement de deps
-COPY package.json package-lock.json* ./
+# package*.json : copie package.json + package-lock.json s’ils sont dans le contexte (sinon seul package.json)
+COPY package*.json ./
 RUN apk update && apk upgrade --no-cache \
-    && npm ci --no-audit --no-fund --loglevel=error 2>&1 | grep -v "npm notice" || true
+    && if [ -f package-lock.json ]; then npm ci --no-audit --no-fund --loglevel=error; else npm install --no-audit --no-fund --loglevel=error; fi
 
 COPY . .
 

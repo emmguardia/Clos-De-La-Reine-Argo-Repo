@@ -77,9 +77,9 @@ jobs:
         run: cd Backend && npm test
 
       - name: Frontend – install
+        working-directory: Frontend
         run: |
-          cd Frontend
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          if [ -f package-lock.json ]; then npm ci; else echo 'WARN: pas de package-lock.json, npm install (commite Frontend/package-lock.json pour des builds reproductibles)'; npm install --no-audit --no-fund; fi
 
       - name: Frontend – audit (moderate+)
         run: cd Frontend && npm audit --audit-level=moderate

@@ -29,6 +29,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  # :latest absent / instable sur Docker Hub → version épinglée (à monter avec Dependabot ou manuellement)
+  TRIVY_IMAGE: aquasec/trivy:0.69.3
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
@@ -189,7 +191,7 @@ jobs:
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
           docker run --rm -e TRIVY_USERNAME -e TRIVY_PASSWORD \
-            aquasec/trivy image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --format table \
+            ${{ env.TRIVY_IMAGE }} image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --format table \
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-back:${{ steps.tag.outputs.tag }}
 
       - name: Extract metadata (frontend)
@@ -217,7 +219,7 @@ jobs:
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
           docker run --rm -e TRIVY_USERNAME -e TRIVY_PASSWORD \
-            aquasec/trivy image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --format table \
+            ${{ env.TRIVY_IMAGE }} image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --format table \
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/clos-de-la-reine-front:${{ steps.tag.outputs.tag }}
 
       # Piner les images par digest pour qu'ArgoCD détecte le changement et déploie

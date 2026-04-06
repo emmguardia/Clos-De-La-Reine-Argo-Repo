@@ -16,8 +16,8 @@
     "cors": "^2.8.6",
     "bcrypt": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
-    "express-rate-limit": "^8.3.1",
-    "stripe": "^21.0.1"
+    "express-rate-limit": "^8.3.2",
+    "stripe": "^22.0.0"
   },
   "devDependencies": {
     "minimatch": "10.2.5"

@@ -122,7 +122,9 @@ export default function OrdersAdminPage() {
       navigate('/admin/login');
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     verifyAdminToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAction = async () => {

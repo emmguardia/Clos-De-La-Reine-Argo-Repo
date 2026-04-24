@@ -5,7 +5,7 @@ const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
 export function useFavorites() {
   const [favorites, setFavorites] = useState<number[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !!getTokenFromStorage());
 
   const fetchFavorites = async () => {
     const token = getTokenFromStorage();
@@ -51,12 +51,8 @@ export function useFavorites() {
   };
 
   useEffect(() => {
-    const token = getTokenFromStorage();
-    if (!token) {
-      setFavorites([]);
-      setLoading(false);
-      return;
-    }
+    if (!getTokenFromStorage()) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchFavorites();
   }, []);
 

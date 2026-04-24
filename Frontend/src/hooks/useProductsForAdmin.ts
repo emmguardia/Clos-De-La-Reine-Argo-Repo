@@ -25,6 +25,7 @@ export function useProductsForAdmin(searchTerm = '') {
   }, [searchTerm]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refetch(1);
   }, [refetch]);
 

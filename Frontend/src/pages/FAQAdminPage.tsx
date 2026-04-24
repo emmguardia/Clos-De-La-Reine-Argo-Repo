@@ -144,6 +144,7 @@ export default function FAQAdminPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchFAQs();
   }, [fetchFAQs]);
 

@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../hooks/useCart';
+import SEO from '../components/SEO';
 import { trackEvent } from '../utils/analytics';
 import { useProductsByIds } from '../hooks/useProductsByIds';
 import { Trash2, Plus, Minus } from 'lucide-react';
@@ -34,6 +35,8 @@ export default function CartPage() {
   }
 
   return (
+    <>
+    <SEO title="Panier" noindex path="/panier" />
     <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb]">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-10">
         <div className="space-y-3 text-center">
@@ -139,5 +142,6 @@ export default function CartPage() {
         )}
       </div>
     </div>
+    </>
   );
 }

@@ -1,7 +1,14 @@
 import { Link } from 'react-router-dom';
+import SEO from '../components/SEO';
 
 export default function CGVPage() {
   return (
+    <>
+    <SEO
+      title="Conditions Générales de Vente"
+      description="Conditions générales de vente de la boutique Le Clos de la Reine — accessoires artisanaux pour chiens."
+      path="/cgv"
+    />
     <div className="min-h-screen bg-white py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
@@ -130,5 +137,6 @@ export default function CGVPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

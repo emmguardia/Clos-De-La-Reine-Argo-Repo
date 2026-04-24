@@ -10,7 +10,7 @@ interface SEOProps {
 }
 
 const SITE_NAME = 'Clos de la Reine';
-const BASE_URL = 'https://closdelareine.com';
+const BASE_URL = 'https://leclosdelareine.com';
 const DEFAULT_DESCRIPTION = 'Accessoires artisanaux pour chiens — colliers, laisses et harnais faits à la main avec des matières de qualité, pour les chiens qui ont du style.';
 const DEFAULT_OG_IMAGE = `${BASE_URL}/Images/header2.webp`;
 

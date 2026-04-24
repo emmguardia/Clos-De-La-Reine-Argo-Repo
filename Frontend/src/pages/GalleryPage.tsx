@@ -20,10 +20,6 @@ export default function GalleryPage() {
   const [pagePro, setPagePro] = useState(1);
   const [pageClient, setPageClient] = useState(1);
 
-  useEffect(() => {
-    fetchGallery();
-  }, []);
-
   const fetchGallery = async () => {
     try {
       const response = await fetch(`${API_URL}/api/gallery?limit=200`);
@@ -39,6 +35,10 @@ export default function GalleryPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchGallery();
+  }, []);
 
   const paginatedPro = professionalImages.slice((pagePro - 1) * ITEMS_PER_PAGE, pagePro * ITEMS_PER_PAGE);
   const paginatedClient = clientImages.slice((pageClient - 1) * ITEMS_PER_PAGE, pageClient * ITEMS_PER_PAGE);

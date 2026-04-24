@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Check, X, Truck, MessageSquare, Package, Filter, Search, User, Calendar, Trash2, AlertCircle, Clock, ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useProductsByIds } from '../hooks/useProductsByIds';
 import { useProductsListForAdmin } from '../hooks/useProductsListForAdmin';
 import { safeJsonResponse } from '../utils/security';
@@ -35,6 +35,7 @@ interface Order {
 }
 
 export default function OrdersAdminPage() {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const productIdsFromOrders = orders.flatMap(o => [
@@ -57,61 +58,26 @@ export default function OrdersAdminPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  useEffect(() => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
-      window.location.href = '/admin/login';
-      return;
-    }
-    verifyAdminToken();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const verifyAdminToken = async () => {
-    try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        window.location.href = '/admin/login';
-        return;
-      }
-
-      const response = await fetch(`${API_URL}/api/admin/verify`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
-      });
-
-      if (!response.ok) {
-        localStorage.removeItem('adminToken');
-        window.location.href = '/admin/login';
-        return;
-      }
-
-      fetchOrders();
-    } catch {
-      localStorage.removeItem('adminToken');
-      window.location.href = '/admin/login';
-    }
-  };
-
   const fetchOrders = async () => {
     try {
       const adminToken = localStorage.getItem('adminToken');
       if (!adminToken) {
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
-      
+
       const response = await fetch(`${API_URL}/api/orders/admin`, {
         headers: {
           'Authorization': `Bearer ${adminToken}`
         }
       });
-      
+
       if (response.status === 401 || response.status === 403) {
         localStorage.removeItem('adminToken');
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
-      
+
       if (response.ok) {
         const data = await safeJsonResponse(response, []);
         if (Array.isArray(data)) {
@@ -125,6 +91,40 @@ export default function OrdersAdminPage() {
     }
   };
 
+  const verifyAdminToken = async () => {
+    try {
+      const adminToken = localStorage.getItem('adminToken');
+      if (!adminToken) {
+        navigate('/admin/login');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/admin/verify`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+
+      if (!response.ok) {
+        localStorage.removeItem('adminToken');
+        navigate('/admin/login');
+        return;
+      }
+
+      fetchOrders();
+    } catch {
+      localStorage.removeItem('adminToken');
+      navigate('/admin/login');
+    }
+  };
+
+  useEffect(() => {
+    const adminToken = localStorage.getItem('adminToken');
+    if (!adminToken) {
+      navigate('/admin/login');
+      return;
+    }
+    verifyAdminToken();
+  }, []);
+
   const handleAction = async () => {
     if (!selectedOrder) return;
     setError('');
@@ -134,7 +134,7 @@ export default function OrdersAdminPage() {
       const adminToken = localStorage.getItem('adminToken');
       if (!adminToken) {
         setError('Session expirée. Veuillez vous reconnecter.');
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
       let response;
@@ -198,7 +198,7 @@ export default function OrdersAdminPage() {
     try {
       const adminToken = localStorage.getItem('adminToken');
       if (!adminToken) {
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
       const response = await fetch(`${API_URL}/api/orders/${orderId}/status`, {
@@ -224,7 +224,7 @@ export default function OrdersAdminPage() {
     try {
       const adminToken = localStorage.getItem('adminToken');
       if (!adminToken) {
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
       
@@ -256,7 +256,7 @@ export default function OrdersAdminPage() {
     try {
       const adminToken = localStorage.getItem('adminToken');
       if (!adminToken) {
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
       const response = await fetch(`${API_URL}/api/orders/${orderId}`, {
@@ -553,7 +553,7 @@ export default function OrdersAdminPage() {
                 try {
                   const adminToken = localStorage.getItem('adminToken');
                   if (!adminToken) {
-                    window.location.href = '/admin/login';
+                    navigate('/admin/login');
                     return;
                   }
                   const response = await fetch(`${API_URL}/api/orders/${order.id}/status`, {

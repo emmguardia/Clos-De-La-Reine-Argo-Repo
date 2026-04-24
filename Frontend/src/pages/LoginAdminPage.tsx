@@ -12,14 +12,6 @@ export default function LoginAdminPage() {
   const [attempts, setAttempts] = useState(0);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (adminToken) {
-      verifyAdminToken();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const verifyAdminToken = async () => {
     try {
       const token = localStorage.getItem('adminToken');
@@ -38,6 +30,13 @@ export default function LoginAdminPage() {
       localStorage.removeItem('adminToken');
     }
   };
+
+  useEffect(() => {
+    const adminToken = localStorage.getItem('adminToken');
+    if (adminToken) {
+      verifyAdminToken();
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -15,20 +15,10 @@ export function useCart() {
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const token = getTokenFromStorage();
-    if (!token) {
-      setItems([]);
-      setLoading(false);
-      return;
-    }
-    fetchCart();
-  }, []);
-
   const fetchCart = async () => {
     const token = getTokenFromStorage();
     if (!token) return;
-    
+
     const doFetch = async (): Promise<CartItem[]> => {
       const response = await fetch(`${API_URL}/api/cart`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -50,6 +40,16 @@ export function useCart() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const token = getTokenFromStorage();
+    if (!token) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    fetchCart();
+  }, []);
 
   const addToCart = async (productId: number, quantity: number = 1, size?: string, productName?: string) => {
     const token = getTokenFromStorage();

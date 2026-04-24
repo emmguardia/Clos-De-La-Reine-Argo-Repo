@@ -1,5 +1,5 @@
 import { Package, FolderOpen, BarChart3, Plus, Edit, Trash2, Search, X, Save, ShoppingBag, HelpCircle, LogOut, Tag, DollarSign } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useProductsForAdmin } from '../hooks/useProductsForAdmin';
 import { invalidateProductsCache } from '../data/products';
@@ -22,6 +22,7 @@ interface GalleryItem {
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
 export default function AdminPanelPage() {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const { products, total, page, totalPages, loading, refetch, goToPage } = useProductsForAdmin(searchTerm);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -57,44 +58,6 @@ export default function AdminPanelPage() {
   const [currentPageClient, setCurrentPageClient] = useState(1);
   const itemsPerPage = 6;
   const [paymentStats, setPaymentStats] = useState<{ totalOrders: number; totalRevenue: number; monthlyOrders: number; monthlyRevenue: number } | null>(null);
-  useEffect(() => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
-      window.location.href = '/admin/login';
-      return;
-    }
-    verifyAdminToken();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-
-  const verifyAdminToken = async () => {
-    try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        window.location.href = '/admin/login';
-        return;
-      }
-
-      const response = await fetch(`${API_URL}/api/admin/verify`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
-      });
-
-      if (!response.ok) {
-        localStorage.removeItem('adminToken');
-        window.location.href = '/admin/login';
-        return;
-      }
-
-      fetchCollections();
-      fetchGalleryItems();
-      fetchPaymentStats();
-    } catch {
-      localStorage.removeItem('adminToken');
-      window.location.href = '/admin/login';
-    }
-  };
-
   const fetchCollections = async () => {
     try {
       const response = await fetch(`${API_URL}/api/collections`);
@@ -159,6 +122,42 @@ export default function AdminPanelPage() {
     }
   };
 
+  const verifyAdminToken = async () => {
+    try {
+      const adminToken = localStorage.getItem('adminToken');
+      if (!adminToken) {
+        navigate('/admin/login');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/admin/verify`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+
+      if (!response.ok) {
+        localStorage.removeItem('adminToken');
+        navigate('/admin/login');
+        return;
+      }
+
+      fetchCollections();
+      fetchGalleryItems();
+      fetchPaymentStats();
+    } catch {
+      localStorage.removeItem('adminToken');
+      navigate('/admin/login');
+    }
+  };
+
+  useEffect(() => {
+    const adminToken = localStorage.getItem('adminToken');
+    if (!adminToken) {
+      navigate('/admin/login');
+      return;
+    }
+    verifyAdminToken();
+  }, []);
+
   const handleGallerySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGalleryError('');
@@ -167,7 +166,7 @@ export default function AdminPanelPage() {
     try {
       const adminToken = localStorage.getItem('adminToken');
       if (!adminToken) {
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
 
@@ -214,7 +213,7 @@ export default function AdminPanelPage() {
     try {
       const adminToken = localStorage.getItem('adminToken');
       if (!adminToken) {
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
 
@@ -328,7 +327,7 @@ export default function AdminPanelPage() {
       if (!adminToken) {
         setFormError('Session expirée. Veuillez vous reconnecter.');
         setFormLoading(false);
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
       
@@ -390,7 +389,7 @@ export default function AdminPanelPage() {
       const adminToken = localStorage.getItem('adminToken');
       if (!adminToken) {
         alert('Session expirée. Veuillez vous reconnecter.');
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
 
@@ -419,7 +418,7 @@ export default function AdminPanelPage() {
   const handleLogout = () => {
     if (confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
       localStorage.removeItem('adminToken');
-      window.location.href = '/admin/login';
+      navigate('/admin/login');
     }
   };
 

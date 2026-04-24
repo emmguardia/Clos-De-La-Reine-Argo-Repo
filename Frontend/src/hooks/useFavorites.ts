@@ -7,20 +7,10 @@ export function useFavorites() {
   const [favorites, setFavorites] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const token = getTokenFromStorage();
-    if (!token) {
-      setFavorites([]);
-      setLoading(false);
-      return;
-    }
-    fetchFavorites();
-  }, []);
-
   const fetchFavorites = async () => {
     const token = getTokenFromStorage();
     if (!token) return;
-    
+
     try {
       const response = await fetch(`${API_URL}/api/favorites`, {
         headers: {
@@ -32,7 +22,7 @@ export function useFavorites() {
         const idsResponse = await fetch(`${API_URL}/api/products/ids`);
         if (idsResponse.ok) {
           const { ids: existingProductIds } = await safeJsonResponse(idsResponse, { ids: [] }) as { ids: number[] };
-          const validFavorites = data.filter((id: number) => 
+          const validFavorites = data.filter((id: number) =>
             Number.isInteger(id) && id > 0 && existingProductIds.includes(id)
           );
           setFavorites(validFavorites);
@@ -59,6 +49,16 @@ export function useFavorites() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const token = getTokenFromStorage();
+    if (!token) {
+      setFavorites([]);
+      setLoading(false);
+      return;
+    }
+    fetchFavorites();
+  }, []);
 
   const addFavorite = async (productId: number) => {
     const token = getTokenFromStorage();

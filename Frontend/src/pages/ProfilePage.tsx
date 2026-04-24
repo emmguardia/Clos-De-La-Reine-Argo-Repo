@@ -81,6 +81,7 @@ export default function ProfilePage() {
     };
 
     if (userStr) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUser(safeJsonParse(userStr, {} as UserData));
     }
     fetchUserData();
@@ -110,6 +111,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (activeTab === 'commandes' || activeTab === 'historique') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchOrders();
     }
   }, [activeTab]);

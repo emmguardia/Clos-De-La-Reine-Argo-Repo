@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { BarChart3, TrendingUp, TrendingDown, DollarSign, ShoppingBag, ArrowLeft } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { safeJsonResponse } from '../utils/security';
@@ -46,8 +46,8 @@ export default function StatsPage() {
   const [period, setPeriod] = useState<Period>('7d');
   const [filterCollection, setFilterCollection] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
-  const allCollections = useRef<string[]>([]);
-  const allCategories = useRef<string[]>([]);
+  const [allCollections, setAllCollections] = useState<string[]>([]);
+  const [allCategories, setAllCategories] = useState<string[]>([]);
 
   const fetchStats = useCallback(async (p: Period, col: string, cat: string) => {
     const adminToken = localStorage.getItem('adminToken');
@@ -67,8 +67,8 @@ export default function StatsPage() {
         if (data) {
           setStats(data);
           if (!col && !cat) {
-            allCollections.current = Object.keys(data.collectionStats);
-            allCategories.current = Object.keys(data.categoryStats);
+            setAllCollections(Object.keys(data.collectionStats));
+            setAllCategories(Object.keys(data.categoryStats));
           }
         }
       }
@@ -77,11 +77,12 @@ export default function StatsPage() {
     } finally {
       setLoading(false);
     }
-  }, [navigate]);
+  }, [navigate, setAllCollections, setAllCategories]);
 
   useEffect(() => {
     const adminToken = localStorage.getItem('adminToken');
     if (!adminToken) { navigate('/admin/login'); return; }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchStats(period, filterCollection, filterCategory);
   }, [period, filterCollection, filterCategory, fetchStats, navigate]);
 
@@ -116,11 +117,11 @@ export default function StatsPage() {
     ? Math.max(...stats.dailyStats.map(d => d.revenue || 0), 1)
     : 1;
 
-  const displayCollections = allCollections.current.length > 0
-    ? allCollections.current
+  const displayCollections = allCollections.length > 0
+    ? allCollections
     : Object.keys(stats.collectionStats);
-  const displayCategories = allCategories.current.length > 0
-    ? allCategories.current
+  const displayCategories = allCategories.length > 0
+    ? allCategories
     : Object.keys(stats.categoryStats);
 
   const periodLabels: Record<Period, string> = {

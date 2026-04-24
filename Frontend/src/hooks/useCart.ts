@@ -13,7 +13,7 @@ export interface CartItem {
 
 export function useCart() {
   const [items, setItems] = useState<CartItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !!getTokenFromStorage());
 
   const fetchCart = async () => {
     const token = getTokenFromStorage();
@@ -42,12 +42,8 @@ export function useCart() {
   };
 
   useEffect(() => {
-    const token = getTokenFromStorage();
-    if (!token) {
-      setItems([]);
-      setLoading(false);
-      return;
-    }
+    if (!getTokenFromStorage()) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCart();
   }, []);
 

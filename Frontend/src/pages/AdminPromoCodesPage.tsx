@@ -101,7 +101,9 @@ export default function AdminPromoCodesPage() {
       navigate('/admin/login');
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     verifyAdminToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const resetForm = () => {

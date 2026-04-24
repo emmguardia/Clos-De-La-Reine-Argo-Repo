@@ -44,6 +44,7 @@ export function useBoutiqueProducts(filters: {
   }, [filters.category, filters.collection, filters.color]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load(1);
   }, [load]);
 

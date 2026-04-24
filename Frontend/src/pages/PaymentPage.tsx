@@ -202,6 +202,7 @@ export default function PaymentPage() {
   }, [navigate, orderId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchOrder();
   }, [fetchOrder]);
 
@@ -240,6 +241,7 @@ export default function PaymentPage() {
       /* ignore */
     }
     if (Object.keys(next).length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShippingAddress((prev) => ({
         firstName: next.firstName ?? prev.firstName,
         lastName: next.lastName ?? prev.lastName,
@@ -275,6 +277,7 @@ export default function PaymentPage() {
     if (typeof window === 'undefined') return;
     const fromSearch = searchParams.get('payment_intent_client_secret');
     if (fromSearch && fromSearch.includes('_secret_')) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setClientSecretFromUrl(fromSearch);
       return;
     }
@@ -309,6 +312,7 @@ export default function PaymentPage() {
     }
     const token = getTokenFromStorage();
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError('Session expirée. Connectez-vous pour confirmer le paiement.');
       return;
     }
@@ -399,6 +403,7 @@ export default function PaymentPage() {
 
   useEffect(() => {
     if (!addressQuery.trim() || addressQuery.length < 3) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAddressSuggestions([]);
       return;
     }

@@ -12,12 +12,12 @@
   "dependencies": {
     "compression": "^1.8.1",
     "express": "^5.2.1",
-    "mongodb": "^7.1.1",
+    "mongodb": "^7.2.0",
     "cors": "^2.8.6",
     "bcrypt": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
-    "express-rate-limit": "^8.3.2",
-    "stripe": "^22.0.2"
+    "express-rate-limit": "^8.4.1",
+    "stripe": "^22.1.0"
   },
   "devDependencies": {
     "minimatch": "10.2.5"

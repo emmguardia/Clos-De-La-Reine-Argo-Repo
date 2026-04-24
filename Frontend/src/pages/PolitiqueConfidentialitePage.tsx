@@ -1,7 +1,14 @@
 import { Link } from 'react-router-dom';
+import SEO from '../components/SEO';
 
 export default function PolitiqueConfidentialitePage() {
   return (
+    <>
+    <SEO
+      title="Politique de Confidentialité"
+      description="Politique de confidentialité et traitement des données personnelles — Le Clos de la Reine."
+      path="/politique-confidentialite"
+    />
     <div className="min-h-screen bg-white py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
@@ -125,5 +132,6 @@ export default function PolitiqueConfidentialitePage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

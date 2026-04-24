@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { trackEvent } from '../utils/analytics';
 import { sanitizeDescription, sanitizeEmail, safeJsonResponse } from '../utils/security';
+import SEO from '../components/SEO';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -90,6 +91,8 @@ export default function RegisterPage() {
   };
 
   return (
+    <>
+    <SEO title="Inscription" noindex path="/inscription" />
     <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb] flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-white/90 backdrop-blur-lg rounded-3xl shadow-xl shadow-black/10 p-8 space-y-6">
         <div className="text-center space-y-2">
@@ -207,5 +210,6 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

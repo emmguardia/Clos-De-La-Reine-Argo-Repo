@@ -2,12 +2,18 @@
 User-agent: *
 Allow: /
 
-# Zones privées / admin
-Disallow: /admin
-Disallow: /admin/
+# Pages privées utilisateurs
+Disallow: /connexion
+Disallow: /inscription
+Disallow: /favoris
+Disallow: /panier
+Disallow: /profil
 Disallow: /checkout
 Disallow: /commande/
-Disallow: /profil
+
+# Admin & interne
+Disallow: /admin
+Disallow: /admin/
 Disallow: /stats
 
 # Sitemap

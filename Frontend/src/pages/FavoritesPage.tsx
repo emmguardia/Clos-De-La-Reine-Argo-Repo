@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import SEO from '../components/SEO';
 import ProductCard from '../components/ProductCard';
 import ProductModal from '../components/ProductModal';
 import { useProductsByIds } from '../hooks/useProductsByIds';
@@ -23,6 +24,8 @@ export default function FavoritesPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   return (
+    <>
+    <SEO title="Favoris" noindex path="/favoris" />
     <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-10">
         <div className="space-y-3 text-center">
@@ -104,11 +107,12 @@ export default function FavoritesPage() {
           </div>
         )}
       </div>
-      <ProductModal 
-        product={selectedProduct} 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
+      <ProductModal
+        product={selectedProduct}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
       />
     </div>
+    </>
   );
 }

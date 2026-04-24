@@ -1,7 +1,14 @@
 import { Link } from 'react-router-dom';
+import SEO from '../components/SEO';
 
 export default function MentionsLegalesPage() {
   return (
+    <>
+    <SEO
+      title="Mentions Légales"
+      description="Mentions légales du site Le Clos de la Reine — éditeur, hébergeur et informations légales."
+      path="/mentions-legales"
+    />
     <div className="min-h-screen bg-white py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
@@ -79,5 +86,6 @@ export default function MentionsLegalesPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -12,23 +12,16 @@ export default defineConfig({
     rollupOptions: {
       output: {
         assetFileNames: 'assets/[name].[ext]',
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          admin: [
-            './src/pages/AdminPanelPage',
-            './src/pages/OrdersAdminPage',
-            './src/pages/CollectionsAdminPage',
-            './src/pages/FAQAdminPage',
-            './src/pages/StatsPage',
-            './src/pages/AdminPromoCodesPage',
-            './src/pages/LoginAdminPage',
-          ],
-          checkout: [
-            './src/pages/CheckoutPage',
-            './src/pages/PaymentPage',
-            './src/pages/PaymentThankYouPage',
-            './src/pages/CounterProposalPage',
-          ],
+        manualChunks(id) {
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
+            return 'vendor';
+          }
+          if (id.includes('/pages/AdminPanelPage') || id.includes('/pages/OrdersAdminPage') || id.includes('/pages/CollectionsAdminPage') || id.includes('/pages/FAQAdminPage') || id.includes('/pages/StatsPage') || id.includes('/pages/AdminPromoCodesPage') || id.includes('/pages/LoginAdminPage')) {
+            return 'admin';
+          }
+          if (id.includes('/pages/CheckoutPage') || id.includes('/pages/PaymentPage') || id.includes('/pages/PaymentThankYouPage') || id.includes('/pages/CounterProposalPage')) {
+            return 'checkout';
+          }
         },
       },
     },

@@ -27,7 +27,11 @@ const MONGODB_USER = process.env.MONGODB_USER;
 const MONGODB_PASSWORD = process.env.MONGODB_PASSWORD;
 const MONGODB_DB = process.env.MONGODB_DB || 'clos_de_la_reine_db';
 const MONGODB_HOST = process.env.MONGODB_HOST;
-const JWT_SECRET = process.env.JWT_SECRET || 'changez-moi-en-production-avec-une-cle-secrete-tres-longue-et-aleatoire';
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? null : 'dev-only-secret-changez-moi');
+if (!JWT_SECRET) {
+  console.error('[BOOT] FATAL: JWT_SECRET manquant en production. Arrêt du serveur.');
+  process.exit(1);
+}
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY || '';
 const stripe = STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.startsWith('sk_')
@@ -55,7 +59,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;");
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   next();
@@ -88,7 +92,7 @@ const adminLoginLimiter = rateLimit({
   legacyHeaders: false,
   skipSuccessfulRequests: true,
   handler: async (req, res) => {
-    const clientIp = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+    const clientIp = req.ip || req.socket?.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
     const userAgent = req.headers['user-agent'] || 'unknown';
     await logAdminAttempt(clientIp, false, { reason: 'Rate limit dépassé', userAgent });
     res.status(429).json({ error: 'Trop de tentatives de connexion. Veuillez réessayer dans 15 minutes.' });
@@ -146,6 +150,12 @@ async function connectToDatabase() {
     await productsCol.createIndex({ category: 1 }).catch(() => {});
     await productsCol.createIndex({ collection: 1 }).catch(() => {});
     await productsCol.createIndex({ isNew: 1 }).catch(() => {});
+    await db.collection('carts').createIndex({ userId: 1 }).catch(() => {});
+    await db.collection('favorites').createIndex({ userId: 1 }).catch(() => {});
+    await db.collection('orders').createIndex({ userId: 1 }).catch(() => {});
+    await db.collection('orders').createIndex({ orderNumber: 1 }).catch(() => {});
+    await db.collection('ip_bans').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }).catch(() => {});
+    await db.collection('admin_login_attempts').createIndex({ timestamp: 1 }, { expireAfterSeconds: 86400 }).catch(() => {});
     console.log('✅ Connecté à MongoDB');
   } catch (error) {
     console.error('❌ Erreur de connexion MongoDB:', error);
@@ -333,7 +343,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
 app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const { email, password, rememberMe } = req.body;
-    const clientIp = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+    const clientIp = req.ip || req.socket?.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
 
     if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
       await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
@@ -839,14 +849,24 @@ app.post('/api/images/upload', authenticateAdmin, async (req, res) => {
 
 app.get('/api/gallery', async (req, res) => {
   try {
-    const images = await db.collection('gallery').find({}).sort({ createdAt: -1 }).toArray();
-    res.json(images.map(img => ({
-      id: img._id.toString(),
-      name: img.name,
-      data: img.data,
-      type: img.type,
-      createdAt: img.createdAt
-    })));
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const skip = (page - 1) * limit;
+    const total = await db.collection('gallery').countDocuments({});
+    const images = await db.collection('gallery').find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray();
+    res.set('Cache-Control', 'private, max-age=60');
+    res.json({
+      images: images.map(img => ({
+        id: img._id.toString(),
+        name: img.name,
+        data: img.data,
+        type: img.type,
+        createdAt: img.createdAt
+      })),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit)
+    });
   } catch (error) {
     console.error('Erreur lors de la récupération de la galerie:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -1318,11 +1338,17 @@ app.delete('/api/favorites/:productId', authenticateToken, async (req, res) => {
   }
 });
 
+const ORDER_SHIPPING = 5.9;
+const ORDER_FEES_TAUX = 0.019;
+
 app.post('/api/orders', authenticateToken, async (req, res) => {
   try {
-    const { items, shippingAddress, total, dogInfo, notes, promoCode, shippingAmount, feesAmount } = req.body;
+    const { items, shippingAddress, dogInfo, notes, promoCode } = req.body;
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Items requis' });
+    }
+    if (items.length > 50) {
+      return res.status(400).json({ error: 'Trop d\'articles dans la commande' });
     }
     if (!shippingAddress) {
       return res.status(400).json({ error: 'Informations de contact requises' });
@@ -1330,7 +1356,41 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
     if (!dogInfo || !dogInfo.breed || !dogInfo.age) {
       return res.status(400).json({ error: 'Informations sur le chien requises (race et âge)' });
     }
-    
+
+    // Recalcul serveur : on ne fait jamais confiance au total client
+    const productIds = items.map(i => i.productId).filter(id => typeof id === 'number' && !isNaN(id));
+    if (productIds.length !== items.length) {
+      return res.status(400).json({ error: 'IDs de produits invalides' });
+    }
+    const dbProducts = await db.collection('products').find({ id: { $in: productIds } }).toArray();
+    const productMap = Object.fromEntries(dbProducts.map(p => [p.id, p]));
+
+    let subtotal = 0;
+    const validatedItems = [];
+    for (const item of items) {
+      const product = productMap[item.productId];
+      if (!product) {
+        return res.status(400).json({ error: `Produit #${item.productId} introuvable` });
+      }
+      const qty = Math.max(1, Math.min(99, parseInt(item.quantity) || 1));
+      let unitPrice = product.price;
+      if (product.category === 'laisses' && item.size === '1m20' && (product.surcharge1m20 ?? 0) > 0) {
+        unitPrice += product.surcharge1m20;
+      }
+      if (product.category === 'colliers' && dogInfo.surMesureCollier && (product.surchargeSurMesure ?? 0) > 0) {
+        unitPrice += product.surchargeSurMesure;
+      }
+      if (product.category === 'harnais' && dogInfo.surMesureHarnais && (product.surchargeSurMesure ?? 0) > 0) {
+        unitPrice += product.surchargeSurMesure;
+      }
+      subtotal += unitPrice * qty;
+      validatedItems.push({ productId: item.productId, quantity: qty, price: unitPrice, size: item.size || null });
+    }
+
+    const shippingAmount = ORDER_SHIPPING;
+    const feesAmount = Math.round((subtotal + shippingAmount) * ORDER_FEES_TAUX * 100) / 100;
+    const total = Math.round((subtotal + shippingAmount + feesAmount) * 100) / 100;
+
     let validatedPromoCode = null;
     if (promoCode && typeof promoCode === 'string' && promoCode.trim() !== '') {
       const promo = await db.collection('promo_codes').findOne({ 
@@ -1355,7 +1415,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
     
     const order = {
       userId: req.user.userId,
-      items,
+      items: validatedItems,
       shippingAddress,
       dogInfo: {
         breed: dogInfo.breed,
@@ -1482,11 +1542,17 @@ app.get('/api/orders', authenticateToken, async (req, res) => {
 app.get('/api/orders/admin', authenticateAdmin, async (req, res) => {
   try {
     const orders = await db.collection('orders').find({}).sort({ createdAt: -1 }).toArray();
-    const ordersWithUsers = await Promise.all(orders.map(async (order) => {
-      const user = await db.collection('users').findOne(
-        { _id: new ObjectId(order.userId) },
-        { projection: { email: 1, firstName: 1, lastName: 1 } }
-      );
+    const userIds = [...new Set(orders.map(o => o.userId).filter(Boolean))];
+    const userObjectIds = userIds.map(id => { try { return new ObjectId(id); } catch { return null; } }).filter(Boolean);
+    const users = userObjectIds.length > 0
+      ? await db.collection('users').find(
+          { _id: { $in: userObjectIds } },
+          { projection: { email: 1, firstName: 1, lastName: 1 } }
+        ).toArray()
+      : [];
+    const userMap = Object.fromEntries(users.map(u => [u._id.toString(), u]));
+    const ordersWithUsers = orders.map((order) => {
+      const user = userMap[order.userId] || null;
       return {
         id: order._id.toString(),
         orderNumber: order.orderNumber || null,
@@ -1503,7 +1569,7 @@ app.get('/api/orders/admin', authenticateAdmin, async (req, res) => {
         createdAt: order.createdAt,
         updatedAt: order.updatedAt
       };
-    }));
+    });
     res.json(ordersWithUsers);
   } catch (error) {
     console.error('Erreur lors de la récupération des commandes admin:', error);
@@ -1687,6 +1753,9 @@ app.delete('/api/orders/:id', authenticateToken, async (req, res) => {
     if (!order) {
       return res.status(404).json({ error: 'Commande non trouvée' });
     }
+    if (order.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Non autorisé' });
+    }
     const deletableStatuses = ['pending_validation', 'pending_counter_proposal', 'validated', 'rejected'];
     if (!deletableStatuses.includes(order.status)) {
       return res.status(400).json({ error: 'Cette commande ne peut pas être supprimée (déjà payée ou en cours)' });
@@ -1731,7 +1800,7 @@ app.put('/api/orders/:id/cancel', authenticateToken, async (req, res) => {
 app.post('/api/admin/login', adminLoginLimiter, async (req, res) => {
   try {
     const { password } = req.body;
-    const clientIp = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+    const clientIp = req.ip || req.socket?.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
     const userAgent = req.headers['user-agent'] || 'unknown';
 
     if (await isIpBanned(clientIp)) {
@@ -1800,7 +1869,7 @@ app.post('/api/admin/login', adminLoginLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error('Erreur lors de la connexion admin:', error);
-    const clientIp = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+    const clientIp = req.ip || req.socket?.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
     const userAgent = req.headers['user-agent'] || 'unknown';
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
     await logAdminAttempt(clientIp, false, { reason: 'Erreur serveur', userAgent });

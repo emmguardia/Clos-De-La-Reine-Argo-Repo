@@ -26,13 +26,12 @@ export default function GalleryPage() {
 
   const fetchGallery = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/gallery`);
+      const response = await fetch(`${API_URL}/api/gallery?limit=200`);
       if (response.ok) {
-        const data = await safeJsonResponse(response, []);
-        if (Array.isArray(data)) {
-          setProfessionalImages(data.filter((item: GalleryItem) => item.type === 'professional'));
-          setClientImages(data.filter((item: GalleryItem) => item.type === 'client'));
-        }
+        const data = await safeJsonResponse(response, { images: [] });
+        const items: GalleryItem[] = Array.isArray(data) ? data : (data as { images: GalleryItem[] }).images ?? [];
+        setProfessionalImages(items.filter((item: GalleryItem) => item.type === 'professional'));
+        setClientImages(items.filter((item: GalleryItem) => item.type === 'client'));
       }
     } catch (error) {
       console.error('Erreur:', error);

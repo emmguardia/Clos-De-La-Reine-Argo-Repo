@@ -12,6 +12,24 @@ export default defineConfig({
     rollupOptions: {
       output: {
         assetFileNames: 'assets/[name].[ext]',
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          admin: [
+            './src/pages/AdminPanelPage',
+            './src/pages/OrdersAdminPage',
+            './src/pages/CollectionsAdminPage',
+            './src/pages/FAQAdminPage',
+            './src/pages/StatsPage',
+            './src/pages/AdminPromoCodesPage',
+            './src/pages/LoginAdminPage',
+          ],
+          checkout: [
+            './src/pages/CheckoutPage',
+            './src/pages/PaymentPage',
+            './src/pages/PaymentThankYouPage',
+            './src/pages/CounterProposalPage',
+          ],
+        },
       },
     },
   },

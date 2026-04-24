@@ -1,33 +1,36 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { trackEvent } from './utils/analytics';
 import Header from './components/Header';
 import CartToast from './components/CartToast';
 import Footer from './components/Footer';
+// Pages critiques (chargées immédiatement)
 import HomePage from './pages/HomePage';
 import BoutiquePage from './pages/BoutiquePage';
-import ContactPage from './pages/ContactPage';
-import FAQPage from './pages/FAQPage';
-import LoginPage from './pages/LoginPage';
-import LoginAdminPage from './pages/LoginAdminPage';
-import RegisterPage from './pages/RegisterPage';
-import ProfilePage from './pages/ProfilePage';
-import FavoritesPage from './pages/FavoritesPage';
-import CartPage from './pages/CartPage';
-import CheckoutPage from './pages/CheckoutPage';
-import PaymentPage from './pages/PaymentPage';
-import PaymentThankYouPage from './pages/PaymentThankYouPage';
-import CounterProposalPage from './pages/CounterProposalPage';
-import AdminPanelPage from './pages/AdminPanelPage';
-import OrdersAdminPage from './pages/OrdersAdminPage';
-import GalleryPage from './pages/GalleryPage';
-import CollectionsAdminPage from './pages/CollectionsAdminPage';
-import FAQAdminPage from './pages/FAQAdminPage';
-import StatsPage from './pages/StatsPage';
-import AdminPromoCodesPage from './pages/AdminPromoCodesPage';
-import CGVPage from './pages/CGVPage';
-import MentionsLegalesPage from './pages/MentionsLegalesPage';
-import PolitiqueConfidentialitePage from './pages/PolitiqueConfidentialitePage';
+// Pages chargées à la demande
+const ContactPage = lazy(() => import('./pages/ContactPage'));
+const FAQPage = lazy(() => import('./pages/FAQPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const LoginAdminPage = lazy(() => import('./pages/LoginAdminPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const FavoritesPage = lazy(() => import('./pages/FavoritesPage'));
+const CartPage = lazy(() => import('./pages/CartPage'));
+const CheckoutPage = lazy(() => import('./pages/CheckoutPage'));
+const PaymentPage = lazy(() => import('./pages/PaymentPage'));
+const PaymentThankYouPage = lazy(() => import('./pages/PaymentThankYouPage'));
+const CounterProposalPage = lazy(() => import('./pages/CounterProposalPage'));
+const GalleryPage = lazy(() => import('./pages/GalleryPage'));
+const CGVPage = lazy(() => import('./pages/CGVPage'));
+const MentionsLegalesPage = lazy(() => import('./pages/MentionsLegalesPage'));
+const PolitiqueConfidentialitePage = lazy(() => import('./pages/PolitiqueConfidentialitePage'));
+// Pages admin (chunk séparé)
+const AdminPanelPage = lazy(() => import('./pages/AdminPanelPage'));
+const OrdersAdminPage = lazy(() => import('./pages/OrdersAdminPage'));
+const CollectionsAdminPage = lazy(() => import('./pages/CollectionsAdminPage'));
+const FAQAdminPage = lazy(() => import('./pages/FAQAdminPage'));
+const StatsPage = lazy(() => import('./pages/StatsPage'));
+const AdminPromoCodesPage = lazy(() => import('./pages/AdminPromoCodesPage'));
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
@@ -52,6 +55,7 @@ function App() {
       <PageViewTracker />
       <Header />
       <CartToast />
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">Chargement...</p></div>}>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/boutique" element={<BoutiquePage />} />
@@ -78,6 +82,7 @@ function App() {
         <Route path="/mentions-legales" element={<MentionsLegalesPage />} />
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialitePage />} />
       </Routes>
+      </Suspense>
       <Footer />
     </div>
   );

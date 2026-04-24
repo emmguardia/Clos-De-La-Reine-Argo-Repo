@@ -144,14 +144,13 @@ export default function AdminPanelPage() {
     try {
       const adminToken = localStorage.getItem('adminToken');
       if (!adminToken) return;
-      const response = await fetch(`${API_URL}/api/gallery`, {
+      const response = await fetch(`${API_URL}/api/gallery?limit=200`, {
         headers: { 'Authorization': `Bearer ${adminToken}` }
       });
       if (response.ok) {
-        const data = await safeJsonResponse(response, []);
-        if (Array.isArray(data)) {
-          setGalleryItems(data);
-        }
+        const data = await safeJsonResponse(response, { images: [] });
+        const items = Array.isArray(data) ? data : (data as { images: GalleryItem[] }).images ?? [];
+        setGalleryItems(items);
       }
     } catch (err) {
       console.error('Erreur:', err);
@@ -219,7 +218,7 @@ export default function AdminPanelPage() {
         return;
       }
 
-      setGalleryDeleteLoading({ ...galleryDeleteLoading, [id]: true });
+      setGalleryDeleteLoading(prev => ({ ...prev, [id]: true }));
       const response = await fetch(`${API_URL}/api/gallery/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${adminToken}` }
@@ -235,7 +234,7 @@ export default function AdminPanelPage() {
     } catch {
       setGalleryError('Erreur lors de la suppression');
     } finally {
-      setGalleryDeleteLoading({ ...galleryDeleteLoading, [id]: false });
+      setGalleryDeleteLoading(prev => ({ ...prev, [id]: false }));
     }
   };
 
@@ -385,7 +384,7 @@ export default function AdminPanelPage() {
       return;
     }
 
-    setDeleteLoading({ ...deleteLoading, [productId]: true });
+    setDeleteLoading(prev => ({ ...prev, [productId]: true }));
 
     try {
       const adminToken = localStorage.getItem('adminToken');
@@ -394,7 +393,7 @@ export default function AdminPanelPage() {
         window.location.href = '/admin/login';
         return;
       }
-      
+
       const response = await fetch(`${API_URL}/api/products/${productId}`, {
         method: 'DELETE',
         headers: {
@@ -411,7 +410,7 @@ export default function AdminPanelPage() {
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     } finally {
-      setDeleteLoading({ ...deleteLoading, [productId]: false });
+      setDeleteLoading(prev => ({ ...prev, [productId]: false }));
     }
   };
 

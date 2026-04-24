@@ -2021,98 +2021,107 @@ app.get('/api/admin/verify', authenticateAdmin, async (req, res) => {
 
 app.get('/api/stats', authenticateAdmin, async (req, res) => {
   try {
-    // Stats lues depuis la table payment_stats (remplie à chaque paiement réussi)
-    const records = await db.collection('payment_stats').find({}).sort({ date: 1 }).toArray();
-
+    const { from, to, collection: fCollection, category: fCategory } = req.query;
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
-    let totalRevenue = 0;
-    let monthlyRevenue = 0;
-    let lastMonthRevenue = 0;
+    const allRecords = await db.collection('payment_stats').find({}).sort({ date: 1 }).toArray();
+
+    // Global monthly KPIs (never filtered — stable reference)
+    let totalRevenue = 0, totalOrders = 0;
+    let monthlyRevenue = 0, monthlyOrders = 0;
+    let lastMonthRevenue = 0, lastMonthOrders = 0;
+    for (const rec of allRecords) {
+      const d = rec.date ? new Date(rec.date) : new Date();
+      const orderTotal = Number(rec.totalAmount) || 0;
+      totalRevenue += orderTotal;
+      totalOrders++;
+      const dMonthStart = new Date(d.getFullYear(), d.getMonth(), 1);
+      if (dMonthStart.getTime() === monthStart.getTime()) { monthlyRevenue += orderTotal; monthlyOrders++; }
+      else if (d >= lastMonthStart && d <= lastMonthEnd) { lastMonthRevenue += orderTotal; lastMonthOrders++; }
+    }
+
+    // Chart date range (default: last 7 days)
+    const fromDate = from ? new Date(String(from)) : (() => { const d = new Date(now); d.setDate(d.getDate() - 6); d.setHours(0, 0, 0, 0); return d; })();
+    const toDate = to ? new Date(String(to)) : now;
+
+    // Filtered aggregation for chart + breakdown bars
     const dailyStatsMap = {};
     const collectionStats = {};
     const categoryStats = {};
 
-    for (const rec of records) {
-      const orderTotal = Number(rec.totalAmount) || 0;
+    for (const rec of allRecords) {
       const d = rec.date ? new Date(rec.date) : new Date();
+      if (d < fromDate || d > toDate) continue;
 
-      totalRevenue += orderTotal;
-
-      const dMonthStart = new Date(d.getFullYear(), d.getMonth(), 1);
-      if (dMonthStart.getTime() === monthStart.getTime()) {
-        monthlyRevenue += orderTotal;
-      } else if (d >= lastMonthStart && d <= lastMonthEnd) {
-        lastMonthRevenue += orderTotal;
-      }
-
+      const orderTotal = Number(rec.totalAmount) || 0;
       const dayKey = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-      if (!dailyStatsMap[dayKey]) dailyStatsMap[dayKey] = { revenue: 0, orders: 0 };
-      dailyStatsMap[dayKey].revenue += orderTotal;
-      dailyStatsMap[dayKey].orders += 1;
+      let orderMatches = !fCollection && !fCategory;
 
       for (const item of rec.items || []) {
-        const collection = item.collection || 'Autre';
-        const category = item.category || 'Autre';
-        const itemTotal = item.itemTotal || 0;
-        collectionStats[collection] = (collectionStats[collection] || 0) + itemTotal;
-        categoryStats[category] = (categoryStats[category] || 0) + itemTotal;
+        const matchCol = !fCollection || item.collection === String(fCollection);
+        const matchCat = !fCategory || item.category === String(fCategory);
+        if (matchCol && matchCat) {
+          const col = item.collection || 'Autre';
+          const cat = item.category || 'Autre';
+          collectionStats[col] = (collectionStats[col] || 0) + Number(item.itemTotal || 0);
+          categoryStats[cat] = (categoryStats[cat] || 0) + Number(item.itemTotal || 0);
+          orderMatches = true;
+        }
+      }
+
+      if (orderMatches) {
+        if (!dailyStatsMap[dayKey]) dailyStatsMap[dayKey] = { revenue: 0, orders: 0 };
+        dailyStatsMap[dayKey].revenue += orderTotal;
+        dailyStatsMap[dayKey].orders += 1;
       }
     }
 
-    const totalOrders = records.length;
-    const monthlyOrders = records.filter(r => {
-      const d = r.date ? new Date(r.date) : new Date();
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    }).length;
-    const lastMonthOrders = records.filter(r => {
-      const d = r.date ? new Date(r.date) : new Date();
-      return d >= lastMonthStart && d <= lastMonthEnd;
-    }).length;
+    // Build chart: daily if ≤ 30 days, weekly otherwise (max 30 bars)
+    const daysDiff = Math.max(1, Math.ceil((toDate - fromDate) / (24 * 60 * 60 * 1000)) + 1);
+    const dailyStats = [];
+    if (daysDiff <= 30) {
+      for (let i = 0; i < daysDiff; i++) {
+        const date = new Date(fromDate);
+        date.setDate(date.getDate() + i);
+        date.setHours(0, 0, 0, 0);
+        const s = dailyStatsMap[date.getTime()] || { revenue: 0, orders: 0 };
+        const label = daysDiff <= 7
+          ? ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][date.getDay()]
+          : date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+        dailyStats.push({ date: label, revenue: s.revenue, orders: s.orders });
+      }
+    } else {
+      const step = Math.ceil(daysDiff / 30) * 7;
+      for (let offset = 0; offset < daysDiff && dailyStats.length < 30; offset += step) {
+        const wStart = new Date(fromDate); wStart.setDate(wStart.getDate() + offset); wStart.setHours(0, 0, 0, 0);
+        const wEnd = new Date(wStart); wEnd.setDate(wEnd.getDate() + step);
+        let rev = 0, orders = 0;
+        for (const [k, v] of Object.entries(dailyStatsMap)) {
+          const kd = new Date(Number(k));
+          if (kd >= wStart && kd < wEnd) { rev += v.revenue; orders += v.orders; }
+        }
+        dailyStats.push({ date: wStart.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }), revenue: rev, orders });
+      }
+    }
 
     const monthlyAverageOrderValue = monthlyOrders > 0 ? monthlyRevenue / monthlyOrders : 0;
     const lastMonthAverageOrderValue = lastMonthOrders > 0 ? lastMonthRevenue / lastMonthOrders : 0;
-
-    const revenueChange = lastMonthRevenue > 0
-      ? ((monthlyRevenue - lastMonthRevenue) / lastMonthRevenue) * 100
-      : (monthlyRevenue > 0 ? 100 : 0);
-    const ordersChange = lastMonthOrders > 0
-      ? ((monthlyOrders - lastMonthOrders) / lastMonthOrders) * 100
-      : (monthlyOrders > 0 ? 100 : 0);
-    const averageOrderValueChange = lastMonthAverageOrderValue > 0
-      ? ((monthlyAverageOrderValue - lastMonthAverageOrderValue) / lastMonthAverageOrderValue) * 100
-      : (monthlyAverageOrderValue > 0 ? 100 : 0);
-
-    const last7Days = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      date.setHours(0, 0, 0, 0);
-      const dayKey = date.getTime();
-      const dayStat = dailyStatsMap[dayKey] || { revenue: 0, orders: 0 };
-      const dayName = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][date.getDay()];
-      last7Days.push({ date: dayName, revenue: dayStat.revenue, orders: dayStat.orders });
-    }
+    const revenueChange = lastMonthRevenue > 0 ? ((monthlyRevenue - lastMonthRevenue) / lastMonthRevenue) * 100 : (monthlyRevenue > 0 ? 100 : 0);
+    const ordersChange = lastMonthOrders > 0 ? ((monthlyOrders - lastMonthOrders) / lastMonthOrders) * 100 : (monthlyOrders > 0 ? 100 : 0);
+    const averageOrderValueChange = lastMonthAverageOrderValue > 0 ? ((monthlyAverageOrderValue - lastMonthAverageOrderValue) / lastMonthAverageOrderValue) * 100 : (monthlyAverageOrderValue > 0 ? 100 : 0);
 
     res.json({
-      totalRevenue,
-      totalOrders,
+      totalRevenue, totalOrders,
       averageOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
-      monthlyRevenue,
-      monthlyOrders,
-      monthlyAverageOrderValue,
-      lastMonthRevenue,
-      lastMonthOrders,
-      lastMonthAverageOrderValue,
+      monthlyRevenue, monthlyOrders, monthlyAverageOrderValue,
+      lastMonthRevenue, lastMonthOrders, lastMonthAverageOrderValue,
       revenueChange: Math.round(revenueChange * 10) / 10,
       ordersChange: Math.round(ordersChange * 10) / 10,
       averageOrderValueChange: Math.round(averageOrderValueChange * 10) / 10,
-      dailyStats: last7Days,
-      collectionStats,
-      categoryStats
+      dailyStats, collectionStats, categoryStats
     });
   } catch (error) {
     console.error('Erreur lors de la récupération des stats:', error);

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { sanitizeDescription, sanitizeEmail } from '../utils/security';
 import { trackEvent } from '../utils/analytics';
+import SEO from '../components/SEO';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
@@ -78,6 +79,12 @@ export default function ContactPage() {
     });
   };
   return (
+    <>
+    <SEO
+      title="Contact"
+      description="Contactez Clos de la Reine pour toute question sur nos créations artisanales pour chiens."
+      path="/contact"
+    />
     <div className="bg-white min-h-screen">
       <div className="relative border-b border-black/5">
         <div className="absolute inset-0">
@@ -236,5 +243,6 @@ export default function ContactPage() {
         </div>
       </main>
     </div>
+    </>
   );
 }

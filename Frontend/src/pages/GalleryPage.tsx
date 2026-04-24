@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { safeJsonResponse } from '../utils/security';
 import Pagination from '../components/Pagination';
+import SEO from '../components/SEO';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 const ITEMS_PER_PAGE = 12;
@@ -54,6 +55,12 @@ export default function GalleryPage() {
   }
 
   return (
+    <>
+    <SEO
+      title="Galerie"
+      description="Galerie photos de nos créations artisanales pour chiens — colliers, laisses et harnais portés par nos clients."
+      path="/galerie"
+    />
     <div className="min-h-screen bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="mb-12 text-center">
@@ -159,5 +166,6 @@ export default function GalleryPage() {
         )}
       </div>
     </div>
+    </>
   );
 }

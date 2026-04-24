@@ -5,6 +5,7 @@ import { useFeaturedProducts } from '../hooks/useFeaturedProducts';
 import ProductCard from '../components/ProductCard';
 import ProductModal from '../components/ProductModal';
 import type { ProductCategory, Product } from '../data/products';
+import SEO from '../components/SEO';
 const heroImage = '/Images/header.webp';
 interface FeaturedProduct {
   id: string;
@@ -62,6 +63,12 @@ export default function HomePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   return (
     <>
+      <SEO
+        title="Clos de la Reine"
+        description="Accessoires artisanaux pour chiens — colliers, laisses et harnais faits à la main avec des matières de qualité, pour les chiens qui ont du style."
+        path="/"
+        ogImage="/Images/header2.webp"
+      />
       <section className="relative overflow-hidden bg-gradient-to-b from-white via-gray-50 to-gray-100">
         <div className="absolute inset-0 overflow-hidden">
           <img

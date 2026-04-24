@@ -18,10 +18,6 @@ export default function FAQPage() {
   const [loading, setLoading] = useState(true);
   const [openItems, setOpenItems] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    fetchFAQs();
-  }, []);
-
   const fetchFAQs = async () => {
     try {
       const response = await fetch(`${API_URL}/api/faq`);
@@ -37,6 +33,10 @@ export default function FAQPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchFAQs();
+  }, []);
 
   const toggleItem = (id: string) => {
     setOpenItems((prev) => {

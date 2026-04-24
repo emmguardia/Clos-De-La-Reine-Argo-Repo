@@ -23,11 +23,6 @@ export default function CollectionsAdminPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    fetchCollections();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const fetchCollections = async () => {
     try {
       const token = localStorage.getItem('adminToken');
@@ -52,6 +47,10 @@ export default function CollectionsAdminPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchCollections();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -86,19 +86,6 @@ export default function ProfilePage() {
     fetchUserData();
   }, [navigate]);
 
-  useEffect(() => {
-    if (activeTab === 'commandes' || activeTab === 'historique') {
-      fetchOrders();
-    }
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (activeTab === 'commandes') {
-      localStorage.removeItem('newOrderBadge');
-      window.dispatchEvent(new Event('newOrderBadgeUpdated'));
-    }
-  }, [activeTab]);
-
   const fetchOrders = async () => {
     setOrdersLoading(true);
     try {
@@ -120,6 +107,19 @@ export default function ProfilePage() {
       setOrdersLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (activeTab === 'commandes' || activeTab === 'historique') {
+      fetchOrders();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'commandes') {
+      localStorage.removeItem('newOrderBadge');
+      window.dispatchEvent(new Event('newOrderBadgeUpdated'));
+    }
+  }, [activeTab]);
 
   const getStatusInfo = (status: string) => {
     const statuses: Record<string, { label: string; icon: ComponentType<{ className?: string }>; color: string }> = {

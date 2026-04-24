@@ -31,11 +31,6 @@ export default function CounterProposalPage() {
     message: ''
   });
 
-  useEffect(() => {
-    fetchOrder();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderId]);
-
   const fetchOrder = async () => {
     try {
       const token = getTokenFromStorage();
@@ -71,6 +66,10 @@ export default function CounterProposalPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchOrder();
+  }, [orderId]);
 
   const handleAccept = async () => {
     if (!order?.counterProposal) {

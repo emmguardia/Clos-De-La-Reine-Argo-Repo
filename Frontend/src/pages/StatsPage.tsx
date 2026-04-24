@@ -27,15 +27,6 @@ export default function StatsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
-      window.location.href = '/admin/login';
-      return;
-    }
-    fetchStats();
-  }, []);
-
   const fetchStats = async () => {
     try {
       const adminToken = localStorage.getItem('adminToken');
@@ -62,6 +53,15 @@ export default function StatsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const adminToken = localStorage.getItem('adminToken');
+    if (!adminToken) {
+      window.location.href = '/admin/login';
+      return;
+    }
+    fetchStats();
+  }, []);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount);

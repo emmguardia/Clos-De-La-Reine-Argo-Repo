@@ -40,6 +40,15 @@ RUN npm install -g cross-spawn@latest glob@latest \
        done \
     && npm cache clean --force
 
+# Patch sécurité: forcer picomatch@latest (CVE-2026-33671 ReDoS via extglob patterns)
+RUN npm install -g picomatch@latest \
+    && G="/usr/local/lib/node_modules" \
+    && for d in $(find "$G" -name "picomatch" -type d 2>/dev/null); do \
+         [ "$d" = "$G/picomatch" ] && continue; \
+         rm -rf "$d" && cp -r "$G/picomatch" "$d"; \
+       done \
+    && npm cache clean --force
+
 RUN echo "update-notifier=false" > .npmrc && echo "loglevel=error" >> .npmrc
 
 COPY dist/package*.json ./
@@ -53,6 +62,12 @@ RUN apk update && apk upgrade --no-cache \
 RUN for d in $(find /usr/local/lib/node_modules /app/node_modules -name "minimatch" -type d 2>/dev/null); do \
       [ "$d" = "/usr/local/lib/node_modules/minimatch" ] && continue; \
       rm -rf "$d" && cp -r /usr/local/lib/node_modules/minimatch "$d"; \
+    done
+
+# Re-patch picomatch après npm ci (remplace par la version latest, corrige CVE-2026-33671)
+RUN for d in $(find /usr/local/lib/node_modules /app/node_modules -name "picomatch" -type d 2>/dev/null); do \
+      [ "$d" = "/usr/local/lib/node_modules/picomatch" ] && continue; \
+      rm -rf "$d" && cp -r /usr/local/lib/node_modules/picomatch "$d"; \
     done
 
 COPY dist/src/ ./src/

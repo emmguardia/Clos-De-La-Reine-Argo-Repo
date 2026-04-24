@@ -6,6 +6,7 @@ import ProductModal from '../components/ProductModal';
 import Pagination from '../components/Pagination';
 import { useBoutiqueProducts } from '../hooks/useBoutiqueProducts';
 import type { Product, ProductCategory } from '../data/products';
+import SEO from '../components/SEO';
 
 export default function BoutiquePage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -50,6 +51,33 @@ export default function BoutiquePage() {
   };
 
   return (
+    <>
+    <SEO
+      title="Boutique"
+      description="Colliers, laisses et harnais artisanaux pour chiens — matières nobles, finitions soignées, teintes intemporelles."
+      path="/boutique"
+      jsonLd={{
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "name": "Boutique Clos de la Reine",
+        "itemListElement": products.map((product, index) => ({
+          "@type": "ListItem",
+          "position": index + 1,
+          "item": {
+            "@type": "Product",
+            "name": product.name,
+            ...(product.briefDescription ? { "description": product.briefDescription } : {}),
+            "image": `https://closdelareine.com${product.image}`,
+            "offers": {
+              "@type": "Offer",
+              "price": product.price,
+              "priceCurrency": "EUR",
+              "availability": "https://schema.org/InStock"
+            }
+          }
+        }))
+      }}
+    />
     <div className="bg-white min-h-screen">
       <div className="relative border-b border-black/5">
         <div className="absolute inset-0">
@@ -189,11 +217,12 @@ export default function BoutiquePage() {
           </div>
         )}
       </main>
-      <ProductModal 
-        product={selectedProduct} 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
+      <ProductModal
+        product={selectedProduct}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
       />
     </div>
+    </>
   );
 }

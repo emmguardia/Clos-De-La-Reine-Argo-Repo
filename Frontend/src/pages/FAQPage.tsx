@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { safeJsonResponse } from '../utils/security';
+import SEO from '../components/SEO';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
@@ -67,6 +68,12 @@ export default function FAQPage() {
     );
   }
   return (
+    <>
+    <SEO
+      title="FAQ"
+      description="Réponses à vos questions sur nos produits artisanaux pour chiens — matières, entretien, commandes, livraison."
+      path="/faq"
+    />
     <div className="bg-white min-h-screen">
       <div className="relative border-b border-black/5">
         <div className="absolute inset-0">
@@ -152,5 +159,6 @@ export default function FAQPage() {
         </div>
       </main>
     </div>
+    </>
   );
 }

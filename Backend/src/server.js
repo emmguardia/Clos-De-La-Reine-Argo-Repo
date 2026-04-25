@@ -240,6 +240,60 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ---------------------------------------------------------------------------
+// Sitemap XML dynamique — inclut les pages statiques + dernière modif produit
+// Nginx proxifie /sitemap.xml vers ce backend (cf. configmap nginx)
+// ---------------------------------------------------------------------------
+app.get('/sitemap.xml', async (req, res) => {
+  try {
+    const BASE_URL = 'https://leclosdelareine.com';
+    const today = new Date().toISOString().split('T')[0];
+    let productsLastMod = today;
+
+    if (db) {
+      try {
+        const [latest] = await db.collection('products')
+          .find({}, { projection: { updatedAt: 1, createdAt: 1 } })
+          .sort({ updatedAt: -1, createdAt: -1 })
+          .limit(1)
+          .toArray();
+        if (latest) {
+          const d = latest.updatedAt || latest.createdAt;
+          if (d) productsLastMod = new Date(d).toISOString().split('T')[0];
+        }
+      } catch (_) { /* si la collection est vide, on garde today */ }
+    }
+
+    const pages = [
+      { url: '/',                           priority: '1.0', changefreq: 'weekly',  lastmod: today },
+      { url: '/boutique',                   priority: '0.9', changefreq: 'daily',   lastmod: productsLastMod },
+      { url: '/boutique?category=colliers', priority: '0.8', changefreq: 'daily',   lastmod: productsLastMod },
+      { url: '/boutique?category=harnais',  priority: '0.8', changefreq: 'daily',   lastmod: productsLastMod },
+      { url: '/boutique?category=laisses',  priority: '0.8', changefreq: 'daily',   lastmod: productsLastMod },
+      { url: '/galerie',                    priority: '0.7', changefreq: 'monthly', lastmod: today },
+      { url: '/faq',                        priority: '0.7', changefreq: 'monthly', lastmod: today },
+      { url: '/contact',                    priority: '0.6', changefreq: 'yearly',  lastmod: today },
+      { url: '/cgv',                        priority: '0.3', changefreq: 'yearly',  lastmod: today },
+      { url: '/mentions-legales',           priority: '0.3', changefreq: 'yearly',  lastmod: today },
+      { url: '/politique-confidentialite',  priority: '0.3', changefreq: 'yearly',  lastmod: today },
+    ];
+
+    const urlEntries = pages.map(({ url, priority, changefreq, lastmod }) =>
+      `  <url>\n    <loc>${BASE_URL}${url}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>\n  </url>`
+    ).join('\n');
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>`;
+
+    res.set('Content-Type', 'application/xml; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.send(xml);
+  } catch (err) {
+    console.error('[SITEMAP] Erreur génération:', err?.message || err);
+    res.set('Content-Type', 'application/xml; charset=utf-8');
+    res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+  }
+});
+
 app.get('/api/config', (req, res) => {
   res.set('Cache-Control', 'public, max-age=300');
   res.json({ stripePublishableKey: STRIPE_PUBLISHABLE_KEY || '' });

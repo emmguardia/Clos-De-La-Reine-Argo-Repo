@@ -1,20 +1,23 @@
-# Le Clos de la Reine - robots.txt
+# Le Clos de la Reine — robots.txt
+# Dernière mise à jour : 2026-04-26
 User-agent: *
 Allow: /
 
-# Pages privées utilisateurs
+# ---- Pages privées utilisateurs (authentification requise) ----
 Disallow: /connexion
 Disallow: /inscription
 Disallow: /favoris
 Disallow: /panier
 Disallow: /profil
 Disallow: /checkout
+
+# ---- Commandes & paiements (URLs dynamiques avec token/ID) ----
 Disallow: /commande/
 
-# Admin & interne
+# ---- Administration & back-office ----
 Disallow: /admin
 Disallow: /admin/
 Disallow: /stats
 
-# Sitemap
+# ---- Sitemap ----
 Sitemap: https://leclosdelareine.com/sitemap.xml

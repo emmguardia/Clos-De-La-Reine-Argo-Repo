@@ -68,6 +68,29 @@ export default function HomePage() {
         description="Accessoires artisanaux pour chiens — colliers, laisses et harnais faits à la main avec des matières de qualité, pour les chiens qui ont du style."
         path="/"
         ogImage="/Images/header2.webp"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "LocalBusiness",
+          "name": "Le Clos de la Reine",
+          "description": "Accessoires artisanaux pour chiens — colliers, laisses et harnais en cuir végétal, finitions sellier, production atelier française.",
+          "url": "https://leclosdelareine.com",
+          "logo": "https://leclosdelareine.com/Images/Logo.webp",
+          "image": "https://leclosdelareine.com/Images/header.webp",
+          "email": "closdelareine@gmail.com",
+          "telephone": "+33628462644",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "1 Chemin de la Marnière",
+            "addressLocality": "Lésigny",
+            "postalCode": "77150",
+            "addressCountry": "FR"
+          },
+          "priceRange": "€€",
+          "currenciesAccepted": "EUR",
+          "paymentAccepted": "Credit Card",
+          "openingHours": "Mo-Su 00:00-23:59",
+          "sameAs": []
+        }}
       />
       <section className="relative overflow-hidden bg-gradient-to-b from-white via-gray-50 to-gray-100">
         <div className="absolute inset-0 overflow-hidden">

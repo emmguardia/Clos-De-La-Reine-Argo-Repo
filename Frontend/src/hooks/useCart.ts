@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getTokenFromStorage, safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
@@ -12,6 +13,7 @@ export interface CartItem {
 }
 
 export function useCart() {
+  const navigate = useNavigate();
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(() => !!getTokenFromStorage());
 
@@ -50,7 +52,7 @@ export function useCart() {
   const addToCart = async (productId: number, quantity: number = 1, size?: string, productName?: string) => {
     const token = getTokenFromStorage();
     if (!token) {
-      window.location.href = '/connexion';
+      navigate('/connexion');
       return;
     }
 

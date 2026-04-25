@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getTokenFromStorage, safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
 export function useFavorites() {
+  const navigate = useNavigate();
   const [favorites, setFavorites] = useState<number[]>([]);
   const [loading, setLoading] = useState(() => !!getTokenFromStorage());
 
@@ -59,7 +61,7 @@ export function useFavorites() {
   const addFavorite = async (productId: number) => {
     const token = getTokenFromStorage();
     if (!token) {
-      window.location.href = '/connexion';
+      navigate('/connexion');
       return;
     }
 

@@ -51,7 +51,7 @@ export default function ProductCard({ product, showCollection = true, compact = 
       <div className={`${compact ? 'h-52' : 'h-56'} relative overflow-hidden`}>
         <img
           src={product.image}
-          alt={product.name}
+          alt={`${product.name} — ${product.category} pour chien artisanal | Clos de la Reine`}
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
         />

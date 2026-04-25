@@ -1,10 +1,13 @@
 import { X, ChevronLeft, ChevronRight, Heart, ShoppingCart, ChevronDown, Check } from 'lucide-react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Helmet } from 'react-helmet-async';
 import type { Product } from '../data/products';
 import { fetchProductById } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
 import { useCart } from '../hooks/useCart';
 import { trackEvent } from '../utils/analytics';
+
+const BASE_URL = 'https://leclosdelareine.com';
 
 interface ProductModalProps {
   product: Product | null;
@@ -68,6 +71,27 @@ function ProductModalBody({
   }, []);
 
   const hasMultipleImages = images.length > 1;
+
+  // Schema.org Product JSON-LD — injecté dans <head> pendant l'ouverture du modal
+  const productJsonLd = useMemo(() => ({
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+    ...(product.briefDescription ? { description: product.briefDescription } : {}),
+    image: images.map((img) => img.startsWith('http') ? img : `${BASE_URL}${img}`),
+    brand: { '@type': 'Brand', name: 'Clos de la Reine' },
+    category: product.category,
+    offers: {
+      '@type': 'Offer',
+      priceCurrency: 'EUR',
+      price: product.price.toFixed(2),
+      availability: 'https://schema.org/InStock',
+      url: `${BASE_URL}/boutique`,
+      priceValidUntil: new Date(new Date().getFullYear() + 1, 0, 1).toISOString().split('T')[0],
+      seller: { '@type': 'Organization', name: 'Clos de la Reine' },
+    },
+  }), [product, images]);
+
   const [guideOpen, setGuideOpen] = useState(false);
   const needsSizeSelection = product.category === 'laisses' || product.category === 'colliers' || product.category === 'harnais';
   const laisseSizes = ['1m', '1m20'];
@@ -89,6 +113,10 @@ function ProductModalBody({
     onClose();
   };
   return (
+    <>
+    <Helmet>
+      <script type="application/ld+json">{JSON.stringify(productJsonLd)}</script>
+    </Helmet>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn"
       role="dialog"
@@ -317,6 +345,7 @@ function ProductModalBody({
         </div>
       </div>
     </div>
+    </>
   );
 }
 

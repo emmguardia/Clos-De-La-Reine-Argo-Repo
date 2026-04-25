@@ -68,12 +68,28 @@ export default function FAQPage() {
       </div>
     );
   }
+  const faqJsonLd = faqs.length > 0
+    ? {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": faqs.map((faq) => ({
+          "@type": "Question",
+          "name": faq.question,
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": faq.answer
+          }
+        }))
+      }
+    : undefined;
+
   return (
     <>
     <SEO
       title="FAQ"
       description="Réponses à vos questions sur nos produits artisanaux pour chiens — matières, entretien, commandes, livraison."
       path="/faq"
+      jsonLd={faqJsonLd}
     />
     <div className="bg-white min-h-screen">
       <div className="relative border-b border-black/5">

@@ -33,15 +33,12 @@ export default function CounterProposalPage() {
 
   const fetchOrder = async () => {
     try {
-      const token = getTokenFromStorage();
-      if (!token) {
+      if (!getTokenFromStorage()) {
         navigate('/connexion');
         return;
       }
       const response = await fetch(`${API_URL}/api/orders`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include'
       });
       if (response.ok) {
         const orders = await safeJsonResponse(response, []);
@@ -81,19 +78,16 @@ export default function CounterProposalPage() {
     setSubmitting(true);
     setError('');
     try {
-      const token = getTokenFromStorage();
-      if (!token) {
+      if (!getTokenFromStorage()) {
         setError('Session expirée. Veuillez vous reconnecter.');
         navigate('/connexion');
         return;
       }
-      
+
       const response = await fetch(`${API_URL}/api/orders/${orderId}/counter-proposal`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ accept: true })
       });
       if (response.ok) {
@@ -117,20 +111,17 @@ export default function CounterProposalPage() {
     setSubmitting(true);
     setError('');
     try {
-      const token = getTokenFromStorage();
-      if (!token) {
+      if (!getTokenFromStorage()) {
         setError('Session expirée. Veuillez vous reconnecter.');
         navigate('/connexion');
         return;
       }
-      
+
       const total = newProposal.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       const response = await fetch(`${API_URL}/api/orders/${orderId}/counter-proposal`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           accept: false,
           newProposal: {

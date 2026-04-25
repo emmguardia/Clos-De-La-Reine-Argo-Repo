@@ -149,13 +149,12 @@ export default function PaymentPage() {
 
   const fetchOrder = useCallback(async () => {
     try {
-      const token = getTokenFromStorage();
-      if (!token) {
+      if (!getTokenFromStorage()) {
         navigate('/connexion');
         return;
       }
       const response = await fetch(`${API_URL}/api/orders`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       if (response.ok) {
         const orders = await safeJsonResponse(response, []) as Array<{
@@ -310,8 +309,7 @@ export default function PaymentPage() {
     } catch {
       /* ignore */
     }
-    const token = getTokenFromStorage();
-    if (!token) {
+    if (!getTokenFromStorage()) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setError('Session expirée. Connectez-vous pour confirmer le paiement.');
       return;
@@ -330,7 +328,8 @@ export default function PaymentPage() {
         const url = `${API_URL}/api/orders/${orderId}/payment`;
         const res = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ paymentIntentId, shippingAddress: ship })
         });
         if (res.ok) {
@@ -380,14 +379,13 @@ export default function PaymentPage() {
   }, []);
   useEffect(() => {
     if (!orderId || !effectiveStripeKey || !order || clientSecretFromUrl || hasClientSecretInUrl) return;
-    const token = getTokenFromStorage();
-    if (!token) return;
+    if (!getTokenFromStorage()) return;
     let cancelled = false;
     (async () => {
       try {
         const res = await fetch(`${API_URL}/api/orders/${orderId}/create-payment-intent`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` }
+          credentials: 'include'
         });
         if (!res.ok || cancelled) return;
         const data = await safeJsonResponse(res, {}) as { clientSecret?: string };
@@ -453,18 +451,15 @@ export default function PaymentPage() {
     setError('');
     setSubmitting(true);
     try {
-      const token = getTokenFromStorage();
-      if (!token) {
+      if (!getTokenFromStorage()) {
         setError('Session expirée.');
         navigate('/connexion');
         return;
       }
       const response = await fetch(`${API_URL}/api/orders/${orderId}/payment`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           paymentMethod: 'stripe',
           shippingAddress
@@ -488,11 +483,11 @@ export default function PaymentPage() {
   };
 
   const handlePaymentConfirmed = useCallback(async (paymentIntentId: string) => {
-    const token = getTokenFromStorage();
-    if (!token || !orderId) return;
+    if (!getTokenFromStorage() || !orderId) return;
     const res = await fetch(`${API_URL}/api/orders/${orderId}/payment`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ paymentIntentId, shippingAddress })
     });
     if (res.ok) {

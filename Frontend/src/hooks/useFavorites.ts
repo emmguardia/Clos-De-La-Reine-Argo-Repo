@@ -10,14 +10,11 @@ export function useFavorites() {
   const [loading, setLoading] = useState(() => !!getTokenFromStorage());
 
   const fetchFavorites = async () => {
-    const token = getTokenFromStorage();
-    if (!token) return;
+    if (!getTokenFromStorage()) return;
 
     try {
       const response = await fetch(`${API_URL}/api/favorites`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await safeJsonResponse(response, []);
@@ -29,17 +26,12 @@ export function useFavorites() {
           );
           setFavorites(validFavorites);
           if (validFavorites.length !== data.length) {
-            const token = getTokenFromStorage();
-            if (token) {
-              await fetch(`${API_URL}/api/favorites`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ productIds: validFavorites })
-              });
-            }
+            await fetch(`${API_URL}/api/favorites`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ productIds: validFavorites })
+            });
           }
         } else {
           setFavorites(data);
@@ -59,8 +51,7 @@ export function useFavorites() {
   }, []);
 
   const addFavorite = async (productId: number) => {
-    const token = getTokenFromStorage();
-    if (!token) {
+    if (!getTokenFromStorage()) {
       navigate('/connexion');
       return;
     }
@@ -72,10 +63,8 @@ export function useFavorites() {
     try {
       const response = await fetch(`${API_URL}/api/favorites`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ productId })
       });
       if (response.ok) {
@@ -91,8 +80,7 @@ export function useFavorites() {
   };
 
   const removeFavorite = async (productId: number) => {
-    const token = getTokenFromStorage();
-    if (!token) return;
+    if (!getTokenFromStorage()) return;
 
     if (!Number.isInteger(productId) || productId <= 0) {
       return;
@@ -101,9 +89,7 @@ export function useFavorites() {
     try {
       const response = await fetch(`${API_URL}/api/favorites/${productId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await safeJsonResponse(response, { productIds: [] });

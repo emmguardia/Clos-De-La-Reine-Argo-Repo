@@ -54,6 +54,7 @@ export default function RegisterPage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           firstName: formData.firstName,
           lastName: formData.lastName,
@@ -62,15 +63,15 @@ export default function RegisterPage() {
         }),
       });
 
-      const data = await safeJsonResponse(response, { error: 'Erreur lors de l\'inscription' }) as { error?: string; token?: string; user?: { id?: string; email?: string; firstName?: string; lastName?: string } };
+      const data = await safeJsonResponse(response, { error: 'Erreur lors de l\'inscription' }) as { error?: string; user?: { id?: string; email?: string; firstName?: string; lastName?: string } };
 
       if (!response.ok) {
         throw new Error(data.error || 'Erreur lors de l\'inscription');
       }
 
-      if (data.token && typeof data.token === 'string' && data.user) {
+      if (data.user) {
         trackEvent('register_success', {});
-        localStorage.setItem('token', data.token);
+        localStorage.setItem('isLoggedIn', 'true');
         localStorage.setItem('user', JSON.stringify({
           id: String(data.user.id || ''),
           email: String(data.user.email || '').slice(0, 255),

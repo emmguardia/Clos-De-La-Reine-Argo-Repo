@@ -44,8 +44,7 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const token = getTokenFromStorage();
-    if (!token) {
+    if (!getTokenFromStorage()) {
       navigate('/connexion');
       return;
     }
@@ -53,9 +52,7 @@ export default function CheckoutPage() {
     const fetchUserData = async () => {
       try {
         const response = await fetch(`${API_URL}/api/auth/me`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+          credentials: 'include'
         });
         if (response.ok) {
           const data = await safeJsonResponse(response, {}) as { firstName?: string; lastName?: string; email?: string; phone?: string };
@@ -157,18 +154,15 @@ export default function CheckoutPage() {
     setSubmitting(true);
 
     try {
-      const token = getTokenFromStorage();
-      if (!token) {
+      if (!getTokenFromStorage()) {
         navigate('/connexion');
         return;
       }
 
       const response = await fetch(`${API_URL}/api/orders`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
           body: JSON.stringify({
           items: cartProducts.map(p => ({ productId: p.id, quantity: p.quantity, price: p.unitPrice, size: p.size })),
           shippingAddress: formData,
@@ -215,8 +209,7 @@ export default function CheckoutPage() {
     </div>;
   }
 
-  const token = getTokenFromStorage();
-  if (!token) {
+  if (!getTokenFromStorage()) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb]">
         <div className="text-center">

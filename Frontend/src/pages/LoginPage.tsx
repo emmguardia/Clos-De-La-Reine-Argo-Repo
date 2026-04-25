@@ -41,6 +41,7 @@ export default function LoginPage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           email: formData.email,
           password: formData.password,
@@ -48,15 +49,15 @@ export default function LoginPage() {
         }),
       });
 
-      const data = await safeJsonResponse(response, { error: 'Erreur lors de la connexion' }) as { error?: string; token?: string; user?: { id?: string; email?: string; firstName?: string; lastName?: string } };
+      const data = await safeJsonResponse(response, { error: 'Erreur lors de la connexion' }) as { error?: string; user?: { id?: string; email?: string; firstName?: string; lastName?: string } };
 
       if (!response.ok) {
         throw new Error(data.error || 'Erreur lors de la connexion');
       }
 
-      if (data.token && typeof data.token === 'string' && data.user) {
+      if (data.user) {
         trackEvent('login_success', {});
-        localStorage.setItem('token', data.token);
+        localStorage.setItem('isLoggedIn', 'true');
         localStorage.setItem('user', JSON.stringify({
           id: String(data.user.id || ''),
           email: String(data.user.email || '').slice(0, 255),

@@ -1,6 +1,7 @@
 import express from 'express';
 import compression from 'compression';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { MongoClient, ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -39,6 +40,7 @@ const stripe = STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.startsWith('sk_')
   : null;
 
 app.use(compression());
+app.use(cookieParser());
 app.set('trust proxy', 1);
 const corsAllowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(s => s.trim()).filter(Boolean)
@@ -177,17 +179,27 @@ function validatePassword(password) {
   return password && password.length >= 8 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password);
 }
 
+function getAuthCookieOptions(maxAge) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+    maxAge,
+    path: '/'
+  };
+}
+
 function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = req.cookies?.authToken;
 
   if (!token) {
-    return res.status(401).json({ error: 'Token manquant' });
+    return res.status(401).json({ error: 'Non authentifié' });
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json({ error: 'Token invalide' });
+      res.clearCookie('authToken', { path: '/' });
+      return res.status(403).json({ error: 'Session invalide ou expirée' });
     }
     req.user = user;
     next();
@@ -324,9 +336,10 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    res.cookie('authToken', token, getAuthCookieOptions(7 * 24 * 60 * 60 * 1000));
+
     res.status(201).json({
       message: 'Inscription réussie',
-      token,
       user: {
         id: result.insertedId.toString(),
         email: user.email,
@@ -392,15 +405,17 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     );
 
     const tokenExpiration = rememberMe === true ? '30d' : '1d';
+    const cookieMaxAge = rememberMe === true ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
     const token = jwt.sign(
       { userId: user._id.toString(), email: user.email },
       JWT_SECRET,
       { expiresIn: tokenExpiration }
     );
 
+    res.cookie('authToken', token, getAuthCookieOptions(cookieMaxAge));
+
     res.json({
       message: 'Connexion réussie',
-      token,
       user: {
         id: user._id.toString(),
         email: user.email,
@@ -437,6 +452,11 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     console.error('Erreur lors de la récupération du profil:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('authToken', { path: '/', httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax' });
+  res.json({ message: 'Déconnexion réussie' });
 });
 
 app.put('/api/auth/me', authenticateToken, async (req, res) => {

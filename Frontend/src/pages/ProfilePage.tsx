@@ -3,7 +3,7 @@ import type { ComponentType } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { User, Package, History, LogOut, Download, Trash2, Edit2, Save, X, CreditCard, CheckCircle, XCircle, Clock, Check, MessageSquare, XOctagon, Truck } from 'lucide-react';
 import { useProductsByIds } from '../hooks/useProductsByIds';
-import { safeJsonResponse, safeJsonParse } from '../utils/security';
+import { safeJsonResponse, safeJsonParse, getTokenFromStorage, clearAuthData } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
@@ -46,10 +46,9 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
     const userStr = localStorage.getItem('user');
-    
-    if (!token || !userStr) {
+
+    if (!getTokenFromStorage() || !userStr) {
       navigate('/connexion');
       return;
     }
@@ -57,9 +56,7 @@ export default function ProfilePage() {
     const fetchUserData = async () => {
       try {
         const response = await fetch(`${API_URL}/api/auth/me`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+          credentials: 'include'
         });
 
         if (!response.ok) {
@@ -72,8 +69,7 @@ export default function ProfilePage() {
         }
       } catch (error) {
         console.error('Erreur:', error);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        clearAuthData();
         navigate('/connexion');
       } finally {
         setLoading(false);
@@ -90,11 +86,8 @@ export default function ProfilePage() {
   const fetchOrders = async () => {
     setOrdersLoading(true);
     try {
-      const token = localStorage.getItem('token');
       const response = await fetch(`${API_URL}/api/orders`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await safeJsonResponse(response, []);
@@ -145,8 +138,8 @@ export default function ProfilePage() {
   const historyOrders = orders.filter(o => ['completed', 'rejected'].includes(o.status));
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    fetch(`${API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
+    clearAuthData();
     navigate('/');
     window.location.reload();
   };
@@ -378,12 +371,9 @@ export default function ProfilePage() {
                                     return;
                                   }
                                   try {
-                                    const token = localStorage.getItem('token');
                                     const response = await fetch(`${API_URL}/api/orders/${order.id}/cancel`, {
                                       method: 'PUT',
-                                      headers: {
-                                        'Authorization': `Bearer ${token}`
-                                      }
+                                      credentials: 'include'
                                     });
                                     if (response.ok) {
                                       fetchOrders();
@@ -466,6 +456,7 @@ export default function ProfilePage() {
 }
 
 function InformationsTab({ user, setUser }: { user: UserData; setUser: (user: UserData | null) => void }) {
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     firstName: user.firstName,
@@ -501,13 +492,10 @@ function InformationsTab({ user, setUser }: { user: UserData; setUser: (user: Us
     }
 
     try {
-      const token = localStorage.getItem('token');
       const response = await fetch(`${API_URL}/api/auth/me`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           firstName: formData.firstName,
           lastName: formData.lastName,
@@ -558,11 +546,8 @@ function InformationsTab({ user, setUser }: { user: UserData; setUser: (user: Us
 
   const handleExport = async () => {
     try {
-      const token = localStorage.getItem('token');
       const response = await fetch(`${API_URL}/api/auth/export`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include'
       });
 
       if (!response.ok) {
@@ -594,13 +579,10 @@ function InformationsTab({ user, setUser }: { user: UserData; setUser: (user: Us
     setDeleteLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
       const response = await fetch(`${API_URL}/api/auth/me`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ password: deletePassword })
       });
 
@@ -610,8 +592,8 @@ function InformationsTab({ user, setUser }: { user: UserData; setUser: (user: Us
         throw new Error(data.error || 'Erreur lors de la suppression');
       }
 
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      await fetch(`${API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+      clearAuthData();
       navigate('/');
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Erreur lors de la suppression');

@@ -198,7 +198,8 @@ export default function Header() {
                     <button
                       onClick={() => {
                         trackEvent('logout', { source: 'header' });
-                        localStorage.removeItem('token');
+                        fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+                        localStorage.removeItem('isLoggedIn');
                         localStorage.removeItem('user');
                         setIsProfileMenuOpen(false);
                         window.location.reload();

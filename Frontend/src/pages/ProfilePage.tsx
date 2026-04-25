@@ -612,7 +612,7 @@ function InformationsTab({ user, setUser }: { user: UserData; setUser: (user: Us
 
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/';
+      navigate('/');
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     } finally {

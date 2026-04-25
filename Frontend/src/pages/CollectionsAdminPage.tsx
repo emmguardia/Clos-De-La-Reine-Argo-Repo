@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Save, X, FolderOpen, ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
@@ -13,6 +13,7 @@ interface Collection {
 }
 
 export default function CollectionsAdminPage() {
+  const navigate = useNavigate();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -27,7 +28,7 @@ export default function CollectionsAdminPage() {
     try {
       const token = localStorage.getItem('adminToken');
       if (!token) {
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
       const response = await fetch(`${API_URL}/api/collections`, {
@@ -62,7 +63,7 @@ export default function CollectionsAdminPage() {
     try {
       const token = localStorage.getItem('adminToken');
       if (!token) {
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
 
@@ -131,7 +132,7 @@ export default function CollectionsAdminPage() {
     try {
       const token = localStorage.getItem('adminToken');
       if (!token) {
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
 

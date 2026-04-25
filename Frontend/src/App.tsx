@@ -4,6 +4,7 @@ import { trackEvent } from './utils/analytics';
 import Header from './components/Header';
 import CartToast from './components/CartToast';
 import Footer from './components/Footer';
+import ErrorBoundary from './components/ErrorBoundary';
 // Pages critiques (chargées immédiatement)
 import HomePage from './pages/HomePage';
 import BoutiquePage from './pages/BoutiquePage';
@@ -31,6 +32,7 @@ const CollectionsAdminPage = lazy(() => import('./pages/CollectionsAdminPage'));
 const FAQAdminPage = lazy(() => import('./pages/FAQAdminPage'));
 const StatsPage = lazy(() => import('./pages/StatsPage'));
 const AdminPromoCodesPage = lazy(() => import('./pages/AdminPromoCodesPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
@@ -55,6 +57,7 @@ function App() {
       <PageViewTracker />
       <Header />
       <CartToast />
+      <ErrorBoundary>
       <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><p className="text-gray-500">Chargement...</p></div>}>
       <Routes>
         <Route path="/" element={<HomePage />} />
@@ -81,8 +84,10 @@ function App() {
         <Route path="/cgv" element={<CGVPage />} />
         <Route path="/mentions-legales" element={<MentionsLegalesPage />} />
         <Route path="/politique-confidentialite" element={<PolitiqueConfidentialitePage />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
       </Suspense>
+      </ErrorBoundary>
       <Footer />
     </div>
   );

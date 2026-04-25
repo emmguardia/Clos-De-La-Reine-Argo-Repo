@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit, Trash2, Save, X, HelpCircle, ArrowLeft, GripVertical } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   DndContext,
   closestCenter,
@@ -104,6 +104,7 @@ function SortableFAQRow({
 }
 
 export default function FAQAdminPage() {
+  const navigate = useNavigate();
   const [faqs, setFaqs] = useState<FAQItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -122,7 +123,7 @@ export default function FAQAdminPage() {
     try {
       const token = localStorage.getItem('adminToken');
       if (!token) {
-        window.location.href = '/connexion';
+        navigate('/connexion');
         return;
       }
       const response = await fetch(`${API_URL}/api/faq`, {
@@ -156,7 +157,7 @@ export default function FAQAdminPage() {
     try {
       const token = localStorage.getItem('adminToken');
       if (!token) {
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
 

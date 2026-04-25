@@ -9,6 +9,9 @@ export default defineConfig({
   build: {
     assetsDir: 'assets',
     copyPublicDir: true,
+    // Disable the inline modulepreload polyfill — all modern browsers support it natively
+    // This removes the last inline <script> from the built HTML, enabling a strict CSP
+    modulePreload: { polyfill: false },
     rollupOptions: {
       output: {
         assetFileNames: 'assets/[name].[ext]',

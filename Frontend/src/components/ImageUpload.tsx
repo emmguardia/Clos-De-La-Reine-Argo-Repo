@@ -71,23 +71,20 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Im
           return;
         }
         
-        const adminToken = localStorage.getItem('adminToken');
-        if (!adminToken) {
+        if (!localStorage.getItem('isAdminLoggedIn')) {
           setError('Session expirée. Veuillez vous reconnecter.');
           setUploading(false);
           return;
         }
-        
+
         const response = await fetch(`${API_URL}/api/images/upload`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${adminToken}`
-          },
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             image: base64,
-            name: file.name.slice(0, 255).replace(/[^a-zA-Z0-9._-]/g, '_')
-          })
+            name: file.name.slice(0, 255).replace(/[^a-zA-Z0-9._-]/g, '_'),
+          }),
         });
 
         if (!response.ok) {

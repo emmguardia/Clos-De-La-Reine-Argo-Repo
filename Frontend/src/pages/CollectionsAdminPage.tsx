@@ -26,15 +26,12 @@ export default function CollectionsAdminPage() {
 
   const fetchCollections = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         navigate('/admin/login');
         return;
       }
       const response = await fetch(`${API_URL}/api/collections`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include',
       });
       if (response.ok) {
         const data = await safeJsonResponse(response, []);
@@ -61,8 +58,7 @@ export default function CollectionsAdminPage() {
     setSuccess('');
 
     try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         navigate('/admin/login');
         return;
       }
@@ -78,24 +74,16 @@ export default function CollectionsAdminPage() {
       if (editingId) {
         response = await fetch(`${API_URL}/api/collections/${editingId}`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            name: sanitizedName
-          })
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ name: sanitizedName }),
         });
       } else {
         response = await fetch(`${API_URL}/api/collections`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            name: sanitizedName
-          })
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ name: sanitizedName }),
         });
       }
 
@@ -130,17 +118,14 @@ export default function CollectionsAdminPage() {
     }
 
     try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         navigate('/admin/login');
         return;
       }
 
       const response = await fetch(`${API_URL}/api/collections/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include',
       });
 
       if (response.ok) {

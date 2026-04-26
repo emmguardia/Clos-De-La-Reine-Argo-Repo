@@ -1,4 +1,5 @@
 import express from 'express';
+import helmet from 'helmet';
 import compression from 'compression';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -42,6 +43,31 @@ const stripe = STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.startsWith('sk_')
 app.use(compression());
 app.use(cookieParser());
 app.set('trust proxy', 1);
+
+// ---------------------------------------------------------------------------
+// Helmet — security headers (supprime X-Powered-By, ajoute HSTS, CSP, etc.)
+// crossOriginEmbedderPolicy désactivé : le frontend appelle ce backend via CORS
+// ---------------------------------------------------------------------------
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+  strictTransportSecurity: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}));
+// Permissions-Policy non couvert par helmet par défaut
+app.use((_req, res, next) => {
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  next();
+});
+
+// ---------------------------------------------------------------------------
+// CORS — origines explicites depuis FRONTEND_URL (env), localhost en dev
+// ---------------------------------------------------------------------------
 const corsAllowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(s => s.trim()).filter(Boolean)
   : (process.env.NODE_ENV === 'production' ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173']);
@@ -53,22 +79,17 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }));
 
+// ---------------------------------------------------------------------------
+// Body parsing — limite générale 1 Mo ; route upload images tolère 10 Mo
+// ---------------------------------------------------------------------------
 app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;");
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
-  next();
+  const limit = req.path === '/api/images/upload' ? '10mb' : '1mb';
+  express.json({ limit, strict: true })(req, res, next);
 });
-
-app.use(express.json({ limit: '50mb', strict: true }));
-app.use(express.urlencoded({ extended: true, limit: '50mb', parameterLimit: 100 }));
+app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 100 }));
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -123,6 +144,9 @@ function escapeMongoRegex(str) {
 }
 
 app.use('/api', apiLimiter);
+// Limiter strict sur toutes les routes d'authentification utilisateur
+// (login + register ont en plus authLimiter en tant que middleware de route)
+app.use('/api/auth', authLimiter);
 
 const SALT_ROUNDS = 12;
 const ADMIN_JWT_EXPIRATION = '8h';
@@ -183,9 +207,20 @@ function getAuthCookieOptions(maxAge) {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+    sameSite: 'lax',   // Lax : protège contre CSRF tout en laissant passer les liens entrants
     maxAge,
-    path: '/'
+    path: '/',
+  };
+}
+
+function getAdminCookieOptions() {
+  // 8h = durée de session admin (ADMIN_JWT_EXPIRATION)
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 8 * 60 * 60 * 1000,
+    path: '/',
   };
 }
 
@@ -207,8 +242,9 @@ function authenticateToken(req, res, next) {
 }
 
 async function authenticateAdmin(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  // Priorité : cookie httpOnly (sécurisé) > header Authorization (rétrocompat)
+  const token = req.cookies?.adminAuthToken
+    || (req.headers['authorization']?.split(' ')[1]);
 
   if (!token) {
     return res.status(401).json({ error: 'Token manquant' });
@@ -1936,11 +1972,10 @@ app.post('/api/admin/login', adminLoginLimiter, async (req, res) => {
 
     await detectBotPattern();
 
-    res.json({
-      message: 'Connexion admin réussie',
-      token,
-      expiresIn: ADMIN_JWT_EXPIRATION
-    });
+    // Stocker le token dans un cookie httpOnly (non accessible via JS)
+    res.cookie('adminAuthToken', token, getAdminCookieOptions());
+
+    res.json({ message: 'Connexion admin réussie' });
   } catch (error) {
     console.error('Erreur lors de la connexion admin:', error);
     const clientIp = req.ip || req.socket?.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
@@ -1949,6 +1984,11 @@ app.post('/api/admin/login', adminLoginLimiter, async (req, res) => {
     await logAdminAttempt(clientIp, false, { reason: 'Erreur serveur', userAgent });
     res.status(500).json({ error: 'Erreur serveur' });
   }
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  res.clearCookie('adminAuthToken', { path: '/' });
+  res.json({ message: 'Déconnexion admin réussie' });
 });
 
 async function isIpBanned(ip) {

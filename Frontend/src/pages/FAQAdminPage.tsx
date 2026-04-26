@@ -121,15 +121,12 @@ export default function FAQAdminPage() {
 
   const fetchFAQs = useCallback(async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) {
-        navigate('/connexion');
+      if (!localStorage.getItem('isAdminLoggedIn')) {
+        navigate('/admin/login');
         return;
       }
       const response = await fetch(`${API_URL}/api/faq`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include',
       });
       if (response.ok) {
         const data = await safeJsonResponse(response, []);
@@ -155,8 +152,7 @@ export default function FAQAdminPage() {
     setSuccess('');
 
     try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         navigate('/admin/login');
         return;
       }
@@ -171,35 +167,26 @@ export default function FAQAdminPage() {
       }
 
       let response;
+      const faqPayload = {
+        category: sanitizedCategory,
+        question: sanitizedQuestion,
+        answer: sanitizedAnswer,
+        order: parseInt(String(formData.order)) || 0,
+        categoryOrder: parseInt(String(formData.categoryOrder)) || 0,
+      };
       if (editingId) {
         response = await fetch(`${API_URL}/api/faq/${editingId}`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            category: sanitizedCategory,
-            question: sanitizedQuestion,
-            answer: sanitizedAnswer,
-            order: parseInt(String(formData.order)) || 0,
-            categoryOrder: parseInt(String(formData.categoryOrder)) || 0
-          })
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(faqPayload),
         });
       } else {
         response = await fetch(`${API_URL}/api/faq`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            category: sanitizedCategory,
-            question: sanitizedQuestion,
-            answer: sanitizedAnswer,
-            order: parseInt(String(formData.order)) || 0,
-            categoryOrder: parseInt(String(formData.categoryOrder)) || 0
-          })
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(faqPayload),
         });
       }
 
@@ -238,14 +225,11 @@ export default function FAQAdminPage() {
     }
 
     try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) return;
+      if (!localStorage.getItem('isAdminLoggedIn')) return;
 
       const response = await fetch(`${API_URL}/api/faq/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -283,17 +267,14 @@ export default function FAQAdminPage() {
     setFaqs(newFaqs);
     setSuccess('Ordre mis à jour');
     try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) return;
+      if (!localStorage.getItem('isAdminLoggedIn')) return;
       await fetch(`${API_URL}/api/faq/reorder`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
-          items: newFaqs.map((f, i) => ({ id: f.id, sortOrder: i }))
-        })
+          items: newFaqs.map((f, i) => ({ id: f.id, sortOrder: i })),
+        }),
       });
     } catch {
       setError('Erreur lors de la mise à jour de l\'ordre');

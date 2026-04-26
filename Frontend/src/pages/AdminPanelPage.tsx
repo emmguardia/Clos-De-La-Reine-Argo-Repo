@@ -78,10 +78,9 @@ export default function AdminPanelPage() {
 
   const fetchPaymentStats = async () => {
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) return;
+      if (!localStorage.getItem('isAdminLoggedIn')) return;
       const response = await fetch(`${API_URL}/api/stats`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
+        credentials: 'include',
       });
       if (response.ok) {
         const data = await safeJsonResponse(response, null);
@@ -105,10 +104,9 @@ export default function AdminPanelPage() {
 
   const fetchGalleryItems = async () => {
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) return;
+      if (!localStorage.getItem('isAdminLoggedIn')) return;
       const response = await fetch(`${API_URL}/api/gallery?limit=200`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
+        credentials: 'include',
       });
       if (response.ok) {
         const data = await safeJsonResponse(response, { images: [] });
@@ -124,18 +122,12 @@ export default function AdminPanelPage() {
 
   const verifyAdminToken = async () => {
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        navigate('/admin/login');
-        return;
-      }
-
       const response = await fetch(`${API_URL}/api/admin/verify`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
+        credentials: 'include',
       });
 
       if (!response.ok) {
-        localStorage.removeItem('adminToken');
+        localStorage.removeItem('isAdminLoggedIn');
         navigate('/admin/login');
         return;
       }
@@ -144,14 +136,13 @@ export default function AdminPanelPage() {
       fetchGalleryItems();
       fetchPaymentStats();
     } catch {
-      localStorage.removeItem('adminToken');
+      localStorage.removeItem('isAdminLoggedIn');
       navigate('/admin/login');
     }
   };
 
   useEffect(() => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
+    if (!localStorage.getItem('isAdminLoggedIn')) {
       navigate('/admin/login');
       return;
     }
@@ -166,8 +157,7 @@ export default function AdminPanelPage() {
     setGallerySuccess('');
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         navigate('/admin/login');
         return;
       }
@@ -184,10 +174,8 @@ export default function AdminPanelPage() {
 
       const response = await fetch(`${API_URL}/api/gallery`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           name: sanitizedName,
           type: galleryFormType,
@@ -213,8 +201,7 @@ export default function AdminPanelPage() {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette image ?')) return;
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         navigate('/admin/login');
         return;
       }
@@ -222,7 +209,7 @@ export default function AdminPanelPage() {
       setGalleryDeleteLoading(prev => ({ ...prev, [id]: true }));
       const response = await fetch(`${API_URL}/api/gallery/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${adminToken}` }
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -325,26 +312,23 @@ export default function AdminPanelPage() {
     }
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         setFormError('Session expirée. Veuillez vous reconnecter.');
         setFormLoading(false);
         navigate('/admin/login');
         return;
       }
-      
-      const url = editingProduct 
+
+      const url = editingProduct
         ? `${API_URL}/api/products/${editingProduct.id}`
         : `${API_URL}/api/products`;
-      
+
       const method = editingProduct ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           name: formData.name.trim(),
           price: parseFloat(formData.price),
@@ -388,8 +372,7 @@ export default function AdminPanelPage() {
     setDeleteLoading(prev => ({ ...prev, [productId]: true }));
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         alert('Session expirée. Veuillez vous reconnecter.');
         navigate('/admin/login');
         return;
@@ -397,9 +380,7 @@ export default function AdminPanelPage() {
 
       const response = await fetch(`${API_URL}/api/products/${productId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${adminToken}`
-        },
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -419,7 +400,8 @@ export default function AdminPanelPage() {
 
   const handleLogout = () => {
     if (confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
-      localStorage.removeItem('adminToken');
+      fetch(`${API_URL}/api/admin/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
+      localStorage.removeItem('isAdminLoggedIn');
       navigate('/admin/login');
     }
   };

@@ -60,20 +60,17 @@ export default function OrdersAdminPage() {
 
   const fetchOrders = async () => {
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         navigate('/admin/login');
         return;
       }
 
       const response = await fetch(`${API_URL}/api/orders/admin`, {
-        headers: {
-          'Authorization': `Bearer ${adminToken}`
-        }
+        credentials: 'include',
       });
 
       if (response.status === 401 || response.status === 403) {
-        localStorage.removeItem('adminToken');
+        localStorage.removeItem('isAdminLoggedIn');
         navigate('/admin/login');
         return;
       }
@@ -93,32 +90,25 @@ export default function OrdersAdminPage() {
 
   const verifyAdminToken = async () => {
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        navigate('/admin/login');
-        return;
-      }
-
       const response = await fetch(`${API_URL}/api/admin/verify`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
+        credentials: 'include',
       });
 
       if (!response.ok) {
-        localStorage.removeItem('adminToken');
+        localStorage.removeItem('isAdminLoggedIn');
         navigate('/admin/login');
         return;
       }
 
       fetchOrders();
     } catch {
-      localStorage.removeItem('adminToken');
+      localStorage.removeItem('isAdminLoggedIn');
       navigate('/admin/login');
     }
   };
 
   useEffect(() => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
+    if (!localStorage.getItem('isAdminLoggedIn')) {
       navigate('/admin/login');
       return;
     }
@@ -133,8 +123,7 @@ export default function OrdersAdminPage() {
     setSuccess('');
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         setError('Session expirée. Veuillez vous reconnecter.');
         navigate('/admin/login');
         return;
@@ -144,37 +133,31 @@ export default function OrdersAdminPage() {
       if (action === 'accept') {
         response = await fetch(`${API_URL}/api/orders/${selectedOrder.id}/status`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${adminToken}`
-          },
-          body: JSON.stringify({ status: 'validated' })
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ status: 'validated' }),
         });
       } else if (action === 'reject') {
         response = await fetch(`${API_URL}/api/orders/${selectedOrder.id}/status`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${adminToken}`
-          },
-          body: JSON.stringify({ status: 'rejected', rejectionReason })
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ status: 'rejected', rejectionReason }),
         });
       } else if (action === 'counter') {
         const total = counterProposal.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         response = await fetch(`${API_URL}/api/orders/${selectedOrder.id}/status`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${adminToken}`
-          },
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             status: 'pending_validation',
             counterProposal: {
               items: counterProposal.items,
               total,
-              message: counterProposal.message
-            }
-          })
+              message: counterProposal.message,
+            },
+          }),
         });
       }
 
@@ -198,18 +181,15 @@ export default function OrdersAdminPage() {
 
   const handleShipping = async (orderId: string) => {
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         navigate('/admin/login');
         return;
       }
       const response = await fetch(`${API_URL}/api/orders/${orderId}/status`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`
-        },
-        body: JSON.stringify({ status: 'shipping' })
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: 'shipping' }),
       });
       if (response.ok) {
         fetchOrders();
@@ -224,19 +204,16 @@ export default function OrdersAdminPage() {
       return;
     }
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         navigate('/admin/login');
         return;
       }
-      
+
       const response = await fetch(`${API_URL}/api/orders/${orderId}/status`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`
-        },
-        body: JSON.stringify({ status: 'rejected', rejectionReason: reason })
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: 'rejected', rejectionReason: reason }),
       });
       
       if (response.ok) {
@@ -256,16 +233,13 @@ export default function OrdersAdminPage() {
       return;
     }
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         navigate('/admin/login');
         return;
       }
       const response = await fetch(`${API_URL}/api/orders/${orderId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${adminToken}`
-        }
+        credentials: 'include',
       });
       if (response.ok) {
         setSuccess('Commande supprimée avec succès');
@@ -553,18 +527,15 @@ export default function OrdersAdminPage() {
             <button
               onClick={async () => {
                 try {
-                  const adminToken = localStorage.getItem('adminToken');
-                  if (!adminToken) {
+                  if (!localStorage.getItem('isAdminLoggedIn')) {
                     navigate('/admin/login');
                     return;
                   }
                   const response = await fetch(`${API_URL}/api/orders/${order.id}/status`, {
                     method: 'PUT',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${adminToken}`
-                    },
-                    body: JSON.stringify({ status: 'completed' })
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ status: 'completed' }),
                   });
                   if (response.ok) {
                     fetchOrders();

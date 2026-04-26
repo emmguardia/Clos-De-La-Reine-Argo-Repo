@@ -43,20 +43,17 @@ export default function AdminPromoCodesPage() {
 
   const fetchPromoCodes = async () => {
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         navigate('/admin/login');
         return;
       }
 
       const response = await fetch(`${API_URL}/api/promo-codes`, {
-        headers: {
-          'Authorization': `Bearer ${adminToken}`
-        }
+        credentials: 'include',
       });
 
       if (response.status === 401 || response.status === 403) {
-        localStorage.removeItem('adminToken');
+        localStorage.removeItem('isAdminLoggedIn');
         navigate('/admin/login');
         return;
       }
@@ -72,32 +69,25 @@ export default function AdminPromoCodesPage() {
 
   const verifyAdminToken = async () => {
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        navigate('/admin/login');
-        return;
-      }
-
       const response = await fetch(`${API_URL}/api/admin/verify`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
+        credentials: 'include',
       });
 
       if (!response.ok) {
-        localStorage.removeItem('adminToken');
+        localStorage.removeItem('isAdminLoggedIn');
         navigate('/admin/login');
         return;
       }
 
       fetchPromoCodes();
     } catch {
-      localStorage.removeItem('adminToken');
+      localStorage.removeItem('isAdminLoggedIn');
       navigate('/admin/login');
     }
   };
 
   useEffect(() => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
+    if (!localStorage.getItem('isAdminLoggedIn')) {
       navigate('/admin/login');
       return;
     }
@@ -156,8 +146,7 @@ export default function AdminPromoCodesPage() {
     setFormLoading(true);
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         setFormError('Session expirée');
         navigate('/admin/login');
         return;
@@ -193,11 +182,9 @@ export default function AdminPromoCodesPage() {
 
       const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`
-        },
-        body: JSON.stringify(payload)
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
       });
 
       const data = await safeJsonResponse(response, { error: 'Erreur' });
@@ -226,8 +213,7 @@ export default function AdminPromoCodesPage() {
     setDeleteLoading({ ...deleteLoading, [id]: true });
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         alert('Session expirée');
         navigate('/admin/login');
         return;
@@ -235,9 +221,7 @@ export default function AdminPromoCodesPage() {
 
       const response = await fetch(`${API_URL}/api/promo-codes/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${adminToken}`
-        }
+        credentials: 'include',
       });
 
       if (!response.ok) {

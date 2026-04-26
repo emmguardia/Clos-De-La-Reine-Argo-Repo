@@ -14,26 +14,22 @@ export default function LoginAdminPage() {
 
   const verifyAdminToken = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) return;
-
       const response = await fetch(`${API_URL}/api/admin/verify`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include',
       });
 
       if (response.ok) {
         navigate('/admin');
       } else {
-        localStorage.removeItem('adminToken');
+        localStorage.removeItem('isAdminLoggedIn');
       }
     } catch {
-      localStorage.removeItem('adminToken');
+      localStorage.removeItem('isAdminLoggedIn');
     }
   };
 
   useEffect(() => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (adminToken) {
+    if (localStorage.getItem('isAdminLoggedIn')) {
       verifyAdminToken();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -58,16 +54,15 @@ export default function LoginAdminPage() {
     try {
       const response = await fetch(`${API_URL}/api/admin/login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ password })
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ password }),
       });
 
       const data = await response.json();
 
-      if (response.ok && data.token) {
-        localStorage.setItem('adminToken', data.token);
+      if (response.ok) {
+        localStorage.setItem('isAdminLoggedIn', 'true');
         setPassword('');
         setAttempts(0);
         navigate('/admin');

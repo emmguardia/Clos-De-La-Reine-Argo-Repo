@@ -50,8 +50,7 @@ export default function StatsPage() {
   const [allCategories, setAllCategories] = useState<string[]>([]);
 
   const fetchStats = useCallback(async (p: Period, col: string, cat: string) => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) { navigate('/admin/login'); return; }
+    if (!localStorage.getItem('isAdminLoggedIn')) { navigate('/admin/login'); return; }
     setLoading(true);
     try {
       const { from, to } = periodToRange(p);
@@ -59,9 +58,9 @@ export default function StatsPage() {
       if (col) params.set('collection', col);
       if (cat) params.set('category', cat);
       const response = await fetch(`${API_URL}/api/stats?${params}`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
+        credentials: 'include',
       });
-      if (response.status === 401 || response.status === 403) { navigate('/admin/login'); return; }
+      if (response.status === 401 || response.status === 403) { localStorage.removeItem('isAdminLoggedIn'); navigate('/admin/login'); return; }
       if (response.ok) {
         const data = await safeJsonResponse(response, null) as Stats | null;
         if (data) {
@@ -80,8 +79,7 @@ export default function StatsPage() {
   }, [navigate, setAllCollections, setAllCategories]);
 
   useEffect(() => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) { navigate('/admin/login'); return; }
+    if (!localStorage.getItem('isAdminLoggedIn')) { navigate('/admin/login'); return; }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchStats(period, filterCollection, filterCategory);
   }, [period, filterCollection, filterCategory, fetchStats, navigate]);

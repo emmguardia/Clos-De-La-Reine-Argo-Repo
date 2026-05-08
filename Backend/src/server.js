@@ -179,7 +179,13 @@ async function connectToDatabase() {
     await db.collection('carts').createIndex({ userId: 1 }).catch(() => {});
     await db.collection('favorites').createIndex({ userId: 1 }).catch(() => {});
     await db.collection('orders').createIndex({ userId: 1 }).catch(() => {});
-    await db.collection('orders').createIndex({ orderNumber: 1 }).catch(() => {});
+    // unique + partial pour ignorer les anciens docs sans orderNumber.
+    // S'il existait déjà un index non-unique, on le warn (ne casse pas le boot).
+    await db.collection('orders').createIndex(
+      { orderNumber: 1 },
+      { unique: true, partialFilterExpression: { orderNumber: { $type: 'string' } } }
+    ).catch((e) => console.warn('[index orderNumber unique] non créé:', e.message));
+    await db.collection('counters').createIndex({ _id: 1 }).catch(() => {});
     await db.collection('ip_bans').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }).catch(() => {});
     await db.collection('admin_login_attempts').createIndex({ timestamp: 1 }, { expireAfterSeconds: 86400 }).catch(() => {});
     console.log('✅ Connecté à MongoDB');
@@ -1548,31 +1554,24 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
       updatedAt: new Date()
     };
     
+    // Numérotation atomique (art. 242 nonies A CGI: séquence sans rupture).
+    // findOneAndUpdate avec $inc est une opération atomique single-doc côté Mongo.
     const now = new Date();
     const year = now.getFullYear().toString();
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const day = now.getDate().toString().padStart(2, '0');
     const dayPrefix = `${year}${month}${day}`;
-    
-    const dayOrders = await db.collection('orders').find({
-      orderNumber: { $regex: `^${dayPrefix}` }
-    }).toArray();
-    
-    let maxNumber = 0;
-    dayOrders.forEach(order => {
-      if (order.orderNumber) {
-        const match = order.orderNumber.match(/^(\d{8})(\d+)$/);
-        if (match) {
-          const num = parseInt(match[2], 10);
-          if (num > maxNumber) {
-            maxNumber = num;
-          }
-        }
-      }
-    });
-    
-    const nextNumber = (maxNumber + 1).toString().padStart(4, '0');
-    const orderNumber = `${dayPrefix}${nextNumber}`;
+
+    const counterDoc = await db.collection('counters').findOneAndUpdate(
+      { _id: `orders:${dayPrefix}` },
+      { $inc: { seq: 1 }, $setOnInsert: { createdAt: now } },
+      { upsert: true, returnDocument: 'after' }
+    );
+    const seq = counterDoc?.seq ?? counterDoc?.value?.seq;
+    if (!Number.isInteger(seq) || seq < 1) {
+      throw new Error('Compteur de numérotation indisponible');
+    }
+    const orderNumber = `${dayPrefix}${seq.toString().padStart(4, '0')}`;
     order.orderNumber = orderNumber;
     const result = await db.collection('orders').insertOne(order);
     await db.collection('carts').updateOne(

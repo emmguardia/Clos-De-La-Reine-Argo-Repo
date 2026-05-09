@@ -10,15 +10,18 @@ import rateLimit from 'express-rate-limit';
 import { sendNewContactNotificationEmail, sendContactConfirmationEmail, sendOrderConfirmationEmail, sendNewOrderNotificationEmail, sendOrderValidatedEmail } from './utils/email.js';
 import { sendInvoiceEmail } from './utils/invoice.js';
 import Stripe from 'stripe';
+import logger from './utils/logger.js';
+import { register as metricsRegister, rateLimitHitsTotal } from './utils/metrics.js';
+import { httpLogger, prometheusMiddleware } from './utils/requestLogger.js';
 
-console.log('[BOOT] Démarrage du serveur...');
+logger.info({ version: process.version, env: process.env.NODE_ENV || 'development' }, '[BOOT] Démarrage du serveur');
 
 process.on('uncaughtException', (err) => {
-  console.error('[CRASH] uncaughtException:', err?.message || err, err?.stack);
+  logger.fatal({ err }, '[CRASH] uncaughtException');
   process.exit(1);
 });
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('[CRASH] unhandledRejection:', reason, promise);
+  logger.fatal({ err: reason, promise: String(promise) }, '[CRASH] unhandledRejection');
   process.exit(1);
 });
 
@@ -40,9 +43,16 @@ const stripe = STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.startsWith('sk_')
   ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-11-20.acacia' })
   : null;
 
+app.set('trust proxy', 1);
+
+// ── Observabilité ──────────────────────────────────────────────────────────────
+// AVANT tous les autres middlewares (en particulier express-rate-limit),
+// pour que MÊME les requêtes 429 soient loguées et comptées.
+app.use(prometheusMiddleware); // compteurs Prometheus
+app.use(httpLogger);           // logs JSON structurés pino-http
+
 app.use(compression());
 app.use(cookieParser());
-app.set('trust proxy', 1);
 
 // ---------------------------------------------------------------------------
 // Helmet — security headers (supprime X-Powered-By, ajoute HSTS, CSP, etc.)
@@ -136,12 +146,55 @@ const apiLimiter = rateLimit({
   message: { error: 'Trop de requêtes. Veuillez réessayer dans une minute.' },
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res, _next, options) => {
+    // Important : on logue + compte chaque hit pour pouvoir diagnostiquer les
+    // boucles de fetch côté front (ex. /api/products?ids=2 spammé en boucle).
+    rateLimitHitsTotal.inc({ limiter: 'api', route: req.baseUrl + req.path });
+    req.log?.warn({
+      limiter: 'api',
+      ip: req.ip,
+      route: req.originalUrl,
+      method: req.method,
+      ua: req.headers['user-agent'],
+    }, '[RATE-LIMIT] /api dépassé (120 req/min)');
+    res.status(options.statusCode).json(options.message);
+  },
 });
 
 function escapeMongoRegex(str) {
   if (typeof str !== 'string') return '';
   return str.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&').slice(0, 200);
 }
+
+// ── Endpoints d'observabilité ─────────────────────────────────────────────────
+// Déclarés AVANT apiLimiter pour ne pas être rate-limités (sondes K8s toutes les 10 s)
+// et AVANT le middleware "DB-required" pour rester dispos quand la DB est down.
+app.get('/api/health', async (_req, res) => {
+  if (!db) return res.status(503).json({ status: 'error', db: 'disconnected', timestamp: new Date().toISOString() });
+  try {
+    await db.command({ ping: 1 });
+    res.json({ status: 'ok', db: 'connected', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'error', db: 'disconnected', timestamp: new Date().toISOString() });
+  }
+});
+
+// Endpoint de scrape Prometheus — protégé par token Bearer si METRICS_TOKEN défini.
+app.get('/api/metrics', async (req, res) => {
+  const metricsToken = process.env.METRICS_TOKEN;
+  if (metricsToken) {
+    const auth = req.headers.authorization;
+    if (!auth || auth !== `Bearer ${metricsToken}`) {
+      return res.status(401).end('Unauthorized');
+    }
+  }
+  try {
+    res.set('Content-Type', metricsRegister.contentType);
+    res.end(await metricsRegister.metrics());
+  } catch (err) {
+    res.status(500).end(err.message);
+  }
+});
 
 app.use('/api', apiLimiter);
 // Limiter strict sur toutes les routes d'authentification utilisateur
@@ -2828,28 +2881,35 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
   }
 });
 
-app.use((err, req, res, next) => {
-  console.error('[EXPRESS] Erreur non gérée:', err?.message || err, err?.stack);
+app.use((err, req, res, _next) => {
+  // pino-http attache déjà req.log, on l'utilise pour conserver le requestId
+  (req.log || logger).error({ err, method: req.method, url: req.originalUrl }, '[EXPRESS] Erreur non gérée');
   if (!res.headersSent) {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-console.log('[BOOT] Écoute sur le port', PORT);
+logger.info({ port: PORT }, '[BOOT] Écoute');
 try {
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Serveur démarré sur le port ${PORT}`);
+    logger.info({
+      port: PORT,
+      env: process.env.NODE_ENV || 'development',
+      api: `http://0.0.0.0:${PORT}/api`,
+      health: `http://0.0.0.0:${PORT}/api/health`,
+      metrics: `http://0.0.0.0:${PORT}/api/metrics`,
+    }, '🚀 Serveur démarré');
     connectToDatabase();
   });
 } catch (err) {
-  console.error('[BOOT] Erreur au démarrage:', err);
+  logger.fatal({ err }, '[BOOT] Erreur au démarrage');
   process.exit(1);
 }
 
 process.on('SIGTERM', async () => {
   if (client) {
     await client.close();
-    console.log('Connexion MongoDB fermée');
+    logger.info('Connexion MongoDB fermée');
   }
   process.exit(0);
 });

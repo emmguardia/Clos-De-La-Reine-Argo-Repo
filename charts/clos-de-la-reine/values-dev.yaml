@@ -30,10 +30,10 @@ backend:
   resources:
     requests:
       cpu: "50m"
-      memory: "128Mi"
+      memory: "256Mi"
     limits:
       cpu: "300m"
-      memory: "256Mi"
+      memory: "512Mi"  # Prod=768Mi — Node.js+Stripe+bcrypt nécessite au minimum ~400Mi
   hpa:
     enabled: false  # Pas d'HPA en dev (replicas gérés à la main)
 

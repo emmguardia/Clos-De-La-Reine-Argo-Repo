@@ -1,10 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getTokenFromStorage, safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
-
-let cartFetchPromise: Promise<CartItem[]> | null = null;
 
 export interface CartItem {
   productId: number;
@@ -16,6 +14,9 @@ export function useCart() {
   const navigate = useNavigate();
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(() => !!getTokenFromStorage());
+  // Chaque instance du hook a sa propre promise — évite les race conditions
+  // entre Header et CartPage qui utilisent tous les deux useCart.
+  const fetchPromiseRef = useRef<Promise<CartItem[]> | null>(null);
 
   const fetchCart = async () => {
     if (!getTokenFromStorage()) return;
@@ -29,15 +30,15 @@ export function useCart() {
     };
 
     try {
-      if (!cartFetchPromise) {
-        cartFetchPromise = doFetch();
+      if (!fetchPromiseRef.current) {
+        fetchPromiseRef.current = doFetch();
       }
-      const data = await cartFetchPromise;
+      const data = await fetchPromiseRef.current;
       setItems(data);
     } catch (error) {
       console.error('Erreur lors de la récupération du panier:', error);
     } finally {
-      cartFetchPromise = null;
+      fetchPromiseRef.current = null;
       setLoading(false);
     }
   };

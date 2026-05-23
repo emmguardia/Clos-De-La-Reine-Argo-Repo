@@ -26,7 +26,12 @@ export default function CartPage() {
 
   const total = cartProducts.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
 
-  if (loading || productsLoading) {
+  // Évite le flash "panier vide" : quand les items du panier viennent d'arriver
+  // mais que useProductsByIds n'a pas encore démarré son fetch (productsLoading
+  // démarre à false car ids était vide au premier render).
+  const awaitingProducts = items.length > 0 && cartProducts.length === 0 && !productsLoading;
+
+  if (loading || productsLoading || awaitingProducts) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb] flex items-center justify-center">
         <p className="text-gray-600">Chargement du panier...</p>

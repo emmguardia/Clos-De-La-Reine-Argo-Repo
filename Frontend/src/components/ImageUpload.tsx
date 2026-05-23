@@ -1,8 +1,37 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Upload, X, ImagePlus } from 'lucide-react';
-import { validateFileType, validateFileSize, safeJsonResponse } from '../utils/security';
+import { validateFileType, validateFileSize, safeJsonResponse, getSafeImageSrc } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
+
+/** Affiche une image via blob URL pour éviter le flux DOM XSS (CodeQL) - l'URL utilisateur ne va jamais dans img src */
+function SafeImagePreview({ url, className, alt }: { url: string; className?: string; alt?: string }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const blobRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!url) return;
+    let cancelled = false;
+    fetch(url, { mode: 'cors' })
+      .then((r) => r.blob())
+      .then((blob) => {
+        if (!cancelled) {
+          const u = URL.createObjectURL(blob);
+          blobRef.current = u;
+          setBlobUrl(u);
+        }
+      })
+      .catch(() => setBlobUrl(null));
+    return () => {
+      cancelled = true;
+      if (blobRef.current) {
+        URL.revokeObjectURL(blobRef.current);
+        blobRef.current = null;
+      }
+    };
+  }, [url]);
+  if (!blobUrl) return <div className={`${className || ''} bg-gray-100 animate-pulse`} />;
+  return <img src={blobUrl} alt={alt || 'Preview'} className={className} referrerPolicy="no-referrer" />;
+}
 
 interface ImageUploadProps {
   onImageUploaded: (imageUrl: string) => void;
@@ -42,23 +71,20 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Im
           return;
         }
         
-        const adminToken = localStorage.getItem('adminToken');
-        if (!adminToken) {
+        if (!localStorage.getItem('isAdminLoggedIn')) {
           setError('Session expirée. Veuillez vous reconnecter.');
           setUploading(false);
           return;
         }
-        
+
         const response = await fetch(`${API_URL}/api/images/upload`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${adminToken}`
-          },
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             image: base64,
-            name: file.name.slice(0, 255).replace(/[^a-zA-Z0-9._-]/g, '_')
-          })
+            name: file.name.slice(0, 255).replace(/[^a-zA-Z0-9._-]/g, '_'),
+          }),
         });
 
         if (!response.ok) {
@@ -97,9 +123,11 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Im
         aria-hidden
       />
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      {currentImage ? (
+      {(() => {
+        const safeSrc = getSafeImageSrc(currentImage);
+        return safeSrc ? (
         <div className="relative">
-          <img src={currentImage} alt="Preview" className="w-full h-48 object-cover rounded-lg" />
+          <SafeImagePreview url={safeSrc} className="w-full h-48 object-cover rounded-lg" />
           <div className="absolute top-2 right-2 flex gap-1">
             <button
               type="button"
@@ -137,7 +165,8 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Im
           <span className="text-sm text-gray-600">Cliquez pour uploader</span>
           {uploading && <p className="text-sm text-gray-500 mt-2">Upload en cours...</p>}
         </div>
-      )}
+      );
+})()}
       {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
   );

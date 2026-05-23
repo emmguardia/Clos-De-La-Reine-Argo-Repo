@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Save, X, FolderOpen, ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
@@ -13,6 +13,7 @@ interface Collection {
 }
 
 export default function CollectionsAdminPage() {
+  const navigate = useNavigate();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -23,22 +24,14 @@ export default function CollectionsAdminPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    fetchCollections();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const fetchCollections = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) {
-        window.location.href = '/admin/login';
+      if (!localStorage.getItem('isAdminLoggedIn')) {
+        navigate('/admin/login');
         return;
       }
       const response = await fetch(`${API_URL}/api/collections`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include',
       });
       if (response.ok) {
         const data = await safeJsonResponse(response, []);
@@ -53,15 +46,20 @@ export default function CollectionsAdminPage() {
     }
   };
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchCollections();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
     try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) {
-        window.location.href = '/admin/login';
+      if (!localStorage.getItem('isAdminLoggedIn')) {
+        navigate('/admin/login');
         return;
       }
 
@@ -76,24 +74,16 @@ export default function CollectionsAdminPage() {
       if (editingId) {
         response = await fetch(`${API_URL}/api/collections/${editingId}`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            name: sanitizedName
-          })
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ name: sanitizedName }),
         });
       } else {
         response = await fetch(`${API_URL}/api/collections`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            name: sanitizedName
-          })
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ name: sanitizedName }),
         });
       }
 
@@ -128,17 +118,14 @@ export default function CollectionsAdminPage() {
     }
 
     try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) {
-        window.location.href = '/admin/login';
+      if (!localStorage.getItem('isAdminLoggedIn')) {
+        navigate('/admin/login');
         return;
       }
 
       const response = await fetch(`${API_URL}/api/collections/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include',
       });
 
       if (response.ok) {

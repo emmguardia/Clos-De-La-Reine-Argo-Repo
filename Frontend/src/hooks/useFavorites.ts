@@ -1,56 +1,37 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getTokenFromStorage, safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
 export function useFavorites() {
+  const navigate = useNavigate();
   const [favorites, setFavorites] = useState<number[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const token = getTokenFromStorage();
-    if (!token) {
-      setFavorites([]);
-      setLoading(false);
-      return;
-    }
-    fetchFavorites();
-  }, []);
+  const [loading, setLoading] = useState(() => !!getTokenFromStorage());
 
   const fetchFavorites = async () => {
-    const token = getTokenFromStorage();
-    if (!token) return;
-    
+    if (!getTokenFromStorage()) return;
+
     try {
       const response = await fetch(`${API_URL}/api/favorites`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await safeJsonResponse(response, []);
-        const productsResponse = await fetch(`${API_URL}/api/products`);
-        if (productsResponse.ok) {
-          const products = await safeJsonResponse(productsResponse, []);
-          const existingProductIds = products
-            .map((p: { id?: number; _id?: number }) => p.id ?? p._id)
-            .filter((id): id is number => id != null);
-          const validFavorites = data.filter((id: number) => 
+        const idsResponse = await fetch(`${API_URL}/api/products/ids`);
+        if (idsResponse.ok) {
+          const { ids: existingProductIds } = await safeJsonResponse(idsResponse, { ids: [] }) as { ids: number[] };
+          const validFavorites = data.filter((id: number) =>
             Number.isInteger(id) && id > 0 && existingProductIds.includes(id)
           );
           setFavorites(validFavorites);
           if (validFavorites.length !== data.length) {
-            const token = getTokenFromStorage();
-            if (token) {
-              await fetch(`${API_URL}/api/favorites`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ productIds: validFavorites })
-              });
-            }
+            await fetch(`${API_URL}/api/favorites`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ productIds: validFavorites })
+            });
           }
         } else {
           setFavorites(data);
@@ -63,10 +44,15 @@ export function useFavorites() {
     }
   };
 
+  useEffect(() => {
+    if (!getTokenFromStorage()) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchFavorites();
+  }, []);
+
   const addFavorite = async (productId: number) => {
-    const token = getTokenFromStorage();
-    if (!token) {
-      window.location.href = '/connexion';
+    if (!getTokenFromStorage()) {
+      navigate('/connexion');
       return;
     }
 
@@ -77,10 +63,8 @@ export function useFavorites() {
     try {
       const response = await fetch(`${API_URL}/api/favorites`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ productId })
       });
       if (response.ok) {
@@ -96,8 +80,7 @@ export function useFavorites() {
   };
 
   const removeFavorite = async (productId: number) => {
-    const token = getTokenFromStorage();
-    if (!token) return;
+    if (!getTokenFromStorage()) return;
 
     if (!Number.isInteger(productId) || productId <= 0) {
       return;
@@ -106,9 +89,7 @@ export function useFavorites() {
     try {
       const response = await fetch(`${API_URL}/api/favorites/${productId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await safeJsonResponse(response, { productIds: [] });

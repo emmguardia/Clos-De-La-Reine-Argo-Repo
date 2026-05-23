@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Check, X, MessageSquare } from 'lucide-react';
-import { useProducts } from '../hooks/useProducts';
+import { useProductsByIds } from '../hooks/useProductsByIds';
+import { useProductsListForAdmin } from '../hooks/useProductsListForAdmin';
 import { safeJsonResponse, getTokenFromStorage } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
@@ -18,8 +19,10 @@ interface CounterOrder {
 export default function CounterProposalPage() {
   const navigate = useNavigate();
   const { orderId, action } = useParams();
-  const { products } = useProducts();
   const [order, setOrder] = useState<CounterOrder | null>(null);
+  const orderProductIds = order ? [...order.items.map(i => i.productId), ...(order.counterProposal?.items?.map(i => i.productId) ?? [])] : [];
+  const { getProduct } = useProductsByIds([...new Set(orderProductIds)]);
+  const { products } = useProductsListForAdmin();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -28,22 +31,14 @@ export default function CounterProposalPage() {
     message: ''
   });
 
-  useEffect(() => {
-    fetchOrder();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderId]);
-
   const fetchOrder = async () => {
     try {
-      const token = getTokenFromStorage();
-      if (!token) {
+      if (!getTokenFromStorage()) {
         navigate('/connexion');
         return;
       }
       const response = await fetch(`${API_URL}/api/orders`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include'
       });
       if (response.ok) {
         const orders = await safeJsonResponse(response, []);
@@ -61,35 +56,38 @@ export default function CounterProposalPage() {
         console.error('Erreur lors de la récupération des commandes');
         navigate('/profil?tab=commandes');
       }
-    } catch {
-      console.error('Erreur:', error);
+    } catch (err) {
+      console.error('Erreur:', err);
       navigate('/profil?tab=commandes');
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchOrder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]);
+
   const handleAccept = async () => {
-    if (!order.counterProposal) {
+    if (!order?.counterProposal) {
       setError('Aucune contre-proposition disponible à accepter');
       return;
     }
     setSubmitting(true);
     setError('');
     try {
-      const token = getTokenFromStorage();
-      if (!token) {
+      if (!getTokenFromStorage()) {
         setError('Session expirée. Veuillez vous reconnecter.');
         navigate('/connexion');
         return;
       }
-      
+
       const response = await fetch(`${API_URL}/api/orders/${orderId}/counter-proposal`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ accept: true })
       });
       if (response.ok) {
@@ -113,20 +111,17 @@ export default function CounterProposalPage() {
     setSubmitting(true);
     setError('');
     try {
-      const token = getTokenFromStorage();
-      if (!token) {
+      if (!getTokenFromStorage()) {
         setError('Session expirée. Veuillez vous reconnecter.');
         navigate('/connexion');
         return;
       }
-      
+
       const total = newProposal.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       const response = await fetch(`${API_URL}/api/orders/${orderId}/counter-proposal`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           accept: false,
           newProposal: {
@@ -150,7 +145,7 @@ export default function CounterProposalPage() {
   };
 
   const getProductName = (productId: number) => {
-    const product = products.find(p => p.id === productId);
+    const product = getProduct(productId);
     return product ? product.name : `Produit #${productId}`;
   };
 

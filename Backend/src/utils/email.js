@@ -133,6 +133,19 @@ export const sendContactConfirmationEmail = async (userEmail, contactData) => {
   return await sendEmailToService('contact-sent', userEmail, toName, {  });
 };
 
+function formatShippingAddress(shippingAddress) {
+  if (typeof shippingAddress === 'string') return shippingAddress;
+  const s = shippingAddress || {};
+  const parts = [];
+  if (s.firstName || s.lastName) parts.push(`${s.firstName || ''} ${s.lastName || ''}`.trim());
+  if (s.address) parts.push(s.address);
+  if (s.postalCode || s.city) parts.push(`${s.postalCode || ''} ${s.city || ''}`.trim());
+  if (s.country) parts.push(s.country);
+  if (s.email) parts.push(`Email: ${s.email}`);
+  if (s.phone) parts.push(`Tél: ${s.phone}`);
+  return parts.length ? parts.join('\n') : 'Non renseignée';
+}
+
 export const sendNewOrderNotificationEmail = async (orderData) => {
   const adminEmail = process.env.ADMIN_EMAIL || 'closdelareine@gmail.com';
   const toName = 'Administrateur';
@@ -144,12 +157,9 @@ export const sendNewOrderNotificationEmail = async (orderData) => {
   // Formater le total
   const orderTotal = `Sous-total: ${(orderData.totalAmount - (orderData.shippingCost || 0)).toFixed(2)}€\nFrais de port: ${(orderData.shippingCost || 0).toFixed(2)}€\nTotal: ${orderData.totalAmount.toFixed(2)}€`;
   
-  // Formater l'adresse de livraison
-  const shippingAddress = typeof orderData.shippingAddress === 'string' 
-    ? orderData.shippingAddress 
-    : `${orderData.shippingAddress.address || ''}\n${orderData.shippingAddress.postalCode || ''} ${orderData.shippingAddress.city || ''}\n${orderData.shippingAddress.country || 'France'}`;
+  const shippingAddress = formatShippingAddress(orderData.shippingAddress);
 
-  return await sendEmailToService('new-order', adminEmail, toName, {
+  const vars = {
     order_number: orderData.orderNumber || 'N/A',
     customer_name: orderData.customerName || 'Client',
     customer_email: orderData.customerEmail || '',
@@ -158,5 +168,28 @@ export const sendNewOrderNotificationEmail = async (orderData) => {
     order_total: orderTotal,
     shipping_address: shippingAddress,
     payment_method: orderData.paymentMethod || 'Stripe'
+  };
+  if (orderData.dogInfo) vars.dog_info = orderData.dogInfo;
+  if (orderData.notes) vars.notes = orderData.notes;
+  return await sendEmailToService('new-order', adminEmail, toName, vars);
+};
+
+export const sendOrderValidatedEmail = async (clientEmail, orderData) => {
+  const FRONTEND_URL = process.env.FRONTEND_URL || 'https://closdelareine.fr';
+  const siteLink = `${FRONTEND_URL}/profil?tab=commandes`;
+
+  const toName = orderData.customerName || clientEmail.split('@')[0];
+
+  const orderItems = orderData.items.map(item =>
+    `- ${item.name} x${item.quantity} - ${item.price.toFixed(2)}€`
+  ).join('\n');
+
+  const orderTotal = `Sous-total: ${(orderData.totalAmount - (orderData.shippingCost || 0)).toFixed(2)}€\nFrais de port: ${(orderData.shippingCost || 0).toFixed(2)}€\nTotal: ${orderData.totalAmount.toFixed(2)}€`;
+
+  return await sendEmailToService('order-validated', clientEmail, toName, {
+    order_number: orderData.orderNumber || 'N/A',
+    order_items: orderItems,
+    order_total: orderTotal,
+    site_link: siteLink
   });
 };

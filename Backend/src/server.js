@@ -1,11 +1,29 @@
 import express from 'express';
+import helmet from 'helmet';
+import compression from 'compression';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { MongoClient, ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
-import { sendNewContactNotificationEmail, sendContactConfirmationEmail, sendOrderConfirmationEmail, sendNewOrderNotificationEmail } from './utils/email.js';
+import { sendNewContactNotificationEmail, sendContactConfirmationEmail, sendOrderConfirmationEmail, sendNewOrderNotificationEmail, sendOrderValidatedEmail } from './utils/email.js';
+import { sendInvoiceEmail } from './utils/invoice.js';
 import Stripe from 'stripe';
+import logger from './utils/logger.js';
+import { register as metricsRegister, rateLimitHitsTotal } from './utils/metrics.js';
+import { httpLogger, prometheusMiddleware } from './utils/requestLogger.js';
+
+logger.info({ version: process.version, env: process.env.NODE_ENV || 'development' }, '[BOOT] Démarrage du serveur');
+
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, '[CRASH] uncaughtException');
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  logger.fatal({ err: reason, promise: String(promise) }, '[CRASH] unhandledRejection');
+  process.exit(1);
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,7 +32,11 @@ const MONGODB_USER = process.env.MONGODB_USER;
 const MONGODB_PASSWORD = process.env.MONGODB_PASSWORD;
 const MONGODB_DB = process.env.MONGODB_DB || 'clos_de_la_reine_db';
 const MONGODB_HOST = process.env.MONGODB_HOST;
-const JWT_SECRET = process.env.JWT_SECRET || 'changez-moi-en-production-avec-une-cle-secrete-tres-longue-et-aleatoire';
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? null : 'dev-only-secret-changez-moi');
+if (!JWT_SECRET) {
+  console.error('[BOOT] FATAL: JWT_SECRET manquant en production. Arrêt du serveur.');
+  process.exit(1);
+}
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY || '';
 const stripe = STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.startsWith('sk_')
@@ -22,26 +44,62 @@ const stripe = STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.startsWith('sk_')
   : null;
 
 app.set('trust proxy', 1);
-app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
 
-app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;");
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+// ── Observabilité ──────────────────────────────────────────────────────────────
+// AVANT tous les autres middlewares (en particulier express-rate-limit),
+// pour que MÊME les requêtes 429 soient loguées et comptées.
+app.use(prometheusMiddleware); // compteurs Prometheus
+app.use(httpLogger);           // logs JSON structurés pino-http
+
+app.use(compression());
+app.use(cookieParser());
+
+// ---------------------------------------------------------------------------
+// Helmet — security headers (supprime X-Powered-By, ajoute HSTS, CSP, etc.)
+// crossOriginEmbedderPolicy désactivé : le frontend appelle ce backend via CORS
+// ---------------------------------------------------------------------------
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+  strictTransportSecurity: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}));
+// Permissions-Policy non couvert par helmet par défaut
+app.use((_req, res, next) => {
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   next();
 });
 
-app.use(express.json({ limit: '50mb', strict: true }));
-app.use(express.urlencoded({ extended: true, limit: '50mb', parameterLimit: 100 }));
+// ---------------------------------------------------------------------------
+// CORS — origines explicites depuis FRONTEND_URL (env), localhost en dev
+// ---------------------------------------------------------------------------
+const corsAllowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(s => s.trim()).filter(Boolean)
+  : (process.env.NODE_ENV === 'production' ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173']);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (corsAllowedOrigins.includes(origin)) return callback(null, origin);
+    callback(new Error('CORS not allowed'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+}));
+
+// ---------------------------------------------------------------------------
+// Body parsing — limite générale 1 Mo ; route upload images tolère 10 Mo
+// ---------------------------------------------------------------------------
+app.use((req, res, next) => {
+  const limit = req.path === '/api/images/upload' ? '10mb' : '1mb';
+  express.json({ limit, strict: true })(req, res, next);
+});
+app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 100 }));
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -67,7 +125,7 @@ const adminLoginLimiter = rateLimit({
   legacyHeaders: false,
   skipSuccessfulRequests: true,
   handler: async (req, res) => {
-    const clientIp = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+    const clientIp = req.ip || req.socket?.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
     const userAgent = req.headers['user-agent'] || 'unknown';
     await logAdminAttempt(clientIp, false, { reason: 'Rate limit dépassé', userAgent });
     res.status(429).json({ error: 'Trop de tentatives de connexion. Veuillez réessayer dans 15 minutes.' });
@@ -82,19 +140,107 @@ const strictLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: { error: 'Trop de requêtes. Veuillez réessayer dans une minute.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res, _next, options) => {
+    // Important : on logue + compte chaque hit pour pouvoir diagnostiquer les
+    // boucles de fetch côté front (ex. /api/products?ids=2 spammé en boucle).
+    rateLimitHitsTotal.inc({ limiter: 'api', route: req.baseUrl + req.path });
+    req.log?.warn({
+      limiter: 'api',
+      ip: req.ip,
+      route: req.originalUrl,
+      method: req.method,
+      ua: req.headers['user-agent'],
+    }, '[RATE-LIMIT] /api dépassé (120 req/min)');
+    res.status(options.statusCode).json(options.message);
+  },
+});
+
+function escapeMongoRegex(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&').slice(0, 200);
+}
+
+// ── Endpoints d'observabilité ─────────────────────────────────────────────────
+// Déclarés AVANT apiLimiter pour ne pas être rate-limités (sondes K8s toutes les 10 s)
+// et AVANT le middleware "DB-required" pour rester dispos quand la DB est down.
+app.get('/api/health', async (_req, res) => {
+  if (!db) return res.status(503).json({ status: 'error', db: 'disconnected', timestamp: new Date().toISOString() });
+  try {
+    await db.command({ ping: 1 });
+    res.json({ status: 'ok', db: 'connected', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'error', db: 'disconnected', timestamp: new Date().toISOString() });
+  }
+});
+
+// Endpoint de scrape Prometheus — protégé par token Bearer si METRICS_TOKEN défini.
+app.get('/api/metrics', async (req, res) => {
+  const metricsToken = process.env.METRICS_TOKEN;
+  if (metricsToken) {
+    const auth = req.headers.authorization;
+    if (!auth || auth !== `Bearer ${metricsToken}`) {
+      return res.status(401).end('Unauthorized');
+    }
+  }
+  try {
+    res.set('Content-Type', metricsRegister.contentType);
+    res.end(await metricsRegister.metrics());
+  } catch (err) {
+    res.status(500).end(err.message);
+  }
+});
+
+app.use('/api', apiLimiter);
+// Limiter strict sur toutes les routes d'authentification utilisateur
+// (login + register ont en plus authLimiter en tant que middleware de route)
+app.use('/api/auth', authLimiter);
+
 const SALT_ROUNDS = 12;
 const ADMIN_JWT_EXPIRATION = '8h';
 
 let client;
 let db;
 
+async function getProductMapByIds(productIds) {
+  if (!productIds || productIds.length === 0) return {};
+  const ids = [...new Set(productIds.filter(Boolean))];
+  const products = await db.collection('products').find({ id: { $in: ids } }, { projection: { id: 1, name: 1, collection: 1, category: 1 } }).toArray();
+  return Object.fromEntries((products || []).map(p => [p.id, p]));
+}
+
 async function connectToDatabase() {
   try {
     const host = MONGODB_HOST || 'localhost';
     const uri = MONGODB_URI || `mongodb://${MONGODB_USER}:${encodeURIComponent(MONGODB_PASSWORD)}@${host}:27017/${MONGODB_DB}?authSource=${MONGODB_DB}`;
-    client = new MongoClient(uri);
+    client = new MongoClient(uri, {
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 10000
+    });
     await client.connect();
     db = client.db(MONGODB_DB);
+    const productsCol = db.collection('products');
+    await productsCol.createIndex({ id: 1 }).catch(() => {});
+    await productsCol.createIndex({ category: 1 }).catch(() => {});
+    await productsCol.createIndex({ collection: 1 }).catch(() => {});
+    await productsCol.createIndex({ isNew: 1 }).catch(() => {});
+    await db.collection('carts').createIndex({ userId: 1 }).catch(() => {});
+    await db.collection('favorites').createIndex({ userId: 1 }).catch(() => {});
+    await db.collection('orders').createIndex({ userId: 1 }).catch(() => {});
+    // unique + partial pour ignorer les anciens docs sans orderNumber.
+    // S'il existait déjà un index non-unique, on le warn (ne casse pas le boot).
+    await db.collection('orders').createIndex(
+      { orderNumber: 1 },
+      { unique: true, partialFilterExpression: { orderNumber: { $type: 'string' } } }
+    ).catch((e) => console.warn('[index orderNumber unique] non créé:', e.message));
+    await db.collection('counters').createIndex({ _id: 1 }).catch(() => {});
+    await db.collection('ip_bans').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }).catch(() => {});
+    await db.collection('admin_login_attempts').createIndex({ timestamp: 1 }, { expireAfterSeconds: 86400 }).catch(() => {});
     console.log('✅ Connecté à MongoDB');
   } catch (error) {
     console.error('❌ Erreur de connexion MongoDB:', error);
@@ -103,25 +249,51 @@ async function connectToDatabase() {
 }
 
 function validateEmail(email) {
-  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return re.test(email);
+  if (typeof email !== 'string' || email.length > 254) return false;
+  const atIdx = email.indexOf('@');
+  if (atIdx <= 0 || atIdx === email.length - 1) return false;
+  const local = email.slice(0, atIdx);
+  const domain = email.slice(atIdx + 1);
+  if (!local.length || !domain.includes('.')) return false;
+  return /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(local) && /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(domain);
 }
 
 function validatePassword(password) {
   return password && password.length >= 8 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password);
 }
 
+function getAuthCookieOptions(maxAge) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',   // Lax : protège contre CSRF tout en laissant passer les liens entrants
+    maxAge,
+    path: '/',
+  };
+}
+
+function getAdminCookieOptions() {
+  // 8h = durée de session admin (ADMIN_JWT_EXPIRATION)
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 8 * 60 * 60 * 1000,
+    path: '/',
+  };
+}
+
 function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = req.cookies?.authToken;
 
   if (!token) {
-    return res.status(401).json({ error: 'Token manquant' });
+    return res.status(401).json({ error: 'Non authentifié' });
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json({ error: 'Token invalide' });
+      res.clearCookie('authToken', { path: '/' });
+      return res.status(403).json({ error: 'Session invalide ou expirée' });
     }
     req.user = user;
     next();
@@ -129,8 +301,9 @@ function authenticateToken(req, res, next) {
 }
 
 async function authenticateAdmin(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  // Priorité : cookie httpOnly (sécurisé) > header Authorization (rétrocompat)
+  const token = req.cookies?.adminAuthToken
+    || (req.headers['authorization']?.split(' ')[1]);
 
   if (!token) {
     return res.status(401).json({ error: 'Token manquant' });
@@ -162,8 +335,69 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ---------------------------------------------------------------------------
+// Sitemap XML dynamique — inclut les pages statiques + dernière modif produit
+// Nginx proxifie /sitemap.xml vers ce backend (cf. configmap nginx)
+// ---------------------------------------------------------------------------
+app.get('/sitemap.xml', async (req, res) => {
+  try {
+    const BASE_URL = 'https://leclosdelareine.com';
+    const today = new Date().toISOString().split('T')[0];
+    let productsLastMod = today;
+
+    if (db) {
+      try {
+        const [latest] = await db.collection('products')
+          .find({}, { projection: { updatedAt: 1, createdAt: 1 } })
+          .sort({ updatedAt: -1, createdAt: -1 })
+          .limit(1)
+          .toArray();
+        if (latest) {
+          const d = latest.updatedAt || latest.createdAt;
+          if (d) productsLastMod = new Date(d).toISOString().split('T')[0];
+        }
+      } catch (_) { /* si la collection est vide, on garde today */ }
+    }
+
+    const pages = [
+      { url: '/',                           priority: '1.0', changefreq: 'weekly',  lastmod: today },
+      { url: '/boutique',                   priority: '0.9', changefreq: 'daily',   lastmod: productsLastMod },
+      { url: '/boutique?category=colliers', priority: '0.8', changefreq: 'daily',   lastmod: productsLastMod },
+      { url: '/boutique?category=harnais',  priority: '0.8', changefreq: 'daily',   lastmod: productsLastMod },
+      { url: '/boutique?category=laisses',  priority: '0.8', changefreq: 'daily',   lastmod: productsLastMod },
+      { url: '/galerie',                    priority: '0.7', changefreq: 'monthly', lastmod: today },
+      { url: '/faq',                        priority: '0.7', changefreq: 'monthly', lastmod: today },
+      { url: '/contact',                    priority: '0.6', changefreq: 'yearly',  lastmod: today },
+      { url: '/cgv',                        priority: '0.3', changefreq: 'yearly',  lastmod: today },
+      { url: '/mentions-legales',           priority: '0.3', changefreq: 'yearly',  lastmod: today },
+      { url: '/politique-confidentialite',  priority: '0.3', changefreq: 'yearly',  lastmod: today },
+    ];
+
+    const urlEntries = pages.map(({ url, priority, changefreq, lastmod }) =>
+      `  <url>\n    <loc>${BASE_URL}${url}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>\n  </url>`
+    ).join('\n');
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>`;
+
+    res.set('Content-Type', 'application/xml; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.send(xml);
+  } catch (err) {
+    console.error('[SITEMAP] Erreur génération:', err?.message || err);
+    res.set('Content-Type', 'application/xml; charset=utf-8');
+    res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+  }
+});
+
 app.get('/api/config', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=300');
   res.json({ stripePublishableKey: STRIPE_PUBLISHABLE_KEY || '' });
+});
+
+app.use('/api', (req, res, next) => {
+  if (req.path === '/config') return next();
+  if (!db) return res.status(503).json({ error: 'Service temporairement indisponible' });
+  next();
 });
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'closdelareine@gmail.com';
@@ -251,9 +485,10 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    res.cookie('authToken', token, getAuthCookieOptions(7 * 24 * 60 * 60 * 1000));
+
     res.status(201).json({
       message: 'Inscription réussie',
-      token,
       user: {
         id: result.insertedId.toString(),
         email: user.email,
@@ -270,7 +505,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
 app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const { email, password, rememberMe } = req.body;
-    const clientIp = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+    const clientIp = req.ip || req.socket?.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
 
     if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
       await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
@@ -319,15 +554,17 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     );
 
     const tokenExpiration = rememberMe === true ? '30d' : '1d';
+    const cookieMaxAge = rememberMe === true ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
     const token = jwt.sign(
       { userId: user._id.toString(), email: user.email },
       JWT_SECRET,
       { expiresIn: tokenExpiration }
     );
 
+    res.cookie('authToken', token, getAuthCookieOptions(cookieMaxAge));
+
     res.json({
       message: 'Connexion réussie',
-      token,
       user: {
         id: user._id.toString(),
         email: user.email,
@@ -364,6 +601,11 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     console.error('Erreur lors de la récupération du profil:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('authToken', { path: '/', httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax' });
+  res.json({ message: 'Déconnexion réussie' });
 });
 
 app.put('/api/auth/me', authenticateToken, async (req, res) => {
@@ -517,17 +759,59 @@ app.delete('/api/auth/me', authenticateToken, async (req, res) => {
 
 app.get('/api/products', async (req, res) => {
   try {
-    const products = await db.collection('products').find({}).toArray();
+    const minimal = req.query.minimal !== '0' && (req.query.minimal === '1' || req.query.minimal === 'true' || !req.query.minimal);
+    const idsParam = req.query.ids;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 24));
+    const skip = idsParam ? 0 : (page - 1) * limit;
+    const ALLOWED_CATEGORIES = ['colliers', 'harnais', 'laisses'];
+    const categoryRaw = req.query.category;
+    const category = (typeof categoryRaw === 'string' && ALLOWED_CATEGORIES.includes(categoryRaw)) ? categoryRaw : null;
+    const collectionRaw = req.query.collection;
+    const collection = (typeof collectionRaw === 'string' && !collectionRaw.includes('$') && !collectionRaw.includes('.')) ? collectionRaw.slice(0, 100) : null;
+    const colorRaw = req.query.color;
+    const color = (typeof colorRaw === 'string' && !colorRaw.includes('$') && !colorRaw.includes('.')) ? colorRaw.slice(0, 50) : null;
+    const isNew = req.query.isNew === '1' || req.query.isNew === 'true';
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const includeFilters = req.query.includeFilters === '1' || req.query.includeFilters === 'true';
+
+    let filter = {};
+    if (idsParam && typeof idsParam === 'string') {
+      const ids = idsParam.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+      if (ids.length > 0) filter = { id: { $in: ids } };
+    } else {
+      if (category) filter.category = category;
+      if (collection) filter.collection = collection;
+      if (color) filter.$or = [{ color: color }, { color: { $in: [color] } }];
+      if (isNew) filter.isNew = true;
+      if (search) {
+        const escaped = escapeMongoRegex(search);
+        if (escaped) {
+          const searchFilter = { $or: [
+            { name: { $regex: escaped, $options: 'i' } },
+            { collection: { $regex: escaped, $options: 'i' } }
+          ]};
+          filter = Object.keys(filter).length > 0 ? { $and: [filter, searchFilter] } : searchFilter;
+        }
+      }
+    }
+
+    const projection = minimal ? { secondImage: 0, additionalImages: 0 } : {};
+    const filterForMeta = category ? { category } : {};
+    const [products, total, metaProducts] = await Promise.all([
+      db.collection('products').find(filter, { projection }).skip(skip).limit(idsParam ? 500 : limit).toArray(),
+      idsParam ? Promise.resolve(0) : db.collection('products').countDocuments(filter),
+      (includeFilters && page === 1 && !idsParam) ? db.collection('products').find(filterForMeta, { projection: { collection: 1, color: 1 } }).toArray() : Promise.resolve(null)
+    ]);
+
     const formattedProducts = products.map(product => {
       const cat = product.category;
       const sizes = product.sizes?.length ? product.sizes : (cat === 'laisses' ? ['1m', '1m20'] : (cat === 'colliers' || cat === 'harnais') ? ['XS', 'S', 'M', 'L', 'XL'] : []);
-      return {
+      const base = {
         id: product.id || product._id?.toString() || product._id,
         name: product.name,
         price: product.price,
         image: product.image,
-        secondImage: product.secondImage,
-        additionalImages: product.additionalImages || [],
         category: product.category,
         collection: product.collection,
         color: product.color,
@@ -537,10 +821,50 @@ app.get('/api/products', async (req, res) => {
         isNew: product.isNew || false,
         briefDescription: product.briefDescription || undefined
       };
+      if (minimal) return base;
+      return { ...base, secondImage: product.secondImage, additionalImages: product.additionalImages || [] };
     });
-    res.json(formattedProducts);
+
+    if (idsParam) {
+      res.json(formattedProducts);
+    } else {
+      const payload = { products: formattedProducts, total };
+      if (metaProducts) {
+        payload.collections = [...new Set(metaProducts.map(p => p.collection).filter(Boolean))].sort();
+        payload.colors = [...new Set(metaProducts.flatMap(p => Array.isArray(p.color) ? p.color : [p.color]).filter(Boolean))].sort();
+      }
+      res.json(payload);
+    }
   } catch (error) {
     console.error('Erreur lors de la récupération des produits:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+app.get('/api/products/filters', async (req, res) => {
+  try {
+    const ALLOWED_CATEGORIES = ['colliers', 'harnais', 'laisses'];
+    const categoryRaw = req.query.category;
+    const category = (typeof categoryRaw === 'string' && ALLOWED_CATEGORIES.includes(categoryRaw)) ? categoryRaw : null;
+    const filter = category ? { category } : {};
+    const products = await db.collection('products').find(filter, { projection: { collection: 1, color: 1 } }).toArray();
+    const collections = [...new Set(products.map(p => p.collection).filter(Boolean))].sort();
+    const colors = [...new Set(products.flatMap(p => Array.isArray(p.color) ? p.color : [p.color]).filter(Boolean))].sort();
+    res.json({ collections, colors });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des filtres:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+app.get('/api/products/ids', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=300');
+    const products = await db.collection('products').find({}, { projection: { id: 1, _id: 0 } }).toArray();
+    const ids = products.map(p => p.id ?? p._id).filter(Boolean);
+    res.json({ ids });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des IDs:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
@@ -566,10 +890,8 @@ app.post('/api/products', authenticateAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Champs requis manquants' });
     }
 
-    const products = await db.collection('products').find({}).toArray();
-    const maxId = products.length > 0 
-      ? Math.max(...products.map(p => p.id || 0))
-      : 0;
+    const maxDoc = await db.collection('products').find({}).sort({ id: -1 }).limit(1).toArray();
+    const maxId = maxDoc.length > 0 ? (maxDoc[0].id || 0) : 0;
 
     const sizes = category === 'laisses' ? ['1m', '1m20'] : (category === 'colliers' || category === 'harnais') ? ['XS', 'S', 'M', 'L', 'XL'] : [];
     const product = {
@@ -696,14 +1018,24 @@ app.post('/api/images/upload', authenticateAdmin, async (req, res) => {
 
 app.get('/api/gallery', async (req, res) => {
   try {
-    const images = await db.collection('gallery').find({}).sort({ createdAt: -1 }).toArray();
-    res.json(images.map(img => ({
-      id: img._id.toString(),
-      name: img.name,
-      data: img.data,
-      type: img.type,
-      createdAt: img.createdAt
-    })));
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const skip = (page - 1) * limit;
+    const total = await db.collection('gallery').countDocuments({});
+    const images = await db.collection('gallery').find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray();
+    res.set('Cache-Control', 'private, max-age=60');
+    res.json({
+      images: images.map(img => ({
+        id: img._id.toString(),
+        name: img.name,
+        data: img.data,
+        type: img.type,
+        createdAt: img.createdAt
+      })),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit)
+    });
   } catch (error) {
     console.error('Erreur lors de la récupération de la galerie:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -873,7 +1205,9 @@ app.delete('/api/collections/:id', authenticateAdmin, async (req, res) => {
 
 app.get('/api/faq', async (req, res) => {
   try {
-    const faqs = await db.collection('faq').find({}).sort({ categoryOrder: 1, category: 1, order: 1 }).toArray();
+    const faqs = await db.collection('faq').find({}).toArray();
+    faqs.sort((a, b) => (a.sortOrder ?? 999999) - (b.sortOrder ?? 999999));
+    let sortIdx = 0;
     res.json(faqs.map(faq => ({
       id: faq._id.toString(),
       category: faq.category,
@@ -881,6 +1215,7 @@ app.get('/api/faq', async (req, res) => {
       answer: faq.answer,
       order: faq.order || 0,
       categoryOrder: faq.categoryOrder || 0,
+      sortOrder: faq.sortOrder ?? sortIdx++,
       createdAt: faq.createdAt,
       updatedAt: faq.updatedAt
     })));
@@ -902,12 +1237,15 @@ app.post('/api/faq', authenticateAdmin, async (req, res) => {
     if (!answer || answer.trim().length < 1 || answer.trim().length > 5000) {
       return res.status(400).json({ error: 'Réponse requise (1-5000 caractères)' });
     }
+    const maxSort = await db.collection('faq').find({}).sort({ sortOrder: -1 }).limit(1).toArray();
+    const nextSortOrder = (maxSort[0]?.sortOrder ?? -1) + 1;
     const faqItem = {
       category: category.trim(),
       question: question.trim(),
       answer: answer.trim(),
       order: order || 0,
       categoryOrder: categoryOrder || 0,
+      sortOrder: nextSortOrder,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -949,6 +1287,27 @@ app.put('/api/faq/:id', authenticateAdmin, async (req, res) => {
     res.json({ message: 'FAQ mise à jour' });
   } catch (error) {
     console.error('Erreur lors de la mise à jour de la FAQ:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+app.patch('/api/faq/reorder', authenticateAdmin, async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items requis (tableau [{ id, sortOrder }])' });
+    }
+    for (const it of items) {
+      const { id, sortOrder } = it;
+      if (!id || typeof sortOrder !== 'number') continue;
+      await db.collection('faq').updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { sortOrder, updatedAt: new Date() } }
+      );
+    }
+    res.json({ message: 'Ordre mis à jour' });
+  } catch (error) {
+    console.error('Erreur lors du réordonnancement FAQ:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
@@ -1148,11 +1507,17 @@ app.delete('/api/favorites/:productId', authenticateToken, async (req, res) => {
   }
 });
 
+const ORDER_SHIPPING = 5.9;
+const ORDER_FEES_TAUX = 0.019;
+
 app.post('/api/orders', authenticateToken, async (req, res) => {
   try {
-    const { items, shippingAddress, total, dogInfo, notes, promoCode, shippingAmount, feesAmount } = req.body;
+    const { items, shippingAddress, dogInfo, notes, promoCode } = req.body;
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Items requis' });
+    }
+    if (items.length > 50) {
+      return res.status(400).json({ error: 'Trop d\'articles dans la commande' });
     }
     if (!shippingAddress) {
       return res.status(400).json({ error: 'Informations de contact requises' });
@@ -1160,7 +1525,41 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
     if (!dogInfo || !dogInfo.breed || !dogInfo.age) {
       return res.status(400).json({ error: 'Informations sur le chien requises (race et âge)' });
     }
-    
+
+    // Recalcul serveur : on ne fait jamais confiance au total client
+    const productIds = items.map(i => i.productId).filter(id => typeof id === 'number' && !isNaN(id));
+    if (productIds.length !== items.length) {
+      return res.status(400).json({ error: 'IDs de produits invalides' });
+    }
+    const dbProducts = await db.collection('products').find({ id: { $in: productIds } }).toArray();
+    const productMap = Object.fromEntries(dbProducts.map(p => [p.id, p]));
+
+    let subtotal = 0;
+    const validatedItems = [];
+    for (const item of items) {
+      const product = productMap[item.productId];
+      if (!product) {
+        return res.status(400).json({ error: `Produit #${item.productId} introuvable` });
+      }
+      const qty = Math.max(1, Math.min(99, parseInt(item.quantity) || 1));
+      let unitPrice = product.price;
+      if (product.category === 'laisses' && item.size === '1m20' && (product.surcharge1m20 ?? 0) > 0) {
+        unitPrice += product.surcharge1m20;
+      }
+      if (product.category === 'colliers' && dogInfo.surMesureCollier && (product.surchargeSurMesure ?? 0) > 0) {
+        unitPrice += product.surchargeSurMesure;
+      }
+      if (product.category === 'harnais' && dogInfo.surMesureHarnais && (product.surchargeSurMesure ?? 0) > 0) {
+        unitPrice += product.surchargeSurMesure;
+      }
+      subtotal += unitPrice * qty;
+      validatedItems.push({ productId: item.productId, quantity: qty, price: unitPrice, size: item.size || null });
+    }
+
+    const shippingAmount = ORDER_SHIPPING;
+    const feesAmount = Math.round((subtotal + shippingAmount) * ORDER_FEES_TAUX * 100) / 100;
+    const total = Math.round((subtotal + shippingAmount + feesAmount) * 100) / 100;
+
     let validatedPromoCode = null;
     if (promoCode && typeof promoCode === 'string' && promoCode.trim() !== '') {
       const promo = await db.collection('promo_codes').findOne({ 
@@ -1185,7 +1584,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
     
     const order = {
       userId: req.user.userId,
-      items,
+      items: validatedItems,
       shippingAddress,
       dogInfo: {
         breed: dogInfo.breed,
@@ -1208,36 +1607,65 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
       updatedAt: new Date()
     };
     
+    // Numérotation atomique (art. 242 nonies A CGI: séquence sans rupture).
+    // findOneAndUpdate avec $inc est une opération atomique single-doc côté Mongo.
     const now = new Date();
-    const year = now.getFullYear().toString().slice(-2);
+    const year = now.getFullYear().toString();
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const monthPrefix = `${year}${month}-`;
-    
-    const monthOrders = await db.collection('orders').find({
-      orderNumber: { $regex: `^${monthPrefix}` }
-    }).toArray();
-    
-    let maxNumber = 0;
-    monthOrders.forEach(order => {
-      if (order.orderNumber) {
-        const match = order.orderNumber.match(/^\d{4}-(\d+)$/);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxNumber) {
-            maxNumber = num;
-          }
-        }
-      }
-    });
-    
-    const nextNumber = (maxNumber + 1).toString().padStart(4, '0');
-    const orderNumber = `${monthPrefix}${nextNumber}`;
+    const day = now.getDate().toString().padStart(2, '0');
+    const dayPrefix = `${year}${month}${day}`;
+
+    const counterDoc = await db.collection('counters').findOneAndUpdate(
+      { _id: `orders:${dayPrefix}` },
+      { $inc: { seq: 1 }, $setOnInsert: { createdAt: now } },
+      { upsert: true, returnDocument: 'after' }
+    );
+    const seq = counterDoc?.seq ?? counterDoc?.value?.seq;
+    if (!Number.isInteger(seq) || seq < 1) {
+      throw new Error('Compteur de numérotation indisponible');
+    }
+    const orderNumber = `${dayPrefix}${seq.toString().padStart(4, '0')}`;
     order.orderNumber = orderNumber;
     const result = await db.collection('orders').insertOne(order);
     await db.collection('carts').updateOne(
       { userId: req.user.userId },
       { $set: { items: [], updatedAt: new Date() } }
     );
+
+    try {
+      const user = await db.collection('users').findOne(
+        { _id: new ObjectId(req.user.userId) },
+        { projection: { email: 1, firstName: 1, lastName: 1 } }
+      );
+      const productMap = await getProductMapByIds((order.items || []).map(i => i.productId));
+      const ship = order.shippingAddress || {};
+      const itemsForEmail = (order.items || []).map(item => ({
+        name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
+        quantity: item.quantity,
+        price: item.price
+      }));
+      const shippingCost = order.shippingAmount != null ? Number(order.shippingAmount) : 5.9;
+      const dogInfoStr = order.dogInfo ? `Race: ${order.dogInfo.breed || ''}\nÂge: ${order.dogInfo.age || ''}${order.dogInfo.tourDeCou ? `\nTour de cou: ${order.dogInfo.tourDeCou}` : ''}${order.dogInfo.tourDeTaille ? `\nTour de taille: ${order.dogInfo.tourDeTaille}` : ''}` : '';
+      const orderData = {
+        orderNumber: orderNumber,
+        firstName: ship.firstName || user?.firstName || '',
+        lastName: ship.lastName || user?.lastName || '',
+        items: itemsForEmail,
+        totalAmount: Number(order.total),
+        shippingCost,
+        shippingAddress: ship,
+        customerName: [ship.firstName, ship.lastName].filter(Boolean).join(' ') || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Client'),
+        customerEmail: ship.email || user?.email || '',
+        customerPhone: ship.phone || '',
+        paymentMethod: 'En attente de validation',
+        dogInfo: dogInfoStr || undefined,
+        notes: order.notes || undefined
+      };
+      await sendNewOrderNotificationEmail(orderData);
+    } catch (emailErr) {
+      console.error('Erreur envoi email nouvelle commande (non-bloquant):', emailErr);
+    }
+
     res.status(201).json({ id: result.insertedId.toString(), orderNumber, ...order });
   } catch (error) {
     console.error('Erreur lors de la création de la commande:', error);
@@ -1276,11 +1704,17 @@ app.get('/api/orders', authenticateToken, async (req, res) => {
 app.get('/api/orders/admin', authenticateAdmin, async (req, res) => {
   try {
     const orders = await db.collection('orders').find({}).sort({ createdAt: -1 }).toArray();
-    const ordersWithUsers = await Promise.all(orders.map(async (order) => {
-      const user = await db.collection('users').findOne(
-        { _id: new ObjectId(order.userId) },
-        { projection: { email: 1, firstName: 1, lastName: 1 } }
-      );
+    const userIds = [...new Set(orders.map(o => o.userId).filter(Boolean))];
+    const userObjectIds = userIds.map(id => { try { return new ObjectId(id); } catch { return null; } }).filter(Boolean);
+    const users = userObjectIds.length > 0
+      ? await db.collection('users').find(
+          { _id: { $in: userObjectIds } },
+          { projection: { email: 1, firstName: 1, lastName: 1 } }
+        ).toArray()
+      : [];
+    const userMap = Object.fromEntries(users.map(u => [u._id.toString(), u]));
+    const ordersWithUsers = orders.map((order) => {
+      const user = userMap[order.userId] || null;
       return {
         id: order._id.toString(),
         orderNumber: order.orderNumber || null,
@@ -1297,7 +1731,7 @@ app.get('/api/orders/admin', authenticateAdmin, async (req, res) => {
         createdAt: order.createdAt,
         updatedAt: order.updatedAt
       };
-    }));
+    });
     res.json(ordersWithUsers);
   } catch (error) {
     console.error('Erreur lors de la récupération des commandes admin:', error);
@@ -1340,6 +1774,9 @@ app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
       }
       updateData.counterProposal = null;
     }
+    if (status === 'paid') {
+      updateData.paymentInfo = { method: 'admin', paidAt: new Date(), ...(order.paymentInfo || {}) };
+    }
     const result = await db.collection('orders').updateOne(
       { _id: new ObjectId(req.params.id) },
       { $set: updateData }
@@ -1347,6 +1784,45 @@ app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
     if (result.matchedCount === 0) {
       return res.status(404).json({ error: 'Commande non trouvée' });
     }
+
+    if (status === 'validated') {
+      try {
+        const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+        const user = await db.collection('users').findOne(
+          { _id: new ObjectId(updatedOrder.userId) },
+          { projection: { email: 1, firstName: 1, lastName: 1 } }
+        );
+        const productMap = await getProductMapByIds((updatedOrder.items || []).map(i => i.productId));
+        const ship = updatedOrder.shippingAddress || {};
+        const itemsForEmail = (updatedOrder.items || []).map(item => ({
+          name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
+          quantity: item.quantity,
+          price: item.price
+        }));
+        const shippingCost = updatedOrder.shippingAmount != null ? Number(updatedOrder.shippingAmount) : 5.9;
+        const orderData = {
+          orderNumber: updatedOrder.orderNumber || updatedOrder._id.toString(),
+          firstName: ship.firstName || user?.firstName || '',
+          lastName: ship.lastName || user?.lastName || '',
+          items: itemsForEmail,
+          totalAmount: Number(updatedOrder.total),
+          shippingCost,
+          customerName: [ship.firstName, ship.lastName].filter(Boolean).join(' ') || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Client')
+        };
+        const clientEmail = ship.email || user?.email;
+        if (clientEmail) {
+          await sendOrderValidatedEmail(clientEmail, orderData);
+        }
+      } catch (emailErr) {
+        console.error('Erreur envoi email commande validée (non-bloquant):', emailErr);
+      }
+    }
+
+    if (status === 'paid') {
+      const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+      await insertPaymentStat(updatedOrder);
+    }
+
     res.json({ message: 'Statut mis à jour', status });
   } catch (error) {
     console.error('Erreur lors de la mise à jour du statut:', error);
@@ -1379,6 +1855,34 @@ app.put('/api/orders/:id/counter-proposal', authenticateToken, async (req, res) 
         { _id: new ObjectId(req.params.id) },
         { $set: updateData }
       );
+      try {
+        const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+        const user = await db.collection('users').findOne(
+          { _id: new ObjectId(updatedOrder.userId) },
+          { projection: { email: 1, firstName: 1, lastName: 1 } }
+        );
+        const productMap = await getProductMapByIds((updatedOrder.items || []).map(i => i.productId));
+        const ship = updatedOrder.shippingAddress || {};
+        const itemsForEmail = (updatedOrder.items || []).map(item => ({
+          name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
+          quantity: item.quantity,
+          price: item.price
+        }));
+        const shippingCost = updatedOrder.shippingAmount != null ? Number(updatedOrder.shippingAmount) : 5.9;
+        const orderData = {
+          orderNumber: updatedOrder.orderNumber || updatedOrder._id.toString(),
+          items: itemsForEmail,
+          totalAmount: Number(updatedOrder.total),
+          shippingCost,
+          customerName: [ship.firstName, ship.lastName].filter(Boolean).join(' ') || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Client')
+        };
+        const clientEmail = ship.email || user?.email;
+        if (clientEmail) {
+          await sendOrderValidatedEmail(clientEmail, orderData);
+        }
+      } catch (emailErr) {
+        console.error('Erreur envoi email commande validée (non-bloquant):', emailErr);
+      }
       res.json({ message: 'Contre-proposition acceptée', status: 'validated' });
     } else if (newProposal) {
       const updateData = {
@@ -1410,6 +1914,9 @@ app.delete('/api/orders/:id', authenticateToken, async (req, res) => {
     const order = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
     if (!order) {
       return res.status(404).json({ error: 'Commande non trouvée' });
+    }
+    if (order.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Non autorisé' });
     }
     const deletableStatuses = ['pending_validation', 'pending_counter_proposal', 'validated', 'rejected'];
     if (!deletableStatuses.includes(order.status)) {
@@ -1455,7 +1962,7 @@ app.put('/api/orders/:id/cancel', authenticateToken, async (req, res) => {
 app.post('/api/admin/login', adminLoginLimiter, async (req, res) => {
   try {
     const { password } = req.body;
-    const clientIp = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+    const clientIp = req.ip || req.socket?.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
     const userAgent = req.headers['user-agent'] || 'unknown';
 
     if (await isIpBanned(clientIp)) {
@@ -1517,19 +2024,23 @@ app.post('/api/admin/login', adminLoginLimiter, async (req, res) => {
 
     await detectBotPattern();
 
-    res.json({
-      message: 'Connexion admin réussie',
-      token,
-      expiresIn: ADMIN_JWT_EXPIRATION
-    });
+    // Stocker le token dans un cookie httpOnly (non accessible via JS)
+    res.cookie('adminAuthToken', token, getAdminCookieOptions());
+
+    res.json({ message: 'Connexion admin réussie' });
   } catch (error) {
     console.error('Erreur lors de la connexion admin:', error);
-    const clientIp = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+    const clientIp = req.ip || req.socket?.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
     const userAgent = req.headers['user-agent'] || 'unknown';
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
     await logAdminAttempt(clientIp, false, { reason: 'Erreur serveur', userAgent });
     res.status(500).json({ error: 'Erreur serveur' });
   }
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  res.clearCookie('adminAuthToken', { path: '/' });
+  res.json({ message: 'Déconnexion admin réussie' });
 });
 
 async function isIpBanned(ip) {
@@ -1676,92 +2187,107 @@ app.get('/api/admin/verify', authenticateAdmin, async (req, res) => {
 
 app.get('/api/stats', authenticateAdmin, async (req, res) => {
   try {
-    const statsDoc = await db.collection('stats').findOne({});
-    
+    const { from, to, collection: fCollection, category: fCategory } = req.query;
     const now = new Date();
-    const last7Days = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      date.setHours(0, 0, 0, 0);
-      
-      const dayStat = statsDoc?.dailyStats?.find(d => {
-        if (!d.date) return false;
-        const dDate = new Date(d.date);
-        dDate.setHours(0, 0, 0, 0);
-        return dDate.getTime() === date.getTime();
-      });
-
-      const dayName = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][date.getDay()];
-      last7Days.push({
-        date: dayName,
-        revenue: dayStat?.revenue || 0,
-        orders: dayStat?.orders || 0
-      });
-    }
-    
-    if (!statsDoc) {
-      return res.json({
-        totalRevenue: 0,
-        totalOrders: 0,
-        averageOrderValue: 0,
-        monthlyRevenue: 0,
-        monthlyOrders: 0,
-        monthlyAverageOrderValue: 0,
-        lastMonthRevenue: 0,
-        lastMonthOrders: 0,
-        lastMonthAverageOrderValue: 0,
-        revenueChange: 0,
-        ordersChange: 0,
-        averageOrderValueChange: 0,
-        dailyStats: last7Days,
-        collectionStats: {},
-        categoryStats: {}
-      });
-    }
-
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
-    const monthlyStat = statsDoc.monthlyStats?.find(m => 
-      m.month && new Date(m.month).getTime() === monthStart.getTime()
-    ) || { revenue: 0, orders: 0 };
+    const allRecords = await db.collection('payment_stats').find({}).sort({ date: 1 }).toArray();
 
-    const lastMonthlyStat = statsDoc.monthlyStats?.find(m => {
-      const mDate = new Date(m.month);
-      return mDate.getTime() >= lastMonthStart.getTime() && mDate.getTime() <= lastMonthEnd.getTime();
-    }) || { revenue: 0, orders: 0 };
+    // Global monthly KPIs (never filtered — stable reference)
+    let totalRevenue = 0, totalOrders = 0;
+    let monthlyRevenue = 0, monthlyOrders = 0;
+    let lastMonthRevenue = 0, lastMonthOrders = 0;
+    for (const rec of allRecords) {
+      const d = rec.date ? new Date(rec.date) : new Date();
+      const orderTotal = Number(rec.totalAmount) || 0;
+      totalRevenue += orderTotal;
+      totalOrders++;
+      const dMonthStart = new Date(d.getFullYear(), d.getMonth(), 1);
+      if (dMonthStart.getTime() === monthStart.getTime()) { monthlyRevenue += orderTotal; monthlyOrders++; }
+      else if (d >= lastMonthStart && d <= lastMonthEnd) { lastMonthRevenue += orderTotal; lastMonthOrders++; }
+    }
 
-    const monthlyAverageOrderValue = monthlyStat.orders > 0 ? monthlyStat.revenue / monthlyStat.orders : 0;
-    const lastMonthAverageOrderValue = lastMonthlyStat.orders > 0 ? lastMonthlyStat.revenue / lastMonthlyStat.orders : 0;
+    // Chart date range (default: last 7 days)
+    const fromDate = from ? new Date(String(from)) : (() => { const d = new Date(now); d.setDate(d.getDate() - 6); d.setHours(0, 0, 0, 0); return d; })();
+    const toDate = to ? new Date(String(to)) : now;
 
-    const revenueChange = lastMonthlyStat.revenue > 0 
-      ? ((monthlyStat.revenue - lastMonthlyStat.revenue) / lastMonthlyStat.revenue) * 100 
-      : 0;
-    const ordersChange = lastMonthlyStat.orders > 0 
-      ? ((monthlyStat.orders - lastMonthlyStat.orders) / lastMonthlyStat.orders) * 100 
-      : 0;
-    const averageOrderValueChange = lastMonthAverageOrderValue > 0 
-      ? ((monthlyAverageOrderValue - lastMonthAverageOrderValue) / lastMonthAverageOrderValue) * 100 
-      : 0;
+    // Filtered aggregation for chart + breakdown bars
+    const dailyStatsMap = {};
+    const collectionStats = {};
+    const categoryStats = {};
+
+    for (const rec of allRecords) {
+      const d = rec.date ? new Date(rec.date) : new Date();
+      if (d < fromDate || d > toDate) continue;
+
+      const orderTotal = Number(rec.totalAmount) || 0;
+      const dayKey = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      let orderMatches = !fCollection && !fCategory;
+
+      for (const item of rec.items || []) {
+        const matchCol = !fCollection || item.collection === String(fCollection);
+        const matchCat = !fCategory || item.category === String(fCategory);
+        if (matchCol && matchCat) {
+          const col = item.collection || 'Autre';
+          const cat = item.category || 'Autre';
+          collectionStats[col] = (collectionStats[col] || 0) + Number(item.itemTotal || 0);
+          categoryStats[cat] = (categoryStats[cat] || 0) + Number(item.itemTotal || 0);
+          orderMatches = true;
+        }
+      }
+
+      if (orderMatches) {
+        if (!dailyStatsMap[dayKey]) dailyStatsMap[dayKey] = { revenue: 0, orders: 0 };
+        dailyStatsMap[dayKey].revenue += orderTotal;
+        dailyStatsMap[dayKey].orders += 1;
+      }
+    }
+
+    // Build chart: daily if ≤ 30 days, weekly otherwise (max 30 bars)
+    const daysDiff = Math.max(1, Math.ceil((toDate - fromDate) / (24 * 60 * 60 * 1000)) + 1);
+    const dailyStats = [];
+    if (daysDiff <= 30) {
+      for (let i = 0; i < daysDiff; i++) {
+        const date = new Date(fromDate);
+        date.setDate(date.getDate() + i);
+        date.setHours(0, 0, 0, 0);
+        const s = dailyStatsMap[date.getTime()] || { revenue: 0, orders: 0 };
+        const label = daysDiff <= 7
+          ? ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][date.getDay()]
+          : date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+        dailyStats.push({ date: label, revenue: s.revenue, orders: s.orders });
+      }
+    } else {
+      const step = Math.ceil(daysDiff / 30) * 7;
+      for (let offset = 0; offset < daysDiff && dailyStats.length < 30; offset += step) {
+        const wStart = new Date(fromDate); wStart.setDate(wStart.getDate() + offset); wStart.setHours(0, 0, 0, 0);
+        const wEnd = new Date(wStart); wEnd.setDate(wEnd.getDate() + step);
+        let rev = 0, orders = 0;
+        for (const [k, v] of Object.entries(dailyStatsMap)) {
+          const kd = new Date(Number(k));
+          if (kd >= wStart && kd < wEnd) { rev += v.revenue; orders += v.orders; }
+        }
+        dailyStats.push({ date: wStart.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }), revenue: rev, orders });
+      }
+    }
+
+    const monthlyAverageOrderValue = monthlyOrders > 0 ? monthlyRevenue / monthlyOrders : 0;
+    const lastMonthAverageOrderValue = lastMonthOrders > 0 ? lastMonthRevenue / lastMonthOrders : 0;
+    const revenueChange = lastMonthRevenue > 0 ? ((monthlyRevenue - lastMonthRevenue) / lastMonthRevenue) * 100 : (monthlyRevenue > 0 ? 100 : 0);
+    const ordersChange = lastMonthOrders > 0 ? ((monthlyOrders - lastMonthOrders) / lastMonthOrders) * 100 : (monthlyOrders > 0 ? 100 : 0);
+    const averageOrderValueChange = lastMonthAverageOrderValue > 0 ? ((monthlyAverageOrderValue - lastMonthAverageOrderValue) / lastMonthAverageOrderValue) * 100 : (monthlyAverageOrderValue > 0 ? 100 : 0);
 
     res.json({
-      totalRevenue: statsDoc.totalRevenue || 0,
-      totalOrders: statsDoc.totalOrders || 0,
-      averageOrderValue: statsDoc.averageOrderValue || 0,
-      monthlyRevenue: monthlyStat.revenue || 0,
-      monthlyOrders: monthlyStat.orders || 0,
-      monthlyAverageOrderValue: monthlyAverageOrderValue,
-      lastMonthRevenue: lastMonthlyStat.revenue || 0,
-      lastMonthOrders: lastMonthlyStat.orders || 0,
-      lastMonthAverageOrderValue: lastMonthAverageOrderValue,
+      totalRevenue, totalOrders,
+      averageOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
+      monthlyRevenue, monthlyOrders, monthlyAverageOrderValue,
+      lastMonthRevenue, lastMonthOrders, lastMonthAverageOrderValue,
       revenueChange: Math.round(revenueChange * 10) / 10,
       ordersChange: Math.round(ordersChange * 10) / 10,
       averageOrderValueChange: Math.round(averageOrderValueChange * 10) / 10,
-      dailyStats: last7Days,
-      collectionStats: statsDoc.collectionStats || {},
-      categoryStats: statsDoc.categoryStats || {}
+      dailyStats, collectionStats, categoryStats
     });
   } catch (error) {
     console.error('Erreur lors de la récupération des stats:', error);
@@ -1769,138 +2295,39 @@ app.get('/api/stats', authenticateAdmin, async (req, res) => {
   }
 });
 
-async function updateStats(order) {
+async function insertPaymentStat(order) {
   try {
     if (!db) {
-      console.error('❌ [STATS] DB non initialisée');
+      console.error('❌ [PAYMENT_STATS] DB non initialisée');
       return;
     }
+    const existing = await db.collection('payment_stats').findOne({ orderId: order._id });
+    if (existing) return;
 
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+    const productMap = await getProductMapByIds((order.items || []).map(i => i.productId));
 
-    const orderTotal = order.total || 0;
-    const orderItems = order.items || [];
-
-    const products = await db.collection('products').find({}).toArray();
-    const productMap = {};
-    products.forEach(p => {
-      productMap[p.id] = p;
-    });
-
-    const collectionStats = {};
-    const categoryStats = {};
-
-    orderItems.forEach(item => {
+    const date = order.paymentInfo?.paidAt || order.updatedAt || order.createdAt || new Date();
+    const totalAmount = Number(order.total) || 0;
+    const items = (order.items || []).map(item => {
       const product = productMap[item.productId];
-      if (product) {
-        const collection = product.collection || 'Autre';
-        const category = product.category || 'Autre';
-        const itemTotal = (item.price || 0) * (item.quantity || 1);
-
-        collectionStats[collection] = (collectionStats[collection] || 0) + itemTotal;
-        categoryStats[category] = (categoryStats[category] || 0) + itemTotal;
-      }
+      const collection = product?.collection || 'Autre';
+      const category = product?.category || 'Autre';
+      const quantity = item.quantity || 1;
+      const price = item.price || 0;
+      const itemTotal = price * quantity;
+      return { productId: item.productId, collection, category, quantity, price, itemTotal };
     });
 
-    const statsDoc = await db.collection('stats').findOne({});
-    
-    if (!statsDoc) {
-      const newStats = {
-        totalRevenue: orderTotal,
-        totalOrders: 1,
-        averageOrderValue: orderTotal,
-        dailyStats: [{
-          date: today,
-          revenue: orderTotal,
-          orders: 1
-        }],
-        monthlyStats: [{
-          month: monthStart,
-          revenue: orderTotal,
-          orders: 1
-        }],
-        collectionStats: collectionStats,
-        categoryStats: categoryStats,
-        lastUpdated: now
-      };
-      await db.collection('stats').insertOne(newStats);
-    } else {
-      const updateData = {
-        totalRevenue: (statsDoc.totalRevenue || 0) + orderTotal,
-        totalOrders: (statsDoc.totalOrders || 0) + 1,
-        lastUpdated: now
-      };
-
-      updateData.averageOrderValue = updateData.totalRevenue / updateData.totalOrders;
-
-      const dailyStat = statsDoc.dailyStats?.find(d => {
-        if (!d.date) return false;
-        const dDate = d.date instanceof Date ? d.date : new Date(d.date);
-        dDate.setHours(0, 0, 0, 0);
-        const todayCopy = new Date(today);
-        todayCopy.setHours(0, 0, 0, 0);
-        return dDate.getTime() === todayCopy.getTime();
-      });
-
-      if (dailyStat) {
-        dailyStat.revenue = (dailyStat.revenue || 0) + orderTotal;
-        dailyStat.orders = (dailyStat.orders || 0) + 1;
-      } else {
-        if (!statsDoc.dailyStats) statsDoc.dailyStats = [];
-        statsDoc.dailyStats.push({
-          date: today,
-          revenue: orderTotal,
-          orders: 1
-        });
-      }
-
-      const monthlyStat = statsDoc.monthlyStats?.find(m => {
-        if (!m.month) return false;
-        const mDate = m.month instanceof Date ? m.month : new Date(m.month);
-        mDate.setHours(0, 0, 0, 0);
-        const monthStartCopy = new Date(monthStart);
-        monthStartCopy.setHours(0, 0, 0, 0);
-        return mDate.getTime() === monthStartCopy.getTime();
-      });
-
-      if (monthlyStat) {
-        monthlyStat.revenue = (monthlyStat.revenue || 0) + orderTotal;
-        monthlyStat.orders = (monthlyStat.orders || 0) + 1;
-      } else {
-        if (!statsDoc.monthlyStats) statsDoc.monthlyStats = [];
-        statsDoc.monthlyStats.push({
-          month: monthStart,
-          revenue: orderTotal,
-          orders: 1
-        });
-      }
-
-      Object.keys(collectionStats).forEach(collection => {
-        if (!statsDoc.collectionStats) statsDoc.collectionStats = {};
-        statsDoc.collectionStats[collection] = (statsDoc.collectionStats[collection] || 0) + collectionStats[collection];
-      });
-
-      Object.keys(categoryStats).forEach(category => {
-        if (!statsDoc.categoryStats) statsDoc.categoryStats = {};
-        statsDoc.categoryStats[category] = (statsDoc.categoryStats[category] || 0) + categoryStats[category];
-      });
-
-      updateData.dailyStats = statsDoc.dailyStats;
-      updateData.monthlyStats = statsDoc.monthlyStats;
-      updateData.collectionStats = statsDoc.collectionStats;
-      updateData.categoryStats = statsDoc.categoryStats;
-
-      await db.collection('stats').updateOne(
-        {},
-        { $set: updateData }
-      );
-    }
+    await db.collection('payment_stats').insertOne({
+      orderId: order._id,
+      date: new Date(date),
+      totalAmount,
+      items,
+      createdAt: new Date()
+    });
+    console.log('✅ [PAYMENT_STATS] Enregistrement ajouté pour commande', order._id.toString());
   } catch (error) {
-    console.error('Erreur lors de la mise à jour des stats:', error);
+    console.error('Erreur lors de l\'insertion payment_stats:', error);
   }
 }
 
@@ -2342,14 +2769,13 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
         { $set: updateData }
       );
       const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
-      await updateStats(updatedOrder);
+      await insertPaymentStat(updatedOrder);
 
       const user = await db.collection('users').findOne(
         { _id: new ObjectId(updatedOrder.userId) },
         { projection: { email: 1, firstName: 1, lastName: 1 } }
       );
-      const products = await db.collection('products').find({}).toArray();
-      const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
+      const productMap = await getProductMapByIds((updatedOrder.items || []).map(i => i.productId));
       const ship = updatedOrder.shippingAddress || {};
       const itemsForEmail = (updatedOrder.items || []).map(item => ({
         name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
@@ -2371,9 +2797,11 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
         paymentMethod: 'Stripe'
       };
       try {
+        // Facture envoyée au client (email livraison prioritaire, sinon email compte)
         const clientEmail = ship.email || user?.email;
         if (clientEmail) {
           await sendOrderConfirmationEmail(clientEmail, orderData);
+          await sendInvoiceEmail(clientEmail, orderData);
         }
         await sendNewOrderNotificationEmail(orderData);
       } catch (emailErr) {
@@ -2444,7 +2872,7 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
     );
 
     const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
-    await updateStats(updatedOrder);
+    await insertPaymentStat(updatedOrder);
 
     res.json({ message: 'Paiement enregistré', status: 'paid' });
   } catch (error) {
@@ -2453,15 +2881,35 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
   }
 });
 
-app.listen(PORT, async () => {
-  console.log(`🚀 Serveur démarré sur le port ${PORT}`);
-  await connectToDatabase();
+app.use((err, req, res, _next) => {
+  // pino-http attache déjà req.log, on l'utilise pour conserver le requestId
+  (req.log || logger).error({ err, method: req.method, url: req.originalUrl }, '[EXPRESS] Erreur non gérée');
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
 });
+
+logger.info({ port: PORT }, '[BOOT] Écoute');
+try {
+  app.listen(PORT, '0.0.0.0', () => {
+    logger.info({
+      port: PORT,
+      env: process.env.NODE_ENV || 'development',
+      api: `http://0.0.0.0:${PORT}/api`,
+      health: `http://0.0.0.0:${PORT}/api/health`,
+      metrics: `http://0.0.0.0:${PORT}/api/metrics`,
+    }, '🚀 Serveur démarré');
+    connectToDatabase();
+  });
+} catch (err) {
+  logger.fatal({ err }, '[BOOT] Erreur au démarrage');
+  process.exit(1);
+}
 
 process.on('SIGTERM', async () => {
   if (client) {
     await client.close();
-    console.log('Connexion MongoDB fermée');
+    logger.info('Connexion MongoDB fermée');
   }
   process.exit(0);
 });

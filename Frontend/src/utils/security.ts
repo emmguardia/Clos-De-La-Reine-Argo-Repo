@@ -44,40 +44,25 @@ export function sanitizeDescription(text: string, maxLength: number = 1000): str
     .slice(0, maxLength);
 }
 
-export function validateToken(token: string | null): boolean {
-  if (!token || typeof token !== 'string') {
-    return false;
-  }
+/**
+ * Retourne une valeur truthy si l'utilisateur est connecté (session cookie httpOnly côté serveur).
+ * Le token JWT n'est plus accessible depuis JavaScript — uniquement via cookie httpOnly.
+ * On stocke un flag `isLoggedIn` en localStorage pour savoir si une session existe.
+ */
+export function getTokenFromStorage(): string | null {
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) {
-      return false;
-    }
-    const payload = JSON.parse(atob(parts[1]));
-    if (!payload.exp) {
-      return false;
-    }
-    const expirationTime = payload.exp * 1000;
-    return Date.now() < expirationTime;
+    return localStorage.getItem('isLoggedIn') === 'true' ? 'authenticated' : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
-export function getTokenFromStorage(): string | null {
+export function clearAuthData(): void {
   try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      return null;
-    }
-    if (!validateToken(token)) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      return null;
-    }
-    return token;
+    localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('user');
   } catch {
-    return null;
+    // ignore
   }
 }
 
@@ -100,6 +85,22 @@ export function validateFileType(file: File, allowedTypes: string[]): boolean {
 
 export function validateFileSize(file: File, maxSizeMB: number): boolean {
   return file.size <= maxSizeMB * 1024 * 1024;
+}
+
+const SAFE_IMAGE_PREFIXES = ['https://', 'http://', 'data:image/png', 'data:image/jpeg', 'data:image/jpg', 'data:image/gif', 'data:image/webp'] as const;
+/** Retourne l'URL si elle est sûre pour img src, sinon chaîne vide (allowlist stricte, pas de blocklist partielle) */
+export function getSafeImageSrc(url: string | undefined | null): string {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (trimmed.length === 0 || trimmed.length > 2048) return '';
+  const lower = trimmed.toLowerCase();
+  const isSafe = SAFE_IMAGE_PREFIXES.some(p => lower.startsWith(p))
+    || (trimmed.startsWith('/') && !trimmed.includes('//'));
+  return isSafe ? trimmed : '';
+}
+/** @deprecated Utiliser getSafeImageSrc pour l'attribut src */
+export function isSafeImageUrl(url: string | undefined | null): boolean {
+  return getSafeImageSrc(url).length > 0;
 }
 
 export async function safeJsonResponse<T>(response: Response, fallback: T): Promise<T> {

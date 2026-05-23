@@ -1,9 +1,12 @@
-import { useState } from 'react';
-import { sanitizeInput, sanitizeEmail, sanitizeText } from '../utils/security';
+import { useState, useRef, useEffect } from 'react';
+import { sanitizeDescription, sanitizeEmail } from '../utils/security';
+import { trackEvent } from '../utils/analytics';
+import SEO from '../components/SEO';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
 export default function ContactPage() {
+  const formStartTracked = useRef(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -14,10 +17,24 @@ export default function ContactPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    const form = document.querySelector('form');
+    if (!form) return;
+    const onFormInteraction = () => {
+      if (!formStartTracked.current) {
+        formStartTracked.current = true;
+        trackEvent('contact_form_start', { page: 'contact' });
+      }
+    };
+    form.addEventListener('focusin', onFormInteraction);
+    return () => form.removeEventListener('focusin', onFormInteraction);
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+    trackEvent('contact_form_submit_click', { page: 'contact', subject: formData.subject });
     try {
       const response = await fetch(`${API_URL}/api/contact`, {
         method: 'POST',
@@ -31,12 +48,14 @@ export default function ContactPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (response.ok && data.success) {
+        trackEvent('contact_form_success', { page: 'contact', subject: formData.subject });
         setSuccess(true);
         setFormData({ name: '', email: '', subject: '', message: '' });
       } else {
         setError(data.error || 'Erreur lors de l\'envoi. Réessayez.');
       }
     } catch {
+      trackEvent('contact_form_error', { page: 'contact' });
       setError('Erreur de connexion. Réessayez.');
     } finally {
       setLoading(false);
@@ -49,9 +68,9 @@ export default function ContactPage() {
     if (e.target.name === 'email') {
       sanitizedValue = sanitizeEmail(value) || value.slice(0, 255);
     } else if (e.target.name === 'name' || e.target.name === 'subject') {
-      sanitizedValue = sanitizeInput(value).slice(0, 100);
+      sanitizedValue = sanitizeDescription(value, 100);
     } else if (e.target.name === 'message') {
-      sanitizedValue = sanitizeText(value, 2000);
+      sanitizedValue = sanitizeDescription(value, 2000);
     }
     
     setFormData({
@@ -60,11 +79,17 @@ export default function ContactPage() {
     });
   };
   return (
+    <>
+    <SEO
+      title="Contact"
+      description="Contactez Clos de la Reine pour toute question sur nos créations artisanales pour chiens."
+      path="/contact"
+    />
     <div className="bg-white min-h-screen">
       <div className="relative border-b border-black/5">
         <div className="absolute inset-0">
           <img
-            src="/Images/header2.jpg"
+            src="/Images/header2.webp"
             alt="Contactez-nous"
             className="h-full w-full object-cover"
             loading="lazy"
@@ -89,7 +114,11 @@ export default function ContactPage() {
               <div className="space-y-4 text-gray-600">
                 <div>
                   <p className="font-medium text-gray-900 mb-1">Email</p>
-                  <a href="mailto:contact@closdelareine.fr" className="hover:text-gray-900 transition-colors">
+                  <a
+                    href="mailto:closdelareine@gmail.com"
+                    className="hover:text-gray-900 transition-colors"
+                    onClick={() => trackEvent('contact_email_click', { source: 'contact_page' })}
+                  >
                     closdelareine@gmail.com
                   </a>
                 </div>
@@ -104,8 +133,8 @@ export default function ContactPage() {
               <h3 className="text-lg font-light text-gray-900 mb-3">Le Clos de la Reine</h3>
               <p className="text-gray-600 text-sm leading-relaxed">
                 Une maison française qui imagine colliers, laisses et harnais au croisement de
-                l'élégance épurée et de la fonctionnalité. Matières douces, finitions sellier,
-                palette crème, rose poudré et vert clair pour sublimer vos compagnons et votre intérieur.
+                l'élégance épurée et de la fonctionnalité. Matières douces,
+                détails soignés, palette crème, rose poudré et vert clair pour sublimer vos compagnons.
               </p>
             </div>
           </div>
@@ -214,5 +243,6 @@ export default function ContactPage() {
         </div>
       </main>
     </div>
+    </>
   );
 }

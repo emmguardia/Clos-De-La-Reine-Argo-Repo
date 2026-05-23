@@ -1,9 +1,13 @@
-import { Package, FolderOpen, BarChart3, Image as ImageIcon, Plus, Edit, Trash2, Search, X, Save, ShoppingBag, HelpCircle, LogOut, Tag } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Package, FolderOpen, BarChart3, Plus, Edit, Trash2, Search, X, Save, ShoppingBag, HelpCircle, LogOut, Tag, DollarSign } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { useProducts } from '../hooks/useProducts';
+import { useProductsForAdmin } from '../hooks/useProductsForAdmin';
+import { invalidateProductsCache } from '../data/products';
+import { fetchProductById } from '../data/products';
 import type { Product } from '../data/products';
 import ImageUpload from '../components/ImageUpload';
+import Pagination from '../components/Pagination';
+
 import { sanitizeInput, sanitizeDescription, safeJsonResponse } from '../utils/security';
 
 interface GalleryItem {
@@ -18,10 +22,11 @@ interface GalleryItem {
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
 export default function AdminPanelPage() {
-  const { products, loading } = useProducts();
+  const navigate = useNavigate();
+  const [searchTerm, setSearchTerm] = useState('');
+  const { products, total, page, totalPages, loading, refetch, goToPage } = useProductsForAdmin(searchTerm);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
   const [collections, setCollections] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     name: '',
@@ -52,42 +57,7 @@ export default function AdminPanelPage() {
   const [currentPagePro, setCurrentPagePro] = useState(1);
   const [currentPageClient, setCurrentPageClient] = useState(1);
   const itemsPerPage = 6;
-  useEffect(() => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
-      window.location.href = '/admin/login';
-      return;
-    }
-    verifyAdminToken();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const verifyAdminToken = async () => {
-    try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        window.location.href = '/admin/login';
-        return;
-      }
-
-      const response = await fetch(`${API_URL}/api/admin/verify`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
-      });
-
-      if (!response.ok) {
-        localStorage.removeItem('adminToken');
-        window.location.href = '/admin/login';
-        return;
-      }
-
-      fetchCollections();
-      fetchGalleryItems();
-    } catch {
-      localStorage.removeItem('adminToken');
-      window.location.href = '/admin/login';
-    }
-  };
-
+  const [paymentStats, setPaymentStats] = useState<{ totalOrders: number; totalRevenue: number; monthlyOrders: number; monthlyRevenue: number } | null>(null);
   const fetchCollections = async () => {
     try {
       const response = await fetch(`${API_URL}/api/collections`);
@@ -106,18 +76,42 @@ export default function AdminPanelPage() {
     }
   };
 
-  const fetchGalleryItems = async () => {
+  const fetchPaymentStats = async () => {
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) return;
-      const response = await fetch(`${API_URL}/api/gallery`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
+      if (!localStorage.getItem('isAdminLoggedIn')) return;
+      const response = await fetch(`${API_URL}/api/stats`, {
+        credentials: 'include',
       });
       if (response.ok) {
-        const data = await safeJsonResponse(response, []);
-        if (Array.isArray(data)) {
-          setGalleryItems(data);
+        const data = await safeJsonResponse(response, null);
+        if (data && typeof data === 'object') {
+          setPaymentStats({
+            totalOrders: (data as { totalOrders?: number }).totalOrders ?? 0,
+            totalRevenue: (data as { totalRevenue?: number }).totalRevenue ?? 0,
+            monthlyOrders: (data as { monthlyOrders?: number }).monthlyOrders ?? 0,
+            monthlyRevenue: (data as { monthlyRevenue?: number }).monthlyRevenue ?? 0
+          });
+        } else {
+          setPaymentStats({ totalOrders: 0, totalRevenue: 0, monthlyOrders: 0, monthlyRevenue: 0 });
         }
+      } else {
+        setPaymentStats({ totalOrders: 0, totalRevenue: 0, monthlyOrders: 0, monthlyRevenue: 0 });
+      }
+    } catch {
+      setPaymentStats({ totalOrders: 0, totalRevenue: 0, monthlyOrders: 0, monthlyRevenue: 0 });
+    }
+  };
+
+  const fetchGalleryItems = async () => {
+    try {
+      if (!localStorage.getItem('isAdminLoggedIn')) return;
+      const response = await fetch(`${API_URL}/api/gallery?limit=200`, {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await safeJsonResponse(response, { images: [] });
+        const items = Array.isArray(data) ? data : (data as { images: GalleryItem[] }).images ?? [];
+        setGalleryItems(items);
       }
     } catch (err) {
       console.error('Erreur:', err);
@@ -126,15 +120,45 @@ export default function AdminPanelPage() {
     }
   };
 
+  const verifyAdminToken = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/admin/verify`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        localStorage.removeItem('isAdminLoggedIn');
+        navigate('/admin/login');
+        return;
+      }
+
+      fetchCollections();
+      fetchGalleryItems();
+      fetchPaymentStats();
+    } catch {
+      localStorage.removeItem('isAdminLoggedIn');
+      navigate('/admin/login');
+    }
+  };
+
+  useEffect(() => {
+    if (!localStorage.getItem('isAdminLoggedIn')) {
+      navigate('/admin/login');
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    verifyAdminToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleGallerySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGalleryError('');
     setGallerySuccess('');
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        window.location.href = '/admin/login';
+      if (!localStorage.getItem('isAdminLoggedIn')) {
+        navigate('/admin/login');
         return;
       }
 
@@ -150,10 +174,8 @@ export default function AdminPanelPage() {
 
       const response = await fetch(`${API_URL}/api/gallery`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           name: sanitizedName,
           type: galleryFormType,
@@ -179,16 +201,15 @@ export default function AdminPanelPage() {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette image ?')) return;
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        window.location.href = '/admin/login';
+      if (!localStorage.getItem('isAdminLoggedIn')) {
+        navigate('/admin/login');
         return;
       }
 
-      setGalleryDeleteLoading({ ...galleryDeleteLoading, [id]: true });
+      setGalleryDeleteLoading(prev => ({ ...prev, [id]: true }));
       const response = await fetch(`${API_URL}/api/gallery/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${adminToken}` }
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -201,7 +222,7 @@ export default function AdminPanelPage() {
     } catch {
       setGalleryError('Erreur lors de la suppression');
     } finally {
-      setGalleryDeleteLoading({ ...galleryDeleteLoading, [id]: false });
+      setGalleryDeleteLoading(prev => ({ ...prev, [id]: false }));
     }
   };
 
@@ -256,22 +277,25 @@ export default function AdminPanelPage() {
     setShowAddForm(false);
   };
 
-  const handleEdit = (product: Product) => {
-    setEditingProduct(product);
+  const handleEdit = async (product: Product) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const full = await fetchProductById(product.id);
+    const p = full ?? product;
+    setEditingProduct(p);
     setFormData({
-      name: product.name,
-      price: product.price.toString(),
-      category: product.category,
-      collection: product.collection,
-      color: Array.isArray(product.color) ? product.color.join(', ') : product.color,
-      image: product.image,
-      secondImage: product.secondImage || '',
-      isNew: product.isNew || false,
-      briefDescription: product.briefDescription || '',
-      surcharge1m20: product.surcharge1m20 != null ? String(product.surcharge1m20).replace('.', ',') : '',
-      surchargeSurMesure: product.surchargeSurMesure != null ? String(product.surchargeSurMesure).replace('.', ',') : ''
+      name: p.name,
+      price: p.price.toString(),
+      category: p.category,
+      collection: p.collection,
+      color: Array.isArray(p.color) ? p.color.join(', ') : p.color,
+      image: p.image,
+      secondImage: p.secondImage || '',
+      isNew: p.isNew || false,
+      briefDescription: p.briefDescription || '',
+      surcharge1m20: p.surcharge1m20 != null ? String(p.surcharge1m20).replace('.', ',') : '',
+      surchargeSurMesure: p.surchargeSurMesure != null ? String(p.surchargeSurMesure).replace('.', ',') : ''
     });
-    setAdditionalImages(product.additionalImages || []);
+    setAdditionalImages(p.additionalImages || []);
     setShowAddForm(true);
   };
 
@@ -288,26 +312,23 @@ export default function AdminPanelPage() {
     }
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         setFormError('Session expirée. Veuillez vous reconnecter.');
         setFormLoading(false);
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
-      
-      const url = editingProduct 
+
+      const url = editingProduct
         ? `${API_URL}/api/products/${editingProduct.id}`
         : `${API_URL}/api/products`;
-      
+
       const method = editingProduct ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           name: formData.name.trim(),
           price: parseFloat(formData.price),
@@ -331,11 +352,12 @@ export default function AdminPanelPage() {
       }
 
       setFormSuccess(editingProduct ? 'Produit mis à jour avec succès' : 'Produit créé avec succès');
+      invalidateProductsCache();
       setTimeout(() => {
         resetForm();
-        window.location.reload();
+        refetch();
       }, 1500);
-    } catch {
+    } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Erreur lors de l\'opération');
     } finally {
       setFormLoading(false);
@@ -347,44 +369,40 @@ export default function AdminPanelPage() {
       return;
     }
 
-    setDeleteLoading({ ...deleteLoading, [productId]: true });
+    setDeleteLoading(prev => ({ ...prev, [productId]: true }));
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         alert('Session expirée. Veuillez vous reconnecter.');
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
-      
+
       const response = await fetch(`${API_URL}/api/products/${productId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${adminToken}`
-        },
+        credentials: 'include',
       });
 
       if (!response.ok) {
         throw new Error('Erreur lors de la suppression du produit');
       }
 
-      window.location.reload();
-    } catch {
+      invalidateProductsCache();
+      refetch();
+    } catch (err) {
       alert(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     } finally {
-      setDeleteLoading({ ...deleteLoading, [productId]: false });
+      setDeleteLoading(prev => ({ ...prev, [productId]: false }));
     }
   };
 
-  const filteredProducts = products.filter(p =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.collection.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const paginatedProducts = products;
 
   const handleLogout = () => {
     if (confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
-      localStorage.removeItem('adminToken');
-      window.location.href = '/admin/login';
+      fetch(`${API_URL}/api/admin/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
+      localStorage.removeItem('isAdminLoggedIn');
+      navigate('/admin/login');
     }
   };
 
@@ -442,11 +460,29 @@ export default function AdminPanelPage() {
             </Link>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-2xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <ShoppingBag className="w-8 h-8 text-gray-600" />
+              <span className="text-2xl font-light text-gray-900">{paymentStats?.totalOrders ?? '...'}</span>
+            </div>
+            <p className="text-sm text-gray-600">Commandes payées</p>
+            <p className="text-xs text-gray-500 mt-1">Mis à jour après chaque paiement</p>
+          </div>
+          <div className="bg-white rounded-2xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <DollarSign className="w-8 h-8 text-gray-600" />
+              <span className="text-2xl font-light text-gray-900">
+                {paymentStats ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(paymentStats.totalRevenue) : '...'}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">Chiffre d'affaires total</p>
+            <p className="text-xs text-gray-500 mt-1">Mis à jour après chaque paiement</p>
+          </div>
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <Package className="w-8 h-8 text-gray-600" />
-              <span className="text-2xl font-light text-gray-900">{loading ? '...' : products.length}</span>
+              <span className="text-2xl font-light text-gray-900">{loading ? '...' : total}</span>
             </div>
             <p className="text-sm text-gray-600">Produits</p>
           </div>
@@ -456,13 +492,6 @@ export default function AdminPanelPage() {
               <span className="text-2xl font-light text-gray-900">{loading ? '...' : collections.length}</span>
             </div>
             <p className="text-sm text-gray-600">Collections</p>
-          </div>
-          <div className="bg-white rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <ImageIcon className="w-8 h-8 text-gray-600" />
-              <span className="text-2xl font-light text-gray-900">{galleryLoading ? '...' : galleryItems.length}</span>
-            </div>
-            <p className="text-sm text-gray-600">Photos galerie</p>
           </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -718,15 +747,16 @@ export default function AdminPanelPage() {
                 <h3 className="text-xl font-light text-gray-900 mb-4">Liste des produits</h3>
                 {loading ? (
                   <div className="text-center py-8 text-gray-500">Chargement des produits...</div>
-                ) : filteredProducts.length === 0 ? (
+                ) : paginatedProducts.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">Aucun produit trouvé</div>
                 ) : (
                   <div className="space-y-4">
-                    {filteredProducts.map((product) => (
+                    {paginatedProducts.map((product) => (
                       <div key={product.id} className="p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors">
                         <div className="flex items-center gap-4">
                           <img
                             src={product.image}
+                            loading="lazy"
                             alt={product.name}
                             className="w-16 h-16 object-cover rounded-lg"
                             onError={(e) => {
@@ -764,6 +794,12 @@ export default function AdminPanelPage() {
                         </div>
                       </div>
                     ))}
+                    <Pagination
+                      currentPage={page}
+                      totalPages={totalPages}
+                      onPageChange={goToPage}
+                      className="mt-6"
+                    />
                   </div>
                 )}
               </div>
@@ -791,7 +827,7 @@ export default function AdminPanelPage() {
                         <h3 className="font-medium text-gray-900">{collection}</h3>
                       </div>
                       <p className="text-sm text-gray-600">
-                        {products.filter(p => p.collection === collection).length} produits
+                        produits
                       </p>
                     </div>
                   ))}
@@ -898,6 +934,7 @@ export default function AdminPanelPage() {
                                 <img
                                   src={item.data}
                                   alt={item.name}
+                                  loading="lazy"
                                   className="w-full h-24 object-cover rounded-lg"
                                 />
                                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
@@ -986,6 +1023,7 @@ export default function AdminPanelPage() {
                                 <img
                                   src={item.data}
                                   alt={item.name}
+                                  loading="lazy"
                                   className="w-full h-24 object-cover rounded-lg"
                                 />
                                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">

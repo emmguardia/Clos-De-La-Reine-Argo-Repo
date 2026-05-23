@@ -1,12 +1,15 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../hooks/useCart';
-import { useProducts } from '../hooks/useProducts';
+import SEO from '../components/SEO';
+import { trackEvent } from '../utils/analytics';
+import { useProductsByIds } from '../hooks/useProductsByIds';
 import { Trash2, Plus, Minus } from 'lucide-react';
 
 export default function CartPage() {
   const navigate = useNavigate();
   const { items, loading, updateQuantity, removeFromCart } = useCart();
-  const { products } = useProducts();
+  const productIds = items.map(i => i.productId);
+  const { getProduct, loading: productsLoading } = useProductsByIds(productIds);
   const formatSize = (size?: string) => {
     if (!size) return '';
     if (size === '1m20') return '1,20 m';
@@ -15,7 +18,7 @@ export default function CartPage() {
   };
 
   const cartProducts = items.map(item => {
-    const product = products.find(p => p.id === item.productId);
+    const product = getProduct(item.productId);
     if (!product) return null;
     const surcharge = product.category === 'laisses' && item.size === '1m20' && (product.surcharge1m20 ?? 0) > 0 ? (product.surcharge1m20 ?? 0) : 0;
     return { ...product, quantity: item.quantity, size: item.size, unitPrice: product.price + surcharge };
@@ -23,7 +26,12 @@ export default function CartPage() {
 
   const total = cartProducts.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
 
-  if (loading) {
+  // Évite le flash "panier vide" : quand les items du panier viennent d'arriver
+  // mais que useProductsByIds n'a pas encore démarré son fetch (productsLoading
+  // démarre à false car ids était vide au premier render).
+  const awaitingProducts = items.length > 0 && cartProducts.length === 0 && !productsLoading;
+
+  if (loading || productsLoading || awaitingProducts) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb] flex items-center justify-center">
         <p className="text-gray-600">Chargement du panier...</p>
@@ -32,6 +40,8 @@ export default function CartPage() {
   }
 
   return (
+    <>
+    <SEO title="Panier" noindex path="/panier" />
     <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb]">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-10">
         <div className="space-y-3 text-center">
@@ -71,7 +81,7 @@ export default function CartPage() {
                 const isSameItem = (p: typeof item) => p.id === item.id && (p.size || '') === (item.size || '');
                 return (
                 <div key={itemKey} className="flex gap-4 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
-                  <img src={item.image} alt={item.name} className="w-20 h-20 object-cover rounded-lg" />
+                  <img src={item.image} alt={item.name} loading="lazy" className="w-20 h-20 object-cover rounded-lg" />
                   <div className="flex-1">
                     <h3 className="font-medium text-gray-900">{item.name}</h3>
                     <p className="text-sm text-gray-600">
@@ -106,7 +116,10 @@ export default function CartPage() {
                   <div className="flex flex-col items-end justify-between">
                     <p className="font-medium">{(item.unitPrice * item.quantity).toFixed(2)} €</p>
                     <button
-                      onClick={() => removeFromCart(item.id, item.size)}
+                      onClick={() => {
+                      trackEvent('cart_remove_item', { product_id: item.id, product_name: item.name, quantity: item.quantity });
+                      removeFromCart(item.id, item.size);
+                    }}
                       className="p-2 text-red-600 hover:bg-red-50 rounded"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -120,7 +133,10 @@ export default function CartPage() {
                   <span>{total.toFixed(2)} €</span>
                 </div>
                 <button
-                  onClick={() => navigate('/checkout')}
+                  onClick={() => {
+                  trackEvent('checkout_start', { item_count: cartProducts.length, total: total.toFixed(2) });
+                  navigate('/checkout');
+                }}
                   className="w-full bg-gray-900 text-white py-3 rounded-lg hover:bg-gray-800 transition-colors"
                 >
                   Passer la commande
@@ -131,5 +147,6 @@ export default function CartPage() {
         )}
       </div>
     </div>
+    </>
   );
 }

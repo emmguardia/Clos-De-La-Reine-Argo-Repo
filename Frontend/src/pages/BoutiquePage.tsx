@@ -1,11 +1,14 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ProductCard from '../components/ProductCard';
+import { trackEvent } from '../utils/analytics';
 import ProductModal from '../components/ProductModal';
-import { useProducts } from '../hooks/useProducts';
+import Pagination from '../components/Pagination';
+import { useBoutiqueProducts } from '../hooks/useBoutiqueProducts';
 import type { Product, ProductCategory } from '../data/products';
+import SEO from '../components/SEO';
+
 export default function BoutiquePage() {
-  const { products, loading } = useProducts();
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryParam = searchParams.get('category') as ProductCategory | null;
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'all'>(
@@ -15,60 +18,71 @@ export default function BoutiquePage() {
   const [selectedColor, setSelectedColor] = useState<string>('all');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const categoryProducts = useMemo(
-    () => selectedCategory === 'all' 
-      ? products 
-      : products.filter((p) => p.category === selectedCategory),
-    [selectedCategory, products]
-  );
-  const filtered = useMemo(
-    () => categoryProducts.filter(
-      (p) => (selectedCollection === 'all' || p.collection === selectedCollection) &&
-             (selectedColor === 'all' || 
-              (Array.isArray(p.color) ? p.color.includes(selectedColor) : p.color === selectedColor))
-    ),
-    [categoryProducts, selectedCollection, selectedColor]
-  );
-  const collections = useMemo(
-    () => Array.from(new Set(categoryProducts.map((p) => p.collection))),
-    [categoryProducts]
-  );
-  const colors = useMemo(
-    () => {
-      const allColors = categoryProducts.flatMap((p) => 
-        Array.isArray(p.color) ? p.color : [p.color]
-      );
-      return Array.from(new Set(allColors));
-    },
-    [categoryProducts]
-  );
+
+  const { products, page, totalPages, collections, colors, loading, goToPage } = useBoutiqueProducts({
+    category: selectedCategory === 'all' ? undefined : selectedCategory,
+    collection: selectedCollection === 'all' ? undefined : selectedCollection,
+    color: selectedColor === 'all' ? undefined : selectedColor
+  });
+
   useEffect(() => {
     if (categoryParam && ['colliers', 'harnais', 'laisses'].includes(categoryParam)) {
       queueMicrotask(() => setSelectedCategory(categoryParam));
     }
   }, [categoryParam]);
+
   const categories: { value: ProductCategory | 'all'; label: string }[] = [
     { value: 'all', label: 'Tous les produits' },
     { value: 'colliers', label: 'Colliers' },
     { value: 'harnais', label: 'Harnais' },
     { value: 'laisses', label: 'Laisses' },
   ];
+
   const handleCategoryChange = (category: ProductCategory | 'all') => {
     setSelectedCategory(category);
     setSelectedCollection('all');
     setSelectedColor('all');
+    trackEvent('boutique_filter_category', { category: category === 'all' ? 'tous' : category });
     if (category === 'all') {
       setSearchParams({});
     } else {
       setSearchParams({ category });
     }
   };
+
   return (
+    <>
+    <SEO
+      title="Boutique"
+      description="Colliers, laisses et harnais artisanaux pour chiens — matières nobles, finitions soignées, teintes intemporelles."
+      path="/boutique"
+      jsonLd={{
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "name": "Boutique Clos de la Reine",
+        "itemListElement": products.map((product, index) => ({
+          "@type": "ListItem",
+          "position": index + 1,
+          "item": {
+            "@type": "Product",
+            "name": product.name,
+            ...(product.briefDescription ? { "description": product.briefDescription } : {}),
+            "image": `https://closdelareine.com${product.image}`,
+            "offers": {
+              "@type": "Offer",
+              "price": product.price,
+              "priceCurrency": "EUR",
+              "availability": "https://schema.org/InStock"
+            }
+          }
+        }))
+      }}
+    />
     <div className="bg-white min-h-screen">
       <div className="relative border-b border-black/5">
         <div className="absolute inset-0">
           <img
-            src="/Images/header2.jpg"
+            src="/Images/header2.webp"
             alt="Notre boutique"
             className="h-full w-full object-cover"
             loading="lazy"
@@ -104,11 +118,14 @@ export default function BoutiquePage() {
             </nav>
             <h2 className="text-sm text-gray-600 font-medium pt-2">Collections</h2>
             <nav className="flex flex-wrap gap-2" aria-label="Filtres par collection">
-              {collections.map((col) => (
+              {(collections ?? []).map((col) => (
                 <button
                   key={col}
                   type="button"
-                  onClick={() => setSelectedCollection(col)}
+                  onClick={() => {
+                    setSelectedCollection(col);
+                    trackEvent('boutique_filter_collection', { collection: col });
+                  }}
                   className={`px-3 py-2 rounded-full text-sm transition-colors cursor-pointer ${
                     selectedCollection === col 
                       ? 'bg-gray-900 text-white' 
@@ -122,11 +139,14 @@ export default function BoutiquePage() {
             </nav>
             <h2 className="text-sm text-gray-600 font-medium pt-2">Couleurs</h2>
             <nav className="flex flex-wrap gap-2" aria-label="Filtres par couleur">
-              {colors.map((color) => (
+              {(colors ?? []).map((color) => (
                 <button
                   key={color}
                   type="button"
-                  onClick={() => setSelectedColor(color)}
+                  onClick={() => {
+                    setSelectedColor(color);
+                    trackEvent('boutique_filter_color', { color });
+                  }}
                   className={`px-3 py-2 rounded-full text-sm transition-colors cursor-pointer ${
                     selectedColor === color 
                       ? 'bg-gray-900 text-white' 
@@ -144,6 +164,7 @@ export default function BoutiquePage() {
                 handleCategoryChange('all');
                 setSelectedCollection('all');
                 setSelectedColor('all');
+                trackEvent('boutique_filter_reset', {});
               }}
               className="mt-2 px-4 py-2 rounded-full bg-gray-900 text-white text-sm hover:bg-gray-800 transition-colors w-fit cursor-pointer"
             >
@@ -157,7 +178,7 @@ export default function BoutiquePage() {
           <div className="text-center py-16" role="status" aria-live="polite">
             <p className="text-gray-500 text-lg font-light">Chargement des produits...</p>
           </div>
-        ) : filtered.length > 0 ? (
+        ) : products.length > 0 ? (
           <section className="space-y-6">
             <header className="flex items-center justify-between">
               <h2 className="text-2xl font-light text-gray-900">
@@ -172,7 +193,7 @@ export default function BoutiquePage() {
               <div className="h-px w-16 bg-gray-900" aria-hidden="true" />
             </header>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filtered.map((product) => (
+              {products.map((product) => (
                 <ProductCard 
                   key={product.id} 
                   product={product} 
@@ -183,6 +204,12 @@ export default function BoutiquePage() {
                 />
               ))}
             </div>
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={goToPage}
+              className="mt-10"
+            />
           </section>
         ) : (
           <div className="text-center py-16" role="status" aria-live="polite">
@@ -190,11 +217,12 @@ export default function BoutiquePage() {
           </div>
         )}
       </main>
-      <ProductModal 
-        product={selectedProduct} 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
+      <ProductModal
+        product={selectedProduct}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
       />
     </div>
+    </>
   );
 }

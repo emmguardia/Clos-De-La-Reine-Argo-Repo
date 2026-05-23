@@ -1,21 +1,31 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import SEO from '../components/SEO';
 import ProductCard from '../components/ProductCard';
 import ProductModal from '../components/ProductModal';
-import { useProducts } from '../hooks/useProducts';
+import { useProductsByIds } from '../hooks/useProductsByIds';
 import { useFavorites } from '../hooks/useFavorites';
+import { fetchProductsPaginated } from '../data/products';
 import type { Product } from '../data/products';
 
 export default function FavoritesPage() {
-  const { products, loading } = useProducts();
   const { favorites, loading: favoritesLoading } = useFavorites();
-  const favoriteProducts = useMemo(
-    () => products.filter(p => favorites.includes(p.id)),
-    [products, favorites]
-  );
+  const { products: favoriteProducts, loading: productsLoading } = useProductsByIds(favorites);
+  const [suggestions, setSuggestions] = useState<Product[]>([]);
+  useEffect(() => {
+    if (favorites.length > 0) {
+      fetchProductsPaginated({ limit: 10 }).then(({ products }) => {
+        setSuggestions(products.filter(p => !favorites.includes(p.id)).slice(0, 3));
+      }).catch(() => setSuggestions([]));
+    } else {
+      queueMicrotask(() => setSuggestions([]));
+    }
+  }, [favorites]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   return (
+    <>
+    <SEO title="Favoris" noindex path="/favoris" />
     <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-10">
         <div className="space-y-3 text-center">
@@ -45,7 +55,7 @@ export default function FavoritesPage() {
             </Link>
           </div>
         </div>
-        {loading || favoritesLoading ? (
+        {productsLoading || favoritesLoading ? (
           <div className="rounded-[28px] border border-black/5 bg-white/80 backdrop-blur-sm p-10 text-center shadow-sm">
             <p className="text-lg text-gray-700">Chargement des favoris...</p>
           </div>
@@ -83,10 +93,7 @@ export default function FavoritesPage() {
               <div className="h-px w-16 bg-gray-900" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {products
-                .filter(p => !favoriteProducts.some(fp => fp.id === p.id))
-                .slice(0, 3)
-                .map((product) => (
+              {suggestions.map((product) => (
                   <ProductCard 
                     key={product.id} 
                     product={product} 
@@ -100,11 +107,12 @@ export default function FavoritesPage() {
           </div>
         )}
       </div>
-      <ProductModal 
-        product={selectedProduct} 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
+      <ProductModal
+        product={selectedProduct}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
       />
     </div>
+    </>
   );
 }

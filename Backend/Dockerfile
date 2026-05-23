@@ -1,24 +1,22 @@
-FROM node:20-alpine
+# Alpine ~5MB vs Debian ~1GB : surface d'attaque réduite
+FROM node:26-alpine
 
 ENV NODE_ENV=production
 ENV NPM_CONFIG_LOGLEVEL=error
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
-# Mise à jour des paquets Alpine (correctifs sécurité)
-RUN apk update && apk upgrade --no-cache
-
 WORKDIR /app
 
-# Corriger CVE-2026-26960 (tar): forcer 7.5.8 partout
-RUN npm install -g tar@7.5.8 \
+# Patch sécurité: forcer tar@latest (corrige les CVE connues)
+RUN npm install -g tar@latest \
     && NPM_TAR="/usr/local/lib/node_modules/npm/node_modules/tar" \
     && rm -rf "$NPM_TAR" \
     && mkdir -p "$(dirname "$NPM_TAR")" \
     && cp -r /usr/local/lib/node_modules/tar "$NPM_TAR" \
     && npm cache clean --force
 
-# Corriger CVE-2026-26996 (minimatch): forcer 10.2.1 partout (npm et dépendances)
-RUN npm install -g minimatch@10.2.1 \
+# Patch sécurité: forcer minimatch@latest (corrige les CVE connues)
+RUN npm install -g minimatch@latest \
     && NPM_MM="/usr/local/lib/node_modules/npm/node_modules/minimatch" \
     && rm -rf "$NPM_MM" \
     && mkdir -p "$(dirname "$NPM_MM")" \
@@ -29,8 +27,8 @@ RUN npm install -g minimatch@10.2.1 \
        done) \
     && npm cache clean --force
 
-# Corriger CVE-2024-21538 (cross-spawn) et CVE-2025-64756 (glob)
-RUN npm install -g cross-spawn@7.0.5 glob@10.5.0 \
+# Patch sécurité: forcer cross-spawn@latest et glob@latest (corrige les CVE connues)
+RUN npm install -g cross-spawn@latest glob@latest \
     && G="/usr/local/lib/node_modules" \
     && for d in $(find "$G" -name "cross-spawn" -type d 2>/dev/null); do \
          [ "$d" = "$G/cross-spawn" ] && continue; \
@@ -42,17 +40,34 @@ RUN npm install -g cross-spawn@7.0.5 glob@10.5.0 \
        done \
     && npm cache clean --force
 
+# Patch sécurité: forcer picomatch@latest (CVE-2026-33671 ReDoS via extglob patterns)
+RUN npm install -g picomatch@latest \
+    && G="/usr/local/lib/node_modules" \
+    && for d in $(find "$G" -name "picomatch" -type d 2>/dev/null); do \
+         [ "$d" = "$G/picomatch" ] && continue; \
+         rm -rf "$d" && cp -r "$G/picomatch" "$d"; \
+       done \
+    && npm cache clean --force
+
 RUN echo "update-notifier=false" > .npmrc && echo "loglevel=error" >> .npmrc
 
 COPY dist/package*.json ./
 
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit --no-fund --loglevel=error 2>&1 | grep -v "npm notice" || true; else npm install --omit=dev --no-audit --no-fund --loglevel=error 2>&1 | grep -v "npm notice" || true; fi \
+# apk upgrade juste avant npm ci : cache Docker optimisé + correctifs Alpine frais à chaque changement de deps
+RUN apk update && apk upgrade --no-cache \
+    && (if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit --no-fund --loglevel=error 2>&1 | grep -v "npm notice" || true; else npm install --omit=dev --no-audit --no-fund --loglevel=error 2>&1 | grep -v "npm notice" || true; fi) \
     && npm cache clean --force 2>/dev/null || true
 
-# Re-patch minimatch après npm ci (remplace toute version < 10.2.1)
+# Re-patch minimatch après npm ci (remplace par la version latest)
 RUN for d in $(find /usr/local/lib/node_modules /app/node_modules -name "minimatch" -type d 2>/dev/null); do \
       [ "$d" = "/usr/local/lib/node_modules/minimatch" ] && continue; \
       rm -rf "$d" && cp -r /usr/local/lib/node_modules/minimatch "$d"; \
+    done
+
+# Re-patch picomatch après npm ci (remplace par la version latest, corrige CVE-2026-33671)
+RUN for d in $(find /usr/local/lib/node_modules /app/node_modules -name "picomatch" -type d 2>/dev/null); do \
+      [ "$d" = "/usr/local/lib/node_modules/picomatch" ] && continue; \
+      rm -rf "$d" && cp -r /usr/local/lib/node_modules/picomatch "$d"; \
     done
 
 COPY dist/src/ ./src/

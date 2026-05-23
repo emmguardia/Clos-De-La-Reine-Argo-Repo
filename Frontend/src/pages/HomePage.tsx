@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
-import { useState, useMemo } from 'react';
-import { useProducts } from '../hooks/useProducts';
+import { useState } from 'react';
+import { trackEvent } from '../utils/analytics';
+import { useFeaturedProducts } from '../hooks/useFeaturedProducts';
 import ProductCard from '../components/ProductCard';
 import ProductModal from '../components/ProductModal';
 import type { ProductCategory, Product } from '../data/products';
-const heroImage = '/Images/header.jpg';
+import SEO from '../components/SEO';
+const heroImage = '/Images/header.webp';
 interface FeaturedProduct {
   id: string;
   title: string;
@@ -19,36 +21,36 @@ interface FeaturedProduct {
 }
 const featuredProducts: FeaturedProduct[] = [
   {
-    id: 'collier_tartan_beige',
-    title: 'collier tartan beige',
+    id: '1',
+    title: 'Collier tartan bleu',
     subtitle: 'Collier et laisse assortis, bleu profond',
     price: '27€',
     badge: 'Collier phare',
-    image: '/Images/Back_to_school_1.jpg',
+    image: '/Images/Back_to_school_1.webp',
     tone: 'from-[#f2dedd]/90 via-white to-[#e5f2eb]/60',
     to: '/boutique?category=colliers',
     category: 'colliers',
     collection: 'Back to School',
   },
   {
-    id: 'laisse_tartan_beige',
+    id: '2',
     title: 'Laisse tartan beige',
-    subtitle: 'Tressage atelier, mousqueton inox, teinte moka',
+    subtitle: 'Tissu écossais beige, boucle dorée élégante, finition soignée.',
     price: '37€',
     badge: 'Laisse phare',
-    image: '/Images/Collier_BTS1.jpg',
+    image: '/Images/Collier_BTS1.webp',
     tone: 'from-[#e5f2eb]/90 via-white to-[#f8f4ef]/60',
     to: '/boutique?category=laisses',
     category: 'laisses',
     collection: 'Back to School',
   },
   {
-    id: 'harnais_tartan_beige ',
+    id: '3 ',
     title: 'Harnais tartan beige',
-    subtitle: 'Mesh respirant, sangles sable, ergonomie douce',
+    subtitle: 'Matières douces et respirantes, coupe ergonomique',
     price: '47€',
     badge: 'Harnais phare',
-    image: '/Images/Back_to_school_3.jpg',
+    image: '/Images/Back_to_school_3.webp',
     tone: 'from-[#f8f4ef]/90 via-white to-[#f2dedd]/60',
     to: '/boutique?category=harnais',
     category: 'harnais',
@@ -56,15 +58,40 @@ const featuredProducts: FeaturedProduct[] = [
   },
 ];
 export default function HomePage() {
-  const { products, loading } = useProducts();
-  const newProducts = useMemo(
-    () => products.filter((p) => p.isNew === true).slice(0, 4),
-    [products]
-  );
+  const { products: newProducts, loading } = useFeaturedProducts(4);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   return (
     <>
+      <SEO
+        title="Clos de la Reine"
+        description="Accessoires artisanaux pour chiens — colliers, laisses et harnais faits à la main avec des matières de qualité, pour les chiens qui ont du style."
+        path="/"
+        ogImage="/Images/header2.webp"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "LocalBusiness",
+          "name": "Le Clos de la Reine",
+          "description": "Accessoires artisanaux pour chiens — colliers, laisses et harnais en cuir végétal, finitions sellier, production atelier française.",
+          "url": "https://leclosdelareine.com",
+          "logo": "https://leclosdelareine.com/Images/Logo.webp",
+          "image": "https://leclosdelareine.com/Images/header.webp",
+          "email": "closdelareine@gmail.com",
+          "telephone": "+33628462644",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "1 Chemin de la Marnière",
+            "addressLocality": "Lésigny",
+            "postalCode": "77150",
+            "addressCountry": "FR"
+          },
+          "priceRange": "€€",
+          "currenciesAccepted": "EUR",
+          "paymentAccepted": "Credit Card",
+          "openingHours": "Mo-Su 00:00-23:59",
+          "sameAs": []
+        }}
+      />
       <section className="relative overflow-hidden bg-gradient-to-b from-white via-gray-50 to-gray-100">
         <div className="absolute inset-0 overflow-hidden">
           <img
@@ -92,12 +119,14 @@ export default function HomePage() {
               <a
                 href="#pieces-phares"
                 className="bg-gray-900 text-white px-8 py-3 rounded-full hover:bg-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg shadow-gray-900/10"
+                onClick={() => trackEvent('hero_cta_click', { cta: 'decouvrir_collection', source: 'home' })}
               >
                 Découvrir la collection
               </a>
               <a
                 href="#nouveautes"
                 className="px-8 py-3 rounded-full border border-gray-300 text-gray-900 hover:border-gray-600 hover:text-gray-900 transition-all duration-300"
+                onClick={() => trackEvent('hero_cta_click', { cta: 'nouveautes', source: 'home' })}
               >
                 Nouveautés
               </a>
@@ -105,7 +134,7 @@ export default function HomePage() {
             <div className="flex items-center gap-6 text-sm text-gray-500 animate-fadeIn-delay-3">
               <div className="flex items-center gap-2">
                 <span className="block h-px w-10 bg-gray-400" />
-                Passions & Esthétisme
+                Passion & Esthétisme
               </div>
               <div className="flex items-center gap-2">
                 <span className="block h-px w-10 bg-gray-400" />
@@ -128,12 +157,13 @@ export default function HomePage() {
                 Pièces phares
               </h2>
               <p className="text-gray-900 mt-3 max-w-xl">
-                Découvrez notre dernière collection Back to School.
+                Découvrez notre dernière collection phare Back to School.
               </p>
             </div>
             <Link
               to="/boutique"
               className="self-start sm:self-auto px-5 py-2 rounded-full border border-gray-300 text-sm text-gray-800 hover:border-gray-900 transition-colors"
+              onClick={() => trackEvent('home_section_click', { section: 'pieces_phares', action: 'voir_tout' })}
             >
               Voir tout
             </Link>
@@ -149,9 +179,9 @@ export default function HomePage() {
                 <div className="absolute inset-0">
                   <img
                     src={product.image}
+                    loading="lazy"
                     alt={product.title}
                     className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    loading="lazy"
                   />
                   <div
                     className={`absolute inset-0 bg-gradient-to-br ${product.tone} opacity-60`}
@@ -175,6 +205,7 @@ export default function HomePage() {
                       <Link
                         to={product.to}
                         className={`rounded-full bg-gray-900 text-white font-medium hover:bg-gray-800 transition-all duration-200 shadow-lg ${index === 0 ? 'px-4 py-2 text-sm' : 'px-3 py-1.5 text-xs'}`}
+                        onClick={() => trackEvent('home_featured_click', { product: product.title, category: product.category })}
                       >
                         Découvrir
                       </Link>
@@ -201,6 +232,7 @@ export default function HomePage() {
             <Link
               to="/boutique"
               className="self-start sm:self-auto px-5 py-2 rounded-full border border-gray-300 text-sm text-gray-800 hover:border-gray-900 transition-colors"
+              onClick={() => trackEvent('home_section_click', { section: 'nouveautes', action: 'voir_tout' })}
             >
               Voir tout
             </Link>
@@ -232,19 +264,20 @@ export default function HomePage() {
             <p className="uppercase tracking-[0.28em] text-xs text-gray-500">Maison</p>
             <h2 className="text-3xl font-light text-gray-900">Le Clos de la Reine</h2>
             <p className="text-gray-600 leading-relaxed">
-              Une maison française qui imagine colliers, laisses et harnais au croisement du
-              élégance et de la fonctionnalité. Matières douces, finitions sellier,
-              palette crème, rose poudré et vert clair pour sublimer vos compagnons et votre intérieur.
+            Une maison française qui imagine colliers, laisses et harnais au 
+            croisement de l'élégance et de la fonctionnalité. 
+            Matières douces, finitions soignées, palette crème, rose poudré et
+             vert clair pour sublimer vos compagnons et votre intérieur.
             </p>
             <ul className="flex gap-4 text-sm text-gray-700 list-none">
-              <li className="px-4 py-2 rounded-full bg-[#f8f4ef]">Finitions sellier</li>
-              <li className="px-4 py-2 rounded-full bg-[#e5f2eb]">Cuirs végétaux</li>
+              <li className="px-4 py-2 rounded-full bg-[#f8f4ef]">Détails soignés</li>
+              <li className="px-4 py-2 rounded-full bg-[#e5f2eb]">Tissus élégants</li>
               <li className="px-4 py-2 rounded-full bg-[#f2dedd]">Production atelier</li>
             </ul>
           </article>
           <figure className="overflow-hidden rounded-[28px] shadow-xl shadow-black/10">
             <img
-              src="/Images/Profile1.jpg"
+              src="/Images/Profile1.webp"
               alt="Univers Le Clos de la Reine"
               className="w-full h-full object-cover"
               loading="lazy"
@@ -256,7 +289,7 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 grid md:grid-cols-2 gap-10 items-center">
           <div className="overflow-hidden rounded-[28px] shadow-xl shadow-black/10 order-2 md:order-1 transition duration-300 ease-in-out hover:scale-[1.02]">
             <img
-              src="/Images/Profile2.jpg"
+              src="/Images/Profile2.webp"
               alt="Joanne, fondatrice"
               className="w-full h-full object-cover transition-transform duration-300 ease-in-out hover:scale-[1.02]"
               loading="lazy"
@@ -266,14 +299,38 @@ export default function HomePage() {
             <p className="uppercase tracking-[0.28em] text-xs text-gray-500">Fondatrice</p>
             <h2 className="text-3xl font-light text-gray-900">Joanne — œil couture, esprit atelier</h2>
             <p className="text-gray-600 leading-relaxed">
-              Cavalière, maman et sensible à la beauté dans ses moindres détails, Joanne imagine des lignes raffinées dédiées à l'élégance canine, portées par l'exigence et la sincérité.
-              Chaque pièce est conçue en série limitée, avec des matières sélectionnées avec soin, des finitions précises et une attention constante au confort comme à l'émotion.
+              Cavalière, maman et sensible à la beauté dans ses moindres détails, Joanne imagine des lignes raffinées, dédiées à l'élégance canine, portées par l'exigence et la sincérité.
+              Chaque pièce est conçue en série limitée, avec des matières sélectionnées avec soin, des finitions précises et une attention constante portée au confort comme à l'émotion.
               Le Clos de la Reine privilégie une production mesurée, guidée par l'écoute et les retours, afin de proposer des créations justes, durables et intemporelles.
             </p>
             <div className="flex flex-col gap-2 text-sm text-gray-700">
               <span>• Sélection de matières responsables</span>
               <span>• Production raisonnée, ajustée avec précision</span>
               <span>• Collections pensées pour durer</span>
+            </div>
+            <div className="pt-6 mt-6 border-t border-gray-200/60">
+              <p className="text-gray-600 leading-relaxed">
+              Vendôme est arrivé dans ma vie au moment où j'en avais profondément besoin : il est devenu à la fois mon moteur et mon pilier. Au-delà de sa beauté évidente, il est d'une douceur infinie, drôle, lumineux au quotidien, et il m'accompagne chaque jour dans la création et l'élaboration des produits que propose Le Clos de la Reine.
+                Vendôme a vu le jour à l’élevage du {' '}
+                <a
+                  href="https://dudomainedesrevesbleus.chiens-de-france.com/cocker-spaniel-anglais"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-gray-900 font-medium underline underline-offset-2 hover:text-gray-700 transition-colors"
+                >
+                  domaine des rêves bleus
+                  <span className="text-xs">↗</span>
+                </a>
+                .
+              </p>
+              <a
+                href="https://dudomainedesrevesbleus.chiens-de-france.com/cocker-spaniel-anglais"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-full border border-gray-300 text-sm text-gray-800 hover:border-gray-900 hover:bg-gray-50 transition-colors"
+              >
+                Voir le site de l'élevage
+              </a>
             </div>
           </div>
         </div>
@@ -285,4 +342,5 @@ export default function HomePage() {
       />
     </>
   );
-}
+} 
+

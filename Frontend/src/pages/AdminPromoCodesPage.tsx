@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Save, X, Tag, ArrowLeft, CheckCircle, XCircle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
@@ -21,6 +21,7 @@ interface PromoCode {
 }
 
 export default function AdminPromoCodesPage() {
+  const navigate = useNavigate();
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -40,69 +41,60 @@ export default function AdminPromoCodesPage() {
   const [formLoading, setFormLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
-      window.location.href = '/admin/login';
-      return;
-    }
-    verifyAdminToken();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const verifyAdminToken = async () => {
-    try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        window.location.href = '/admin/login';
-        return;
-      }
-
-      const response = await fetch(`${API_URL}/api/admin/verify`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
-      });
-
-      if (!response.ok) {
-        localStorage.removeItem('adminToken');
-        window.location.href = '/admin/login';
-        return;
-      }
-
-      fetchPromoCodes();
-    } catch {
-      localStorage.removeItem('adminToken');
-      window.location.href = '/admin/login';
-    }
-  };
-
   const fetchPromoCodes = async () => {
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        window.location.href = '/admin/login';
+      if (!localStorage.getItem('isAdminLoggedIn')) {
+        navigate('/admin/login');
         return;
       }
 
       const response = await fetch(`${API_URL}/api/promo-codes`, {
-        headers: {
-          'Authorization': `Bearer ${adminToken}`
-        }
+        credentials: 'include',
       });
 
       if (response.status === 401 || response.status === 403) {
-        localStorage.removeItem('adminToken');
-        window.location.href = '/admin/login';
+        localStorage.removeItem('isAdminLoggedIn');
+        navigate('/admin/login');
         return;
       }
 
       const data = await safeJsonResponse(response, []) as PromoCode[];
       setPromoCodes(data);
-    } catch {
-      console.error('Erreur:', error);
+    } catch (err) {
+      console.error('Erreur:', err);
     } finally {
       setLoading(false);
     }
   };
+
+  const verifyAdminToken = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/admin/verify`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        localStorage.removeItem('isAdminLoggedIn');
+        navigate('/admin/login');
+        return;
+      }
+
+      fetchPromoCodes();
+    } catch {
+      localStorage.removeItem('isAdminLoggedIn');
+      navigate('/admin/login');
+    }
+  };
+
+  useEffect(() => {
+    if (!localStorage.getItem('isAdminLoggedIn')) {
+      navigate('/admin/login');
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    verifyAdminToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const resetForm = () => {
     setFormData({
@@ -154,10 +146,9 @@ export default function AdminPromoCodesPage() {
     setFormLoading(true);
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         setFormError('Session expirée');
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
 
@@ -191,11 +182,9 @@ export default function AdminPromoCodesPage() {
 
       const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`
-        },
-        body: JSON.stringify(payload)
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
       });
 
       const data = await safeJsonResponse(response, { error: 'Erreur' });
@@ -209,8 +198,8 @@ export default function AdminPromoCodesPage() {
       setTimeout(() => {
         resetForm();
       }, 1500);
-    } catch {
-      setFormError(error instanceof Error ? error.message : 'Erreur lors de l\'enregistrement');
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement');
     } finally {
       setFormLoading(false);
     }
@@ -224,18 +213,15 @@ export default function AdminPromoCodesPage() {
     setDeleteLoading({ ...deleteLoading, [id]: true });
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         alert('Session expirée');
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
 
       const response = await fetch(`${API_URL}/api/promo-codes/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${adminToken}`
-        }
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -244,8 +230,8 @@ export default function AdminPromoCodesPage() {
       }
 
       await fetchPromoCodes();
-    } catch {
-      alert(error instanceof Error ? error.message : 'Erreur lors de la suppression');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     } finally {
       setDeleteLoading({ ...deleteLoading, [id]: false });
     }

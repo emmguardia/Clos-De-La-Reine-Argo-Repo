@@ -1,0 +1,48 @@
+name: ESLint
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  eslint:
+    name: Run eslint scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # 1. Installation des dépendances dans le dossier spécifique
+      - name: Install Dependencies
+        run: npm install
+        working-directory: ./Frontend
+
+      # 2. Installation du formateur SARIF (nécessaire pour l'onglet Security)
+      - name: Install SARIF Formatter
+        run: npm install @microsoft/eslint-formatter-sarif@3.1.0
+        working-directory: ./Frontend
+
+      # 3. Exécution d'ESLint
+      - name: Run ESLint
+        env:
+          SARIF_ESLINT_IGNORE_SUPPRESSED: "true"
+        run: |
+          npx eslint . \
+          --ext .js,.jsx,.ts,.tsx \
+          --format @microsoft/eslint-formatter-sarif \
+          --output-file eslint-results.sarif
+        working-directory: ./Frontend
+        continue-on-error: true
+
+      # 4. Envoi du rapport vers l'onglet Security de GitHub
+      - name: Upload analysis results to GitHub
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ./Frontend/eslint-results.sarif
+          wait-for-processing: true

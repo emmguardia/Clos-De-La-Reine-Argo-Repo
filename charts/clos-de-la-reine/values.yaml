@@ -6,15 +6,13 @@ namespace: clos-de-la-reine
 # En prod on déploie le secret via SealedSecret (chiffré dans le repo)
 sealedSecret:
   enabled: true
-nameOverride: ""
-fullnameOverride: ""
 
 imagePullSecrets:
   - name: ghcr-secret
 
 # Backend (Node)
 backend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:d9dfb5d0578b9ca739b38c4fe9ba5d59d5580d904d66472da16622d56816ee5c
+  image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:4f3b547137d20f42041f298f386476cd4230dea5c8b3f513186321b550acdc62
   imagePullPolicy: IfNotPresent
   replicas: 1
   strategy:
@@ -29,14 +27,16 @@ backend:
     FRONTEND_URL: "https://leclosdelareine.com"
     JWT_PRIVATE_KEY_PATH: /app/secrets/jwt_private_key.pem
     EMAIL_SERVICE_URL: http://email-service.email-service.svc.cluster.local:8080
+    INVOICE_SERVICE_URL: http://invoice-service.invoice-service.svc.cluster.local:8080
+    JWT_INVOICE_PRIVATE_KEY_PATH: /app/secrets/jwt_invoice_private_key.pem
   secretName: clos-secrets
   resources:
     requests:
       cpu: "100m"
-      memory: "256Mi"
+      memory: "384Mi"
     limits:
       cpu: "500m"
-      memory: "512Mi"
+      memory: "768Mi"
   hpa:
     enabled: true
     minReplicas: 1
@@ -46,7 +46,7 @@ backend:
 
 # Frontend (nginx)
 frontend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:8e8041405f476108e9ccab3b8ee8f011427802bb994236c9d698c8b178ed08ea
+  image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:08f92e1c41d344b44de52f7f99c34f3d0cb1a5747fa96a14f58d082a0f898e80
   replicas: 1
   strategy:
     rollingUpdate:

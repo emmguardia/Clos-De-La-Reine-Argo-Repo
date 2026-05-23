@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../hooks/useCart';
-import { useProducts } from '../hooks/useProducts';
+import { trackEvent } from '../utils/analytics';
+import { useProductsByIds } from '../hooks/useProductsByIds';
 import { ArrowLeft, CheckCircle, Package, CreditCard, Truck, User, Heart, ArrowRight } from 'lucide-react';
 import { dogBreeds } from '../data/dogBreeds';
-import { sanitizeInput, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJsonParse, safeJsonResponse } from '../utils/security';
+import { sanitizeInput, sanitizeDescription, sanitizeEmail, sanitizePhone, getTokenFromStorage, safeJsonParse, safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 const SHIPPING_LA_POSTE = 5.9;
@@ -13,7 +14,8 @@ const FRAIS_TAUX = 0.019;
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const { items, loading: cartLoading } = useCart();
-  const { products, loading: productsLoading } = useProducts();
+  const productIds = items.map(i => i.productId);
+  const { getProduct, loading: productsLoading } = useProductsByIds(productIds);
   const [currentStep, setCurrentStep] = useState<1 | 2>(1);
   const [formData, setFormData] = useState({
     firstName: '',
@@ -42,8 +44,7 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const token = getTokenFromStorage();
-    if (!token) {
+    if (!getTokenFromStorage()) {
       navigate('/connexion');
       return;
     }
@@ -51,9 +52,7 @@ export default function CheckoutPage() {
     const fetchUserData = async () => {
       try {
         const response = await fetch(`${API_URL}/api/auth/me`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+          credentials: 'include'
         });
         if (response.ok) {
           const data = await safeJsonResponse(response, {}) as { firstName?: string; lastName?: string; email?: string; phone?: string };
@@ -116,11 +115,11 @@ export default function CheckoutPage() {
     setShowBreedSuggestions(false);
   };
 
-  const hasCollier = items.some(i => products.find(p => p.id === i.productId)?.category === 'colliers');
-  const hasHarnais = items.some(i => products.find(p => p.id === i.productId)?.category === 'harnais');
+  const hasCollier = items.some(i => getProduct(i.productId)?.category === 'colliers');
+  const hasHarnais = items.some(i => getProduct(i.productId)?.category === 'harnais');
 
   const cartProducts = items.map(item => {
-    const product = products.find(p => p.id === item.productId);
+    const product = getProduct(item.productId);
     if (!product) return null;
     let unitPrice = product.price;
     if (product.category === 'laisses' && item.size === '1m20' && (product.surcharge1m20 ?? 0) > 0) unitPrice += (product.surcharge1m20 ?? 0);
@@ -139,6 +138,7 @@ export default function CheckoutPage() {
 
   const handleNextStep = () => {
     if (canProceedToStep2) {
+      trackEvent('checkout_step_complete', { step: 1, total_items: cartProducts.length });
       setCurrentStep(2);
     }
   };
@@ -154,18 +154,15 @@ export default function CheckoutPage() {
     setSubmitting(true);
 
     try {
-      const token = getTokenFromStorage();
-      if (!token) {
+      if (!getTokenFromStorage()) {
         navigate('/connexion');
         return;
       }
 
       const response = await fetch(`${API_URL}/api/orders`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
           body: JSON.stringify({
           items: cartProducts.map(p => ({ productId: p.id, quantity: p.quantity, price: p.unitPrice, size: p.size })),
           shippingAddress: formData,
@@ -189,9 +186,17 @@ export default function CheckoutPage() {
         throw new Error(data.error || 'Erreur lors de la création de la commande');
       }
 
+      trackEvent('order_created', {
+        total: total.toFixed(2),
+        item_count: cartProducts.length,
+        has_sur_mesure: dogInfo.surMesureCollier || dogInfo.surMesureHarnais,
+      });
       window.dispatchEvent(new Event('cartUpdated'));
+      localStorage.setItem('newOrderBadge', '1');
+      window.dispatchEvent(new Event('newOrderBadgeUpdated'));
       navigate('/profil?tab=commandes');
     } catch (err) {
+      trackEvent('order_error', { error: err instanceof Error ? err.message : 'unknown' });
       setError(err instanceof Error ? err.message : 'Erreur lors de la création de la commande');
     } finally {
       setSubmitting(false);
@@ -204,8 +209,7 @@ export default function CheckoutPage() {
     </div>;
   }
 
-  const token = getTokenFromStorage();
-  if (!token) {
+  if (!getTokenFromStorage()) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb]">
         <div className="text-center">
@@ -323,7 +327,7 @@ export default function CheckoutPage() {
                           required
                           value={formData.firstName}
                           onChange={(e) => {
-                            setFormData({ ...formData, firstName: sanitizeInput(e.target.value).slice(0, 50) });
+                            setFormData({ ...formData, firstName: sanitizeDescription(e.target.value, 50) });
                             setAutoFilled({ ...autoFilled, firstName: false });
                           }}
                           className={`w-full px-4 py-3 border rounded-2xl transition-all focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent ${
@@ -340,7 +344,7 @@ export default function CheckoutPage() {
                           required
                           value={formData.lastName}
                           onChange={(e) => {
-                            setFormData({ ...formData, lastName: sanitizeInput(e.target.value).slice(0, 50) });
+                            setFormData({ ...formData, lastName: sanitizeDescription(e.target.value, 50) });
                             setAutoFilled({ ...autoFilled, lastName: false });
                           }}
                           className={`w-full px-4 py-3 border rounded-2xl transition-all focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent ${
@@ -416,7 +420,7 @@ export default function CheckoutPage() {
                           type="text"
                           required
                           value={dogInfo.breed}
-                          onChange={(e) => handleBreedChange(sanitizeInput(e.target.value).slice(0, 100))}
+                          onChange={(e) => handleBreedChange(sanitizeDescription(e.target.value, 100))}
                           onFocus={() => {
                             if (dogInfo.breed.length > 0) {
                               const filtered = dogBreeds.filter(breed =>
@@ -477,7 +481,7 @@ export default function CheckoutPage() {
                           <input
                             type="text"
                             value={dogInfo.tourDeCou}
-                            onChange={(e) => setDogInfo({ ...dogInfo, tourDeCou: sanitizeInput(e.target.value).slice(0, 10) })}
+                            onChange={(e) => setDogInfo({ ...dogInfo, tourDeCou: sanitizeDescription(e.target.value, 10) })}
                             placeholder="Ex: 28"
                             className="w-full px-4 py-3 border border-gray-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                           />
@@ -491,7 +495,7 @@ export default function CheckoutPage() {
                           <input
                             type="text"
                             value={dogInfo.tourDeTaille}
-                            onChange={(e) => setDogInfo({ ...dogInfo, tourDeTaille: sanitizeInput(e.target.value).slice(0, 10) })}
+                            onChange={(e) => setDogInfo({ ...dogInfo, tourDeTaille: sanitizeDescription(e.target.value, 10) })}
                             placeholder="Ex: 45"
                             className="w-full px-4 py-3 border border-gray-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                           />
@@ -535,7 +539,7 @@ export default function CheckoutPage() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">Informations supplémentaires</label>
                         <textarea
                           value={additionalInfo}
-                          onChange={(e) => setAdditionalInfo(sanitizeInput(e.target.value).slice(0, 2000))}
+                          onChange={(e) => setAdditionalInfo(sanitizeDescription(e.target.value, 2000))}
                           placeholder="Informations supplémentaires sur votre chien ou votre commande..."
                           rows={4}
                           className="w-full px-4 py-3 border border-gray-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent resize-none"
@@ -572,7 +576,7 @@ export default function CheckoutPage() {
               <div className="space-y-4 mb-6">
                 {cartProducts.map(item => (
                   <div key={`${item.id}-${item.size || ''}`} className="flex gap-4">
-                    <img src={item.image} alt={item.name} className="w-16 h-16 object-cover rounded-2xl" />
+                    <img src={item.image} alt={item.name} loading="lazy" className="w-16 h-16 object-cover rounded-2xl" />
                     <div className="flex-1">
                       <p className="font-medium text-gray-900">{item.name}</p>
                       <p className="text-sm text-gray-600">

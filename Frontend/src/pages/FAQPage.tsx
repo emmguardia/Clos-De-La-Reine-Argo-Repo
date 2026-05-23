@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { safeJsonResponse } from '../utils/security';
+import SEO from '../components/SEO';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
@@ -18,10 +19,6 @@ export default function FAQPage() {
   const [loading, setLoading] = useState(true);
   const [openItems, setOpenItems] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    fetchFAQs();
-  }, []);
-
   const fetchFAQs = async () => {
     try {
       const response = await fetch(`${API_URL}/api/faq`);
@@ -38,6 +35,11 @@ export default function FAQPage() {
     }
   };
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchFAQs();
+  }, []);
+
   const toggleItem = (id: string) => {
     setOpenItems((prev) => {
       const next = new Set(prev);
@@ -50,15 +52,13 @@ export default function FAQPage() {
     });
   };
 
-  const categories = Array.from(new Set(faqs.map(f => f.category))).map(cat => {
-    const categoryFaqs = faqs.filter(f => f.category === cat);
-    const categoryOrder = categoryFaqs[0]?.categoryOrder || 0;
-    return { name: cat, order: categoryOrder };
-  }).sort((a, b) => a.order - b.order).map(c => c.name);
-  
+  const categories: string[] = [];
+  for (const f of faqs) {
+    if (!categories.includes(f.category)) categories.push(f.category);
+  }
   const faqsByCategory = categories.map(category => ({
     title: category,
-    items: faqs.filter(f => f.category === category).sort((a, b) => a.order - b.order)
+    items: faqs.filter(f => f.category === category)
   }));
 
   if (loading) {
@@ -68,12 +68,34 @@ export default function FAQPage() {
       </div>
     );
   }
+  const faqJsonLd = faqs.length > 0
+    ? {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": faqs.map((faq) => ({
+          "@type": "Question",
+          "name": faq.question,
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": faq.answer
+          }
+        }))
+      }
+    : undefined;
+
   return (
+    <>
+    <SEO
+      title="FAQ"
+      description="Réponses à vos questions sur nos produits artisanaux pour chiens — matières, entretien, commandes, livraison."
+      path="/faq"
+      jsonLd={faqJsonLd}
+    />
     <div className="bg-white min-h-screen">
       <div className="relative border-b border-black/5">
         <div className="absolute inset-0">
           <img
-            src="/Images/header2.jpg"
+            src="/Images/header2.webp"
             alt="Questions fréquentes"
             className="h-full w-full object-cover"
             loading="lazy"
@@ -154,5 +176,6 @@ export default function FAQPage() {
         </div>
       </main>
     </div>
+    </>
   );
 }

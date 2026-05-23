@@ -8,10 +8,6 @@ export function useProducts() {
 
   useEffect(() => {
     const cached = getCachedProducts();
-    if (cached) {
-      setProducts(cached);
-      setLoading(false);
-    }
     const loadProducts = async () => {
       try {
         if (!cached) setLoading(true);

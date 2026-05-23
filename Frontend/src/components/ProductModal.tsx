@@ -1,8 +1,13 @@
 import { X, ChevronLeft, ChevronRight, Heart, ShoppingCart, ChevronDown, Check } from 'lucide-react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Helmet } from 'react-helmet-async';
 import type { Product } from '../data/products';
+import { fetchProductById } from '../data/products';
 import { useFavorites } from '../hooks/useFavorites';
 import { useCart } from '../hooks/useCart';
+import { trackEvent } from '../utils/analytics';
+
+const BASE_URL = 'https://leclosdelareine.com';
 
 interface ProductModalProps {
   product: Product | null;
@@ -66,6 +71,27 @@ function ProductModalBody({
   }, []);
 
   const hasMultipleImages = images.length > 1;
+
+  // Schema.org Product JSON-LD — injecté dans <head> pendant l'ouverture du modal
+  const productJsonLd = useMemo(() => ({
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+    ...(product.briefDescription ? { description: product.briefDescription } : {}),
+    image: images.map((img) => img.startsWith('http') ? img : `${BASE_URL}${img}`),
+    brand: { '@type': 'Brand', name: 'Clos de la Reine' },
+    category: product.category,
+    offers: {
+      '@type': 'Offer',
+      priceCurrency: 'EUR',
+      price: product.price.toFixed(2),
+      availability: 'https://schema.org/InStock',
+      url: `${BASE_URL}/boutique`,
+      priceValidUntil: new Date(new Date().getFullYear() + 1, 0, 1).toISOString().split('T')[0],
+      seller: { '@type': 'Organization', name: 'Clos de la Reine' },
+    },
+  }), [product, images]);
+
   const [guideOpen, setGuideOpen] = useState(false);
   const needsSizeSelection = product.category === 'laisses' || product.category === 'colliers' || product.category === 'harnais';
   const laisseSizes = ['1m', '1m20'];
@@ -76,10 +102,21 @@ function ProductModalBody({
     if (needsSizeSelection && !selectedSize) return;
     setAdding(true);
     await addToCart(product.id, 1, needsSizeSelection ? selectedSize : undefined, product.name);
+    trackEvent('add_to_cart', {
+      product_id: product.id,
+      product_name: product.name,
+      quantity: 1,
+      size: needsSizeSelection ? selectedSize : undefined,
+      source: 'product_modal',
+    });
     await new Promise((r) => setTimeout(r, 300));
     onClose();
   };
   return (
+    <>
+    <Helmet>
+      <script type="application/ld+json">{JSON.stringify(productJsonLd)}</script>
+    </Helmet>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn"
       role="dialog"
@@ -105,6 +142,7 @@ function ProductModalBody({
               {images[currentIndex] ? (
                 <img
                   key={`${product.id}-${currentIndex}`}
+                  loading="lazy"
                   src={images[currentIndex]}
                   alt={`${product.name} - Image ${currentIndex + 1}`}
                   className="absolute inset-0 w-full h-full object-cover animate-imageFade"
@@ -239,7 +277,12 @@ function ProductModalBody({
                   <div className="mt-3">
                     <button
                       type="button"
-                      onClick={() => setGuideOpen((o) => !o)}
+                      onClick={() => {
+                      setGuideOpen((o) => {
+                        if (!o) trackEvent('size_guide_open', { product_id: product.id, category: product.category });
+                        return !o;
+                      });
+                    }}
                       className="text-xs font-medium cursor-pointer flex items-center gap-1.5 opacity-80 hover:opacity-100 w-full text-left transition-opacity duration-200"
                       style={{ color: 'var(--ink)' }}
                     >
@@ -302,24 +345,45 @@ function ProductModalBody({
         </div>
       </div>
     </div>
+    </>
   );
 }
 
 export default function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
   const { isFavorite, addFavorite, removeFavorite } = useFavorites();
   const { addToCart } = useCart();
-  const images = useMemo(() => getImages(product), [product]);
+  const [fullProduct, setFullProduct] = useState<Product | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !product) {
+      queueMicrotask(() => setFullProduct(null));
+      return;
+    }
+    queueMicrotask(() => setFullProduct(null));
+    fetchProductById(product.id)
+      .then((p) => setFullProduct(p ?? product))
+      .catch(() => setFullProduct(product));
+  }, [isOpen, product]);
+
+  const displayProduct = fullProduct ?? product;
+  const images = useMemo(() => getImages(displayProduct), [displayProduct]);
   const favorite = product ? isFavorite(product.id) : false;
   const handleFavoriteClick = async () => {
     if (!product) return;
-    if (favorite) await removeFavorite(product.id);
-    else await addFavorite(product.id);
+    if (favorite) {
+      await removeFavorite(product.id);
+      trackEvent('favorite_remove', { product_id: product.id, product_name: product.name, source: 'modal' });
+    } else {
+      await addFavorite(product.id);
+      trackEvent('favorite_add', { product_id: product.id, product_name: product.name, source: 'modal' });
+    }
   };
   if (!isOpen || !product) return null;
+  const productToShow = displayProduct ?? product;
   return (
     <ProductModalBody
       key={product.id}
-      product={product}
+      product={productToShow}
       images={images}
       onClose={onClose}
       favorite={favorite}

@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Check, X, Truck, MessageSquare, Package, Filter, Search, User, Calendar, Trash2, AlertCircle, Clock, ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { useProducts } from '../hooks/useProducts';
+import { Link, useNavigate } from 'react-router-dom';
+import { useProductsByIds } from '../hooks/useProductsByIds';
+import { useProductsListForAdmin } from '../hooks/useProductsListForAdmin';
 import { safeJsonResponse } from '../utils/security';
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
@@ -12,7 +13,7 @@ interface Order {
   user: { email: string; firstName: string; lastName: string } | null;
   items: Array<{ productId: number; quantity: number; price: number }>;
   shippingAddress: Record<string, unknown>;
-  dogInfo: {
+  dogInfo?: {
     breed: string;
     age: string;
     size?: string;
@@ -34,9 +35,15 @@ interface Order {
 }
 
 export default function OrdersAdminPage() {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const { products } = useProducts();
+  const productIdsFromOrders = orders.flatMap(o => [
+    ...o.items.map(i => i.productId),
+    ...(o.counterProposal?.items?.map(i => i.productId) ?? [])
+  ]);
+  const { getProduct } = useProductsByIds([...new Set(productIdsFromOrders)]);
+  const { products } = useProductsListForAdmin();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [action, setAction] = useState<'accept' | 'reject' | 'counter' | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -51,61 +58,23 @@ export default function OrdersAdminPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  useEffect(() => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
-      window.location.href = '/admin/login';
-      return;
-    }
-    verifyAdminToken();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const verifyAdminToken = async () => {
-    try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        window.location.href = '/admin/login';
-        return;
-      }
-
-      const response = await fetch(`${API_URL}/api/admin/verify`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
-      });
-
-      if (!response.ok) {
-        localStorage.removeItem('adminToken');
-        window.location.href = '/admin/login';
-        return;
-      }
-
-      fetchOrders();
-    } catch {
-      localStorage.removeItem('adminToken');
-      window.location.href = '/admin/login';
-    }
-  };
-
   const fetchOrders = async () => {
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        window.location.href = '/admin/login';
+      if (!localStorage.getItem('isAdminLoggedIn')) {
+        navigate('/admin/login');
         return;
       }
-      
+
       const response = await fetch(`${API_URL}/api/orders/admin`, {
-        headers: {
-          'Authorization': `Bearer ${adminToken}`
-        }
+        credentials: 'include',
       });
-      
+
       if (response.status === 401 || response.status === 403) {
-        localStorage.removeItem('adminToken');
-        window.location.href = '/admin/login';
+        localStorage.removeItem('isAdminLoggedIn');
+        navigate('/admin/login');
         return;
       }
-      
+
       if (response.ok) {
         const data = await safeJsonResponse(response, []);
         if (Array.isArray(data)) {
@@ -119,16 +88,44 @@ export default function OrdersAdminPage() {
     }
   };
 
+  const verifyAdminToken = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/admin/verify`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        localStorage.removeItem('isAdminLoggedIn');
+        navigate('/admin/login');
+        return;
+      }
+
+      fetchOrders();
+    } catch {
+      localStorage.removeItem('isAdminLoggedIn');
+      navigate('/admin/login');
+    }
+  };
+
+  useEffect(() => {
+    if (!localStorage.getItem('isAdminLoggedIn')) {
+      navigate('/admin/login');
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    verifyAdminToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleAction = async () => {
     if (!selectedOrder) return;
     setError('');
     setSuccess('');
 
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
+      if (!localStorage.getItem('isAdminLoggedIn')) {
         setError('Session expirée. Veuillez vous reconnecter.');
-        window.location.href = '/admin/login';
+        navigate('/admin/login');
         return;
       }
       let response;
@@ -136,37 +133,31 @@ export default function OrdersAdminPage() {
       if (action === 'accept') {
         response = await fetch(`${API_URL}/api/orders/${selectedOrder.id}/status`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${adminToken}`
-          },
-          body: JSON.stringify({ status: 'validated' })
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ status: 'validated' }),
         });
       } else if (action === 'reject') {
         response = await fetch(`${API_URL}/api/orders/${selectedOrder.id}/status`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${adminToken}`
-          },
-          body: JSON.stringify({ status: 'rejected', rejectionReason })
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ status: 'rejected', rejectionReason }),
         });
       } else if (action === 'counter') {
         const total = counterProposal.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         response = await fetch(`${API_URL}/api/orders/${selectedOrder.id}/status`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${adminToken}`
-          },
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             status: 'pending_validation',
             counterProposal: {
               items: counterProposal.items,
               total,
-              message: counterProposal.message
-            }
-          })
+              message: counterProposal.message,
+            },
+          }),
         });
       }
 
@@ -190,18 +181,15 @@ export default function OrdersAdminPage() {
 
   const handleShipping = async (orderId: string) => {
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        window.location.href = '/admin/login';
+      if (!localStorage.getItem('isAdminLoggedIn')) {
+        navigate('/admin/login');
         return;
       }
       const response = await fetch(`${API_URL}/api/orders/${orderId}/status`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`
-        },
-        body: JSON.stringify({ status: 'shipping' })
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: 'shipping' }),
       });
       if (response.ok) {
         fetchOrders();
@@ -216,19 +204,16 @@ export default function OrdersAdminPage() {
       return;
     }
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        window.location.href = '/admin/login';
+      if (!localStorage.getItem('isAdminLoggedIn')) {
+        navigate('/admin/login');
         return;
       }
-      
+
       const response = await fetch(`${API_URL}/api/orders/${orderId}/status`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`
-        },
-        body: JSON.stringify({ status: 'rejected', rejectionReason: reason })
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: 'rejected', rejectionReason: reason }),
       });
       
       if (response.ok) {
@@ -248,16 +233,13 @@ export default function OrdersAdminPage() {
       return;
     }
     try {
-      const adminToken = localStorage.getItem('adminToken');
-      if (!adminToken) {
-        window.location.href = '/admin/login';
+      if (!localStorage.getItem('isAdminLoggedIn')) {
+        navigate('/admin/login');
         return;
       }
       const response = await fetch(`${API_URL}/api/orders/${orderId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${adminToken}`
-        }
+        credentials: 'include',
       });
       if (response.ok) {
         setSuccess('Commande supprimée avec succès');
@@ -344,7 +326,7 @@ export default function OrdersAdminPage() {
   };
 
   const getProductName = (productId: number) => {
-    const product = products.find(p => p.id === productId);
+    const product = getProduct(productId);
     return product ? product.name : `Produit #${productId}`;
   };
 
@@ -412,14 +394,14 @@ export default function OrdersAdminPage() {
             <div className="bg-gray-50 rounded-2xl p-4">
               <h4 className="font-medium text-gray-900 mb-3">Adresse de livraison</h4>
               <div className="text-sm text-gray-600">
-                <p>{order.shippingAddress.firstName} {order.shippingAddress.lastName}</p>
-                <p>{order.shippingAddress.email}</p>
-                <p>{order.shippingAddress.phone}</p>
-                {order.shippingAddress.address && (
+                <p>{String((order.shippingAddress as Record<string, string>).firstName ?? '')} {String((order.shippingAddress as Record<string, string>).lastName ?? '')}</p>
+                <p>{String((order.shippingAddress as Record<string, string>).email ?? '')}</p>
+                <p>{String((order.shippingAddress as Record<string, string>).phone ?? '')}</p>
+                {(order.shippingAddress as Record<string, string>).address && (
                   <>
-                    <p>{order.shippingAddress.address}</p>
-                    <p>{order.shippingAddress.postalCode} {order.shippingAddress.city}</p>
-                    <p>{order.shippingAddress.country}</p>
+                    <p>{(order.shippingAddress as Record<string, string>).address}</p>
+                    <p>{(order.shippingAddress as Record<string, string>).postalCode} {(order.shippingAddress as Record<string, string>).city}</p>
+                    <p>{(order.shippingAddress as Record<string, string>).country}</p>
                   </>
                 )}
               </div>
@@ -462,7 +444,7 @@ export default function OrdersAdminPage() {
         {order.paymentInfo && (
           <div className="mb-4 p-3 bg-green-50 rounded-lg">
             <p className="text-sm text-green-800">
-              <strong>Paiement effectué</strong> - {new Date(order.paymentInfo.paidAt).toLocaleDateString('fr-FR')}
+              <strong>Paiement effectué</strong> - {order.paymentInfo.paidAt ? new Date(order.paymentInfo.paidAt).toLocaleDateString('fr-FR') : 'N/A'}
             </p>
           </div>
         )}
@@ -545,18 +527,15 @@ export default function OrdersAdminPage() {
             <button
               onClick={async () => {
                 try {
-                  const adminToken = localStorage.getItem('adminToken');
-                  if (!adminToken) {
-                    window.location.href = '/admin/login';
+                  if (!localStorage.getItem('isAdminLoggedIn')) {
+                    navigate('/admin/login');
                     return;
                   }
                   const response = await fetch(`${API_URL}/api/orders/${order.id}/status`, {
                     method: 'PUT',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${adminToken}`
-                    },
-                    body: JSON.stringify({ status: 'completed' })
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ status: 'completed' }),
                   });
                   if (response.ok) {
                     fetchOrders();

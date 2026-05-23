@@ -47,6 +47,10 @@ data:
             proxy_cache_bypass $http_upgrade;
             proxy_read_timeout 300s;
             proxy_connect_timeout 75s;
+            {{- if eq .Release.Namespace "clos-de-la-reine-dev" }}
+            # Dev : strip Origin pour éviter les rejets CORS (back accepte sans Origin)
+            proxy_set_header Origin "";
+            {{- end }}
             # Remove duplicate security headers set by the Express backend
             proxy_hide_header X-Content-Type-Options;
             proxy_hide_header X-Frame-Options;

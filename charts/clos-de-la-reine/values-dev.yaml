@@ -14,10 +14,10 @@ imagePullSecrets:
 backend:
   image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:aec8732478f7a6b1a29619a2f64e29112f695c8c508e3e2c8cb242c5ca54ff95
   imagePullPolicy: Always
-  replicas: 0  # Mettre à 1 quand tu bosses (kubectl scale ... --replicas=1)
+  replicas: 1
   strategy:
     rollingUpdate:
-      maxUnavailable: 1  # Nécessaire pour replicas=0 (maxUnavailable: 0 bloque le scale 0→1)
+      maxUnavailable: 1  # Garder à 1 pour permettre le scale 0→1 si besoin
       maxSurge: 1
   port: 3000
   env:
@@ -40,10 +40,10 @@ backend:
 frontend:
   image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:46ae620b97c77c95258bdee13862e5939a4925b34705949a1aadf7751e3ce825
   imagePullPolicy: Always
-  replicas: 0  # Mettre à 1 quand tu bosses
+  replicas: 1
   strategy:
     rollingUpdate:
-      maxUnavailable: 1  # Nécessaire pour replicas=0 (maxUnavailable: 0 bloque le scale 0→1)
+      maxUnavailable: 1  # Garder à 1 pour permettre le scale 0→1 si besoin
       maxSurge: 1
   serviceType: NodePort
   port: 80

@@ -102,8 +102,10 @@ function ProductModalBody({
   const laisseSizes = ['1m', '1m20'];
   const collarHarnessSizes = ['XS', 'S', 'M', 'L', 'XL'];
   const [selectedSize, setSelectedSize] = useState<string>('');
+  const isUnavailable = product.disponible === false;
   const [adding, setAdding] = useState(false);
   const handleAddToCart = async () => {
+    if (isUnavailable) return;
     if (needsSizeSelection && !selectedSize) return;
     setAdding(true);
     await addToCart(product.id, 1, needsSizeSelection ? selectedSize : undefined, product.name);
@@ -320,6 +322,12 @@ function ProductModalBody({
             </div>
 
             <div className="flex-shrink-0 mt-2 md:mt-4 pt-2 md:pt-4 space-y-2 md:space-y-3 border-t border-gray-200">
+              {isUnavailable ? (
+                <div className="w-full py-3 md:py-4 rounded-full font-medium flex items-center justify-center gap-2 bg-gray-100 text-gray-400 cursor-not-allowed select-none">
+                  <ShoppingCart className="w-5 h-5" />
+                  Non disponible
+                </div>
+              ) : (
               <button
                 type="button"
                 onClick={handleAddToCart}
@@ -334,6 +342,7 @@ function ProductModalBody({
                 )}
                 {adding ? 'Ajouté !' : 'Ajouter au panier'}
               </button>
+              )}
               <button
                 type="button"
                 onClick={onFavoriteClick}

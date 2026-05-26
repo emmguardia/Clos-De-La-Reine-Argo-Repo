@@ -28,8 +28,11 @@ export default function ProductCard({ product, showCollection = true, compact = 
 
   const needsSize = product.category === 'laisses' || product.category === 'colliers' || product.category === 'harnais';
 
+  const isUnavailable = product.disponible === false;
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isUnavailable) return;
     if (needsSize && onProductClick) {
       trackEvent('product_click_add_cart', { product_id: product.id, product_name: product.name, needs_size: true });
       onProductClick(product);
@@ -56,6 +59,13 @@ export default function ProductCard({ product, showCollection = true, compact = 
           className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/10" />
+        {isUnavailable && (
+          <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-10">
+            <span className="bg-white/95 text-gray-800 text-xs font-semibold uppercase tracking-widest px-4 py-1.5 rounded-full shadow">
+              Non disponible
+            </span>
+          </div>
+        )}
         <button
           onClick={handleFavoriteClick}
           className={`absolute top-4 right-4 p-2 rounded-full backdrop-blur-md transition-all duration-300 transform hover:scale-110 shadow-sm z-10 ${
@@ -88,12 +98,16 @@ export default function ProductCard({ product, showCollection = true, compact = 
         <div className="flex items-center justify-between pt-2">
           <span className="text-2xl font-light text-gray-900">{product.price.toFixed(0)}€</span>
           {!readonlyMode && (
-            <button 
-              onClick={handleAddToCart}
-              className="bg-gray-900 text-white p-3 rounded-full hover:bg-gray-800 transition-all duration-300 transform hover:scale-110 hover:rotate-12"
-            >
-              <ShoppingCart className="w-5 h-5" />
-            </button>
+            isUnavailable ? (
+              <span className="text-xs text-red-500 font-medium">Non disponible</span>
+            ) : (
+              <button
+                onClick={handleAddToCart}
+                className="bg-gray-900 text-white p-3 rounded-full hover:bg-gray-800 transition-all duration-300 transform hover:scale-110 hover:rotate-12"
+              >
+                <ShoppingCart className="w-5 h-5" />
+              </button>
+            )
           )}
         </div>
       </div>

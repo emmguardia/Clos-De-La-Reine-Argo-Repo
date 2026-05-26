@@ -37,6 +37,7 @@ export default function AdminPanelPage() {
     image: '',
     secondImage: '',
     isNew: false,
+    disponible: true,
     briefDescription: '',
     surcharge1m20: '',
     surchargeSurMesure: ''
@@ -266,6 +267,7 @@ export default function AdminPanelPage() {
       image: '',
       secondImage: '',
       isNew: false,
+      disponible: true,
       briefDescription: '',
       surcharge1m20: '',
       surchargeSurMesure: ''
@@ -291,6 +293,7 @@ export default function AdminPanelPage() {
       image: p.image,
       secondImage: p.secondImage || '',
       isNew: p.isNew || false,
+      disponible: p.disponible !== false,
       briefDescription: p.briefDescription || '',
       surcharge1m20: p.surcharge1m20 != null ? String(p.surcharge1m20).replace('.', ',') : '',
       surchargeSurMesure: p.surchargeSurMesure != null ? String(p.surchargeSurMesure).replace('.', ',') : ''
@@ -339,6 +342,7 @@ export default function AdminPanelPage() {
           secondImage: formData.secondImage || undefined,
           additionalImages: additionalImages.filter((url) => typeof url === 'string' && url.trim().length > 0),
           isNew: formData.isNew,
+          disponible: formData.disponible,
           briefDescription: formData.briefDescription || undefined,
           surcharge1m20: formData.category === 'laisses' ? (formData.surcharge1m20 ? formData.surcharge1m20.replace(',', '.') : null) : null,
           surchargeSurMesure: formData.category === 'colliers' || formData.category === 'harnais' ? (formData.surchargeSurMesure ? formData.surchargeSurMesure.replace(',', '.') : null) : null
@@ -705,6 +709,26 @@ export default function AdminPanelPage() {
                         Marquer comme nouveauté (affiché sur la page d'accueil)
                       </label>
                     </div>
+                    <div className="flex items-center justify-between p-3 rounded-lg border border-gray-200 bg-white">
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Disponibilité du produit</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {formData.disponible ? 'Visible et achetable' : 'Visible mais non achetable — badge « Non disponible »'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={formData.disponible}
+                        onClick={() => setFormData({ ...formData, disponible: !formData.disponible })}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 ${formData.disponible ? 'bg-green-500' : 'bg-red-400'}`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${formData.disponible ? 'translate-x-5' : 'translate-x-0'}`}
+                        />
+                      </button>
+                    </div>
                     <div className="flex items-center gap-3 pt-2">
                       <button
                         type="submit"
@@ -764,7 +788,12 @@ export default function AdminPanelPage() {
                             }}
                           />
                           <div className="flex-1">
-                            <h3 className="font-medium text-gray-900">{product.name}</h3>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-medium text-gray-900">{product.name}</h3>
+                              {product.disponible === false && (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-600 font-medium">Non disponible</span>
+                              )}
+                            </div>
                             <p className="text-sm text-gray-600">{product.collection} · {product.price}€</p>
                             <p className="text-xs text-gray-500 mt-1">
                               {product.category} · {Array.isArray(product.color) ? product.color.join(', ') : product.color}

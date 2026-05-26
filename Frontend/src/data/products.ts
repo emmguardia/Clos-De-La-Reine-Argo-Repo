@@ -15,6 +15,7 @@ export interface Product {
   stock?: number;
   isNew?: boolean;
   briefDescription?: string;
+  disponible?: boolean;
 }
 
 import { safeJsonResponse } from '../utils/security';
@@ -35,7 +36,8 @@ const mapProduct = (p: Record<string, unknown>): Product => ({
   surcharge1m20: (p.surcharge1m20 as number | null | undefined) ?? null,
   surchargeSurMesure: (p.surchargeSurMesure as number | null | undefined) ?? null,
   isNew: p.isNew === true || p.isNew === 'true',
-  briefDescription: (p.briefDescription as string) || undefined
+  briefDescription: (p.briefDescription as string) || undefined,
+  disponible: p.disponible !== false
 });
 
 export function invalidateProductsCache(): void {

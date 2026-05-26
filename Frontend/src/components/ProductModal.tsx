@@ -97,7 +97,7 @@ function ProductModalBody({
   const imageStyle: CSSProperties = { height: isSmallScreen ? '30vh' : '80vh', minHeight: isSmallScreen ? '30vh' : '80vh', flexShrink: 0 };
   const textStyle: CSSProperties = { height: isSmallScreen ? '60vh' : '80vh', overflow: 'hidden' };
 
-  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(true);
   const needsSizeSelection = product.category === 'laisses' || product.category === 'colliers' || product.category === 'harnais';
   const laisseSizes = ['1m', '1m20'];
   const collarHarnessSizes = ['XS', 'S', 'M', 'L', 'XL'];

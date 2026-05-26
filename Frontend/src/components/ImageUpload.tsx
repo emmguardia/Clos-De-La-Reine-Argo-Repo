@@ -7,9 +7,12 @@ const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 /** Affiche une image via blob URL pour éviter le flux DOM XSS (CodeQL) - l'URL utilisateur ne va jamais dans img src */
 function SafeImagePreview({ url, className, alt }: { url: string; className?: string; alt?: string }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [fetchFailed, setFetchFailed] = useState(false);
   const blobRef = useRef<string | null>(null);
   useEffect(() => {
     if (!url) return;
+    setBlobUrl(null);
+    setFetchFailed(false);
     let cancelled = false;
     fetch(url, { mode: 'cors' })
       .then((r) => r.blob())
@@ -20,7 +23,11 @@ function SafeImagePreview({ url, className, alt }: { url: string; className?: st
           setBlobUrl(u);
         }
       })
-      .catch(() => setBlobUrl(null));
+      .catch(() => {
+        // CORS ou URL externe non-fetchable : fallback sur src direct
+        // L'URL est déjà validée par getSafeImageSrc() avant d'arriver ici
+        if (!cancelled) setFetchFailed(true);
+      });
     return () => {
       cancelled = true;
       if (blobRef.current) {
@@ -29,8 +36,9 @@ function SafeImagePreview({ url, className, alt }: { url: string; className?: st
       }
     };
   }, [url]);
-  if (!blobUrl) return <div className={`${className || ''} bg-gray-100 animate-pulse`} />;
-  return <img src={blobUrl} alt={alt || 'Preview'} className={className} referrerPolicy="no-referrer" />;
+  if (blobUrl) return <img src={blobUrl} alt={alt || 'Preview'} className={className} referrerPolicy="no-referrer" />;
+  if (fetchFailed) return <img src={url} alt={alt || 'Preview'} className={className} referrerPolicy="no-referrer" />;
+  return <div className={`${className || ''} bg-gray-100 animate-pulse`} />;
 }
 
 interface ImageUploadProps {

@@ -136,8 +136,8 @@ function ProductModalBody({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-col md:flex-row md:min-h-0 max-h-[90vh] md:items-start">
-          {/* Gauche : image en pleine hauteur comme l’autre projet */}
-          <div className="relative w-full md:w-1/2 bg-gray-100 flex-shrink-0 h-[55vh] md:h-[80vh]">
+          {/* Gauche : image — mobile 30vh, desktop 80vh */}
+          <div className="relative w-full md:w-1/2 bg-gray-100 flex-shrink-0 h-[30vh] md:h-[80vh]">
             <div className="relative w-full h-full overflow-hidden">
               {images[currentIndex] ? (
                 <img
@@ -189,8 +189,8 @@ function ProductModalBody({
             </div>
           </div>
 
-          {/* Droite : infos — hauteur alignée sur l'image pour éviter le blanc */}
-          <div className="w-full md:w-1/2 p-6 md:p-10 flex flex-col bg-white h-[55vh] md:h-[80vh] min-h-0">
+          {/* Droite : infos — flex-1 sur mobile = prend tout l'espace restant */}
+          <div className="w-full md:w-1/2 p-4 md:p-10 flex flex-col bg-white flex-1 md:h-[80vh] min-h-0">
             <button
               type="button"
               onClick={onClose}
@@ -201,26 +201,26 @@ function ProductModalBody({
             </button>
 
             <div className="flex-1 overflow-y-auto min-h-0 pr-2 -mr-2">
-            <div className="space-y-4 pr-8">
+            <div className="space-y-2 md:space-y-4 pr-8">
               <span
-                className="inline-block text-xs font-medium uppercase tracking-[0.2em] px-3 py-1.5 rounded-full"
+                className="inline-block text-xs font-medium uppercase tracking-[0.2em] px-3 py-1 md:py-1.5 rounded-full"
                 style={{ background: 'var(--blush)', color: 'var(--ink)' }}
               >
                 {product.collection}
               </span>
-              <h2 className="text-2xl md:text-3xl font-light leading-tight" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--ink)' }}>
+              <h2 className="text-xl md:text-3xl font-light leading-tight" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--ink)' }}>
                 {product.name}
               </h2>
-              <p className="text-3xl font-light" style={{ color: 'var(--ink)' }}>
+              <p className="text-2xl md:text-3xl font-light" style={{ color: 'var(--ink)' }}>
                 {product.price.toFixed(0)} €
               </p>
               {product.briefDescription && (
-                <p className="text-sm leading-relaxed opacity-85" style={{ color: 'var(--ink)' }}>
+                <p className="text-sm leading-relaxed opacity-85 line-clamp-2 md:line-clamp-none" style={{ color: 'var(--ink)' }}>
                   {product.briefDescription}
                 </p>
               )}
 
-              <div className="space-y-3 pt-2">
+              <div className="space-y-2 md:space-y-3 pt-1 md:pt-2">
                 <p className="text-xs font-semibold uppercase tracking-wider opacity-70" style={{ color: 'var(--ink)' }}>
                   {Array.isArray(product.color) && product.color.length > 1 ? 'Couleurs' : 'Couleur'}
                 </p>
@@ -237,7 +237,7 @@ function ProductModalBody({
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5 md:space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wider opacity-70" style={{ color: 'var(--ink)' }}>
                   {product.category === 'laisses' ? 'Longueur' : 'Tailles'}
                 </p>
@@ -314,12 +314,12 @@ function ProductModalBody({
             </div>
             </div>
 
-            <div className="flex-shrink-0 mt-4 pt-4 space-y-3 border-t border-gray-200">
+            <div className="flex-shrink-0 mt-2 md:mt-4 pt-2 md:pt-4 space-y-2 md:space-y-3 border-t border-gray-200">
               <button
                 type="button"
                 onClick={handleAddToCart}
                 disabled={(needsSizeSelection && !selectedSize) || adding}
-                className={`w-full py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${adding ? 'scale-95' : ''}`}
+                className={`w-full py-3 md:py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${adding ? 'scale-95' : ''}`}
                 style={{ background: 'var(--ink)', color: 'var(--cream)' }}
               >
                 {adding ? (
@@ -332,7 +332,7 @@ function ProductModalBody({
               <button
                 type="button"
                 onClick={onFavoriteClick}
-                className={`w-full py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 border-2 ${
+                className={`w-full py-3 md:py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 border-2 ${
                   favorite ? 'border-red-400 text-red-600' : 'border-[var(--ink)]/20'
                 }`}
                 style={{ color: favorite ? undefined : 'var(--ink)', background: favorite ? 'rgb(254 226 226)' : 'transparent' }}

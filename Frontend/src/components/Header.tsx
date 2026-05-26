@@ -1,4 +1,4 @@
-import { ShoppingCart, Heart, User, Menu, ChevronDown, Package } from 'lucide-react';
+import { ShoppingCart, Heart, User, Menu, X, ChevronDown, Package } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { trackEvent } from '../utils/analytics';
@@ -110,7 +110,7 @@ export default function Header() {
         <div className="flex items-center justify-between h-16">
           <Link to="/" className="flex items-center space-x-3 group cursor-pointer" onClick={() => trackEvent('header_logo_click', { source: 'header' })}>
             <img src="/Images/Logo.webp" alt="Logo" className="w-10 h-10" />
-            <span className="text-xl font-light tracking-wide">Le Clos De La Reine</span>
+            <span className="hidden md:block text-xl font-light tracking-wide">Le Clos De La Reine</span>
           </Link>
           <nav className="hidden md:flex items-center space-x-8">
             <Link to="/" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 relative group">
@@ -134,8 +134,9 @@ export default function Header() {
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gray-900 group-hover:w-full transition-all duration-300"></span>
             </Link>
           </nav>
-          <div className="flex items-center space-x-4">
-            <Link to="/favoris" className="relative p-2 hover:bg-gray-50 rounded-full transition-all duration-200 transform hover:scale-110" onClick={() => trackEvent('header_favoris_click', { source: 'header' })}>
+          <div className="flex items-center space-x-1 sm:space-x-4">
+            {/* Favoris — desktop seulement */}
+            <Link to="/favoris" className="relative p-2 hover:bg-gray-50 rounded-full transition-all duration-200 transform hover:scale-110 hidden md:flex" onClick={() => trackEvent('header_favoris_click', { source: 'header' })}>
               <Heart className="w-5 h-5 text-gray-600" />
               {favoritesCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
@@ -143,8 +144,9 @@ export default function Header() {
                 </span>
               )}
             </Link>
+            {/* Profil — desktop seulement */}
             {user ? (
-              <div className="relative" ref={profileMenuRef}>
+              <div className="relative hidden md:block" ref={profileMenuRef}>
                 <button
                   onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                   className="flex items-center space-x-2 px-3 py-2 hover:bg-gray-50 rounded-2xl transition-all duration-200 relative"
@@ -159,7 +161,7 @@ export default function Header() {
                       {user.firstName.charAt(0).toUpperCase()}
                     </span>
                   </div>
-                  <span className="hidden md:block text-sm text-gray-700 font-light">
+                  <span className="text-sm text-gray-700 font-light">
                     Bonjour {user.firstName.slice(0, 20)}
                   </span>
                   <ChevronDown className={`w-4 h-4 text-gray-600 transition-transform duration-200 ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
@@ -212,10 +214,11 @@ export default function Header() {
                 )}
               </div>
             ) : (
-              <Link to="/connexion" className="p-2 hover:bg-gray-50 rounded-full transition-all duration-200 transform hover:scale-110">
+              <Link to="/connexion" className="p-2 hover:bg-gray-50 rounded-full transition-all duration-200 transform hover:scale-110 hidden md:flex">
                 <User className="w-5 h-5 text-gray-600" />
               </Link>
             )}
+            {/* Panier — toujours visible */}
             <Link to="/panier" className="relative p-2 hover:bg-gray-50 rounded-full transition-all duration-200 transform hover:scale-110" onClick={() => trackEvent('header_panier_click', { source: 'header', cart_count: cartCount })}>
               <ShoppingCart className="w-5 h-5 text-gray-600" />
               {cartCount > 0 && (
@@ -224,23 +227,103 @@ export default function Header() {
                 </span>
               )}
             </Link>
+            {/* Hamburger — mobile seulement */}
             <button
               className="md:hidden p-2 hover:bg-gray-50 rounded-full transition-all duration-200"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
+              aria-label={isMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
             >
-              <Menu className="w-5 h-5 text-gray-600" />
+              {isMenuOpen
+                ? <X className="w-5 h-5 text-gray-600" />
+                : <Menu className="w-5 h-5 text-gray-600" />
+              }
             </button>
           </div>
         </div>
         {isMenuOpen && (
-          <div className="md:hidden py-4 animate-slideDown">
-            <nav className="flex flex-col space-y-3">
-              <Link to="/" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-2">Accueil</Link>
-              <Link to="/boutique" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-2">Boutique</Link>
-              <Link to="/contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-2">Contact</Link>
-              <Link to="/faq" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-2">FAQ</Link>
-              <Link to="/galerie" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-2">Galerie</Link>
+          <div className="md:hidden pb-4 animate-slideDown">
+            {/* Navigation principale */}
+            <nav className="flex flex-col">
+              <Link to="/" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-3 border-b border-gray-50" onClick={() => setIsMenuOpen(false)}>Accueil</Link>
+              <Link to="/boutique" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-3 border-b border-gray-50" onClick={() => { setIsMenuOpen(false); trackEvent('nav_click', { link: 'boutique', source: 'header_mobile' }); }}>Boutique</Link>
+              <Link to="/contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-3 border-b border-gray-50" onClick={() => { setIsMenuOpen(false); trackEvent('nav_click', { link: 'contact', source: 'header_mobile' }); }}>Contact</Link>
+              <Link to="/faq" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-3 border-b border-gray-50" onClick={() => setIsMenuOpen(false)}>FAQ</Link>
+              <Link to="/galerie" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-3" onClick={() => setIsMenuOpen(false)}>Galerie</Link>
             </nav>
+            {/* Séparateur */}
+            <div className="border-t border-gray-100 my-2"></div>
+            {/* Favoris */}
+            <Link
+              to="/favoris"
+              className="flex items-center justify-between py-3 text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200"
+              onClick={() => { setIsMenuOpen(false); trackEvent('header_favoris_click', { source: 'header_mobile' }); }}
+            >
+              <div className="flex items-center gap-2">
+                <Heart className="w-4 h-4" />
+                Favoris
+              </div>
+              {favoritesCount > 0 && (
+                <span className="bg-gray-900 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {favoritesCount}
+                </span>
+              )}
+            </Link>
+            {/* Séparateur */}
+            <div className="border-t border-gray-100 my-2"></div>
+            {/* Profil ou Connexion */}
+            {user ? (
+              <div>
+                <div className="flex items-center gap-3 py-2 mb-1">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#f2dedd] to-[#e5f2eb] flex items-center justify-center shrink-0">
+                    <span className="text-sm font-medium text-gray-700">{user.firstName.charAt(0).toUpperCase()}</span>
+                  </div>
+                  <span className="text-sm text-gray-700 font-light">Bonjour {user.firstName.slice(0, 20)}</span>
+                </div>
+                <Link
+                  to="/profil"
+                  className="flex items-center justify-between py-3 text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Mon profil
+                  {newOrderBadge > 0 && (
+                    <span className="bg-gray-900 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">{newOrderBadge}</span>
+                  )}
+                </Link>
+                <Link
+                  to="/profil?tab=commandes"
+                  className="flex items-center gap-2 py-3 text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <Package className="w-4 h-4" />
+                  Commandes
+                  {newOrderBadge > 0 && (
+                    <span className="bg-gray-900 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">{newOrderBadge}</span>
+                  )}
+                </Link>
+                <button
+                  onClick={() => {
+                    trackEvent('logout', { source: 'header_mobile' });
+                    fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+                    localStorage.removeItem('isLoggedIn');
+                    localStorage.removeItem('user');
+                    setIsMenuOpen(false);
+                    window.location.reload();
+                  }}
+                  className="w-full text-left py-3 text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200"
+                >
+                  Déconnexion
+                </button>
+              </div>
+            ) : (
+              <Link
+                to="/connexion"
+                className="flex items-center gap-2 py-3 text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <User className="w-4 h-4" />
+                Connexion
+              </Link>
+            )}
           </div>
         )}
       </div>

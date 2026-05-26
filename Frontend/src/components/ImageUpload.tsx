@@ -6,6 +6,15 @@ const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
 /** Affiche une image via blob URL pour éviter le flux DOM XSS (CodeQL) - l'URL utilisateur ne va jamais dans img src */
 function SafeImagePreview({ url, className, alt }: { url: string; className?: string; alt?: string }) {
+  // Data URIs : affichage direct, pas besoin de fetch (pas de réseau, pas de CORS)
+  if (url.startsWith('data:image/')) {
+    return <img src={url} alt={alt || 'Preview'} className={className} />;
+  }
+
+  return <SafeImagePreviewRemote url={url} className={className} alt={alt} />;
+}
+
+function SafeImagePreviewRemote({ url, className, alt }: { url: string; className?: string; alt?: string }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
   const blobRef = useRef<string | null>(null);
@@ -24,8 +33,6 @@ function SafeImagePreview({ url, className, alt }: { url: string; className?: st
         }
       })
       .catch(() => {
-        // CORS ou URL externe non-fetchable : fallback sur src direct
-        // L'URL est déjà validée par getSafeImageSrc() avant d'arriver ici
         if (!cancelled) setFetchFailed(true);
       });
     return () => {

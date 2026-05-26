@@ -110,7 +110,7 @@ export default function Header() {
         <div className="flex items-center justify-between h-16">
           <Link to="/" className="flex items-center space-x-3 group cursor-pointer" onClick={() => trackEvent('header_logo_click', { source: 'header' })}>
             <img src="/Images/Logo.webp" alt="Logo" className="w-10 h-10" />
-            <span className="hidden md:block text-xl font-light tracking-wide">Le Clos De La Reine</span>
+            <span className="text-sm font-light tracking-wide md:text-xl">Le Clos De La Reine</span>
           </Link>
           <nav className="hidden md:flex items-center space-x-8">
             <Link to="/" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 relative group">
@@ -244,11 +244,11 @@ export default function Header() {
           <div className="md:hidden pb-4 animate-slideDown">
             {/* Navigation principale */}
             <nav className="flex flex-col">
-              <Link to="/" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-3 border-b border-gray-50" onClick={() => setIsMenuOpen(false)}>Accueil</Link>
-              <Link to="/boutique" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-3 border-b border-gray-50" onClick={() => { setIsMenuOpen(false); trackEvent('nav_click', { link: 'boutique', source: 'header_mobile' }); }}>Boutique</Link>
-              <Link to="/contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-3 border-b border-gray-50" onClick={() => { setIsMenuOpen(false); trackEvent('nav_click', { link: 'contact', source: 'header_mobile' }); }}>Contact</Link>
-              <Link to="/faq" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-3 border-b border-gray-50" onClick={() => setIsMenuOpen(false)}>FAQ</Link>
-              <Link to="/galerie" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-3" onClick={() => setIsMenuOpen(false)}>Galerie</Link>
+              <Link to="/" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-2" onClick={() => setIsMenuOpen(false)}>Accueil</Link>
+              <Link to="/boutique" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-2" onClick={() => { setIsMenuOpen(false); trackEvent('nav_click', { link: 'boutique', source: 'header_mobile' }); }}>Boutique</Link>
+              <Link to="/contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-2" onClick={() => { setIsMenuOpen(false); trackEvent('nav_click', { link: 'contact', source: 'header_mobile' }); }}>Contact</Link>
+              <Link to="/faq" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-2" onClick={() => setIsMenuOpen(false)}>FAQ</Link>
+              <Link to="/galerie" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 py-2" onClick={() => setIsMenuOpen(false)}>Galerie</Link>
             </nav>
             {/* Séparateur */}
             <div className="border-t border-gray-100 my-2"></div>
@@ -273,18 +273,17 @@ export default function Header() {
             {/* Profil ou Connexion */}
             {user ? (
               <div>
-                <div className="flex items-center gap-3 py-2 mb-1">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#f2dedd] to-[#e5f2eb] flex items-center justify-center shrink-0">
-                    <span className="text-sm font-medium text-gray-700">{user.firstName.charAt(0).toUpperCase()}</span>
-                  </div>
-                  <span className="text-sm text-gray-700 font-light">Bonjour {user.firstName.slice(0, 20)}</span>
-                </div>
                 <Link
                   to="/profil"
-                  className="flex items-center justify-between py-3 text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200"
+                  className="flex items-center justify-between py-2 mb-1 hover:opacity-70 transition-opacity duration-200"
                   onClick={() => setIsMenuOpen(false)}
                 >
-                  Mon profil
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#f2dedd] to-[#e5f2eb] flex items-center justify-center shrink-0">
+                      <span className="text-sm font-medium text-gray-700">{user.firstName.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <span className="text-sm text-gray-700 font-light">Bonjour {user.firstName.slice(0, 20)}</span>
+                  </div>
                   {newOrderBadge > 0 && (
                     <span className="bg-gray-900 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">{newOrderBadge}</span>
                   )}

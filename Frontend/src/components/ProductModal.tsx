@@ -118,7 +118,7 @@ function ProductModalBody({
       <script type="application/ld+json">{JSON.stringify(productJsonLd)}</script>
     </Helmet>
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center md:p-4 animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn"
       role="dialog"
       aria-modal="true"
       aria-label="Détail du produit"
@@ -131,13 +131,13 @@ function ProductModalBody({
 
       {/* Carte produit — même taille d’image que l’autre Clos de la Reine (60vh / 80vh) */}
       <div
-        className="relative z-10 w-full md:max-w-6xl md:rounded-3xl overflow-hidden bg-white animate-slideDown h-full md:h-auto md:max-h-[90vh]"
+        className="relative z-10 w-full max-w-6xl rounded-3xl overflow-hidden bg-white animate-slideDown max-h-[90vh]"
         style={{ boxShadow: 'var(--shadow)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-col md:flex-row md:min-h-0 h-full md:h-auto md:max-h-[90vh] md:items-start">
+        <div className="flex flex-col md:flex-row md:min-h-0 md:items-start">
           {/* Gauche : image — mobile h-[35%] du full-screen, desktop 80vh */}
-          <div className="relative w-full md:w-1/2 bg-gray-100 flex-shrink-0 h-[35%] md:h-[80vh]">
+          <div className="relative w-full md:w-1/2 bg-gray-100 flex-shrink-0 product-modal-image">
             <div className="relative w-full h-full overflow-hidden">
               {images[currentIndex] ? (
                 <img
@@ -190,7 +190,7 @@ function ProductModalBody({
           </div>
 
           {/* Droite : infos — mobile flex-1 (65% restant), desktop 80vh */}
-          <div className="w-full md:w-1/2 p-4 md:p-10 flex flex-col bg-white flex-1 md:h-[80vh] min-h-0">
+          <div className="w-full md:w-1/2 p-4 md:p-10 flex flex-col bg-white product-modal-text min-h-0">
             <button
               type="button"
               onClick={onClose}

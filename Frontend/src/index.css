@@ -71,3 +71,24 @@ h1, h2, h3, h4 {
   font-family: 'Playfair Display', 'Inter', serif;
   letter-spacing: -0.02em;
 }
+
+/* Product modal — heights fiables sur mobile (évite les bugs JIT Tailwind) */
+.product-modal-image {
+  height: 30vh;
+  min-height: 30vh;
+  flex-shrink: 0;
+}
+.product-modal-text {
+  height: 60vh;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .product-modal-image {
+    height: 80vh;
+    min-height: 80vh;
+  }
+  .product-modal-text {
+    height: 80vh;
+  }
+}

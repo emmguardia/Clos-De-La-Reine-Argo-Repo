@@ -709,25 +709,24 @@ export default function AdminPanelPage() {
                         Marquer comme nouveauté (affiché sur la page d'accueil)
                       </label>
                     </div>
-                    <div className="flex items-center justify-between p-3 rounded-lg border border-gray-200 bg-white">
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Disponibilité du produit</p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {formData.disponible ? 'Visible et achetable' : 'Visible mais non achetable — badge « Non disponible »'}
-                        </p>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 mb-1.5">Disponibilité</p>
+                      <div className="flex rounded-lg overflow-hidden border border-gray-200 w-fit">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, disponible: true })}
+                          className={`px-5 py-2 text-sm font-medium transition-colors duration-150 ${formData.disponible ? 'bg-green-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                        >
+                          ✓ Disponible
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, disponible: false })}
+                          className={`px-5 py-2 text-sm font-medium border-l border-gray-200 transition-colors duration-150 ${!formData.disponible ? 'bg-red-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                        >
+                          ✕ Indisponible
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={formData.disponible}
-                        onClick={() => setFormData({ ...formData, disponible: !formData.disponible })}
-                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 ${formData.disponible ? 'bg-green-500' : 'bg-red-400'}`}
-                      >
-                        <span
-                          aria-hidden="true"
-                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${formData.disponible ? 'translate-x-5' : 'translate-x-0'}`}
-                        />
-                      </button>
                     </div>
                     <div className="flex items-center gap-3 pt-2">
                       <button

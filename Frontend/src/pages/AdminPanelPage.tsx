@@ -709,24 +709,17 @@ export default function AdminPanelPage() {
                         Marquer comme nouveauté (affiché sur la page d'accueil)
                       </label>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-700 mb-1.5">Disponibilité</p>
-                      <div className="flex rounded-lg overflow-hidden border border-gray-200 w-fit">
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, disponible: true })}
-                          className={`px-5 py-2 text-sm font-medium transition-colors duration-150 ${formData.disponible ? 'bg-green-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-                        >
-                          ✓ Disponible
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, disponible: false })}
-                          className={`px-5 py-2 text-sm font-medium border-l border-gray-200 transition-colors duration-150 ${!formData.disponible ? 'bg-red-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-                        >
-                          ✕ Indisponible
-                        </button>
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="disponible"
+                        checked={!formData.disponible}
+                        onChange={(e) => setFormData({ ...formData, disponible: !e.target.checked })}
+                        className="w-4 h-4 text-gray-900 border-gray-300 rounded focus:ring-gray-900"
+                      />
+                      <label htmlFor="disponible" className="text-sm font-medium text-gray-700">
+                        Marquer comme indisponible (badge visible sur le produit, achat désactivé)
+                      </label>
                     </div>
                     <div className="flex items-center gap-3 pt-2">
                       <button

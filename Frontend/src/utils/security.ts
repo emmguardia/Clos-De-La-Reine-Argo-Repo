@@ -92,8 +92,11 @@ const SAFE_IMAGE_PREFIXES = ['https://', 'http://', 'data:image/png', 'data:imag
 export function getSafeImageSrc(url: string | undefined | null): string {
   if (!url || typeof url !== 'string') return '';
   const trimmed = url.trim();
-  if (trimmed.length === 0 || trimmed.length > 2048) return '';
+  if (trimmed.length === 0) return '';
   const lower = trimmed.toLowerCase();
+  // Les data URIs d'image (base64) peuvent dépasser largement 2048 chars — la limite ne s'applique qu'aux URLs HTTP(S)
+  const isDataImageUri = SAFE_IMAGE_PREFIXES.some(p => p.startsWith('data:') && lower.startsWith(p));
+  if (!isDataImageUri && trimmed.length > 2048) return '';
   const isSafe = SAFE_IMAGE_PREFIXES.some(p => lower.startsWith(p))
     || (trimmed.startsWith('/') && !trimmed.includes('//'));
   return isSafe ? trimmed : '';

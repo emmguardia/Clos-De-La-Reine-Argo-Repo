@@ -1,5 +1,5 @@
 import { X, ChevronLeft, ChevronRight, Heart, ShoppingCart, ChevronDown, Check } from 'lucide-react';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, type CSSProperties } from 'react';
 import { Helmet } from 'react-helmet-async';
 import type { Product } from '../data/products';
 import { fetchProductById } from '../data/products';
@@ -92,6 +92,11 @@ function ProductModalBody({
     },
   }), [product, images]);
 
+  // Inline styles pour les hauteurs — inline styles > CSS classes, fonctionne même si Tailwind JIT manque la classe
+  const isSmallScreen = typeof window !== 'undefined' && window.innerWidth < 768;
+  const imageStyle: CSSProperties = { height: isSmallScreen ? '30vh' : '80vh', minHeight: isSmallScreen ? '30vh' : '80vh', flexShrink: 0 };
+  const textStyle: CSSProperties = { height: isSmallScreen ? '60vh' : '80vh', overflow: 'hidden' };
+
   const [guideOpen, setGuideOpen] = useState(false);
   const needsSizeSelection = product.category === 'laisses' || product.category === 'colliers' || product.category === 'harnais';
   const laisseSizes = ['1m', '1m20'];
@@ -137,7 +142,7 @@ function ProductModalBody({
       >
         <div className="flex flex-col md:flex-row md:min-h-0 md:items-start">
           {/* Gauche : image — mobile h-[35%] du full-screen, desktop 80vh */}
-          <div className="relative w-full md:w-1/2 bg-gray-100 flex-shrink-0 product-modal-image">
+          <div className="relative w-full md:w-1/2 bg-gray-100 flex-shrink-0" style={imageStyle}>
             <div className="relative w-full h-full overflow-hidden">
               {images[currentIndex] ? (
                 <img
@@ -190,7 +195,7 @@ function ProductModalBody({
           </div>
 
           {/* Droite : infos — mobile flex-1 (65% restant), desktop 80vh */}
-          <div className="w-full md:w-1/2 p-4 md:p-10 flex flex-col bg-white product-modal-text min-h-0">
+          <div className="w-full md:w-1/2 p-4 md:p-10 flex flex-col bg-white min-h-0" style={textStyle}>
             <button
               type="button"
               onClick={onClose}

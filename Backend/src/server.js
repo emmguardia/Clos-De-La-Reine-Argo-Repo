@@ -819,7 +819,8 @@ app.get('/api/products', async (req, res) => {
         surcharge1m20: product.surcharge1m20 ?? null,
         surchargeSurMesure: product.surchargeSurMesure ?? null,
         isNew: product.isNew || false,
-        briefDescription: product.briefDescription || undefined
+        briefDescription: product.briefDescription || undefined,
+        disponible: product.disponible !== false
       };
       if (minimal) return base;
       return { ...base, secondImage: product.secondImage, additionalImages: product.additionalImages || [] };
@@ -884,7 +885,7 @@ app.get('/api/products/:id', async (req, res) => {
 
 app.post('/api/products', authenticateAdmin, async (req, res) => {
   try {
-    const { name, price, image, secondImage, additionalImages, category, collection, color, isNew, briefDescription, surcharge1m20, surchargeSurMesure } = req.body;
+    const { name, price, image, secondImage, additionalImages, category, collection, color, isNew, briefDescription, surcharge1m20, surchargeSurMesure, disponible } = req.body;
 
     if (!name || !price || !image || !category || !collection) {
       return res.status(400).json({ error: 'Champs requis manquants' });
@@ -908,6 +909,7 @@ app.post('/api/products', authenticateAdmin, async (req, res) => {
       surcharge1m20: surcharge1m20 !== undefined && surcharge1m20 !== '' && surcharge1m20 !== null ? parseFloat(String(surcharge1m20).replace(',', '.')) : null,
       surchargeSurMesure: surchargeSurMesure !== undefined && surchargeSurMesure !== '' && surchargeSurMesure !== null ? parseFloat(String(surchargeSurMesure).replace(',', '.')) : null,
       isNew: isNew || false,
+      disponible: disponible !== undefined ? Boolean(disponible) : true,
       briefDescription: briefDescription ? String(briefDescription).trim().slice(0, 500) : '',
       createdAt: new Date(),
       updatedAt: new Date()
@@ -924,7 +926,7 @@ app.post('/api/products', authenticateAdmin, async (req, res) => {
 app.put('/api/products/:id', authenticateAdmin, async (req, res) => {
   try {
     const productId = parseInt(req.params.id);
-    const { name, price, image, secondImage, additionalImages, category, collection, color, isNew, briefDescription, surcharge1m20, surchargeSurMesure } = req.body;
+    const { name, price, image, secondImage, additionalImages, category, collection, color, isNew, briefDescription, surcharge1m20, surchargeSurMesure, disponible } = req.body;
 
     const updateData = {
       updatedAt: new Date()
@@ -957,6 +959,9 @@ app.put('/api/products/:id', authenticateAdmin, async (req, res) => {
     }
     if (isNew !== undefined) {
       updateData.isNew = Boolean(isNew);
+    }
+    if (disponible !== undefined) {
+      updateData.disponible = Boolean(disponible);
     }
 
     const result = await db.collection('products').updateOne(

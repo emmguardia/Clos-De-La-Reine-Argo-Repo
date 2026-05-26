@@ -136,8 +136,8 @@ function ProductModalBody({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-col md:flex-row md:min-h-0 max-h-[90vh] md:items-start">
-          {/* Gauche : image — mobile 30vh, desktop 80vh */}
-          <div className="relative w-full md:w-1/2 bg-gray-100 flex-shrink-0 h-[30vh] md:h-[80vh]">
+          {/* Gauche : image — mobile 28vh, desktop 80vh */}
+          <div className="relative w-full md:w-1/2 bg-gray-100 flex-shrink-0 h-[28vh] md:h-[80vh]">
             <div className="relative w-full h-full overflow-hidden">
               {images[currentIndex] ? (
                 <img
@@ -189,8 +189,8 @@ function ProductModalBody({
             </div>
           </div>
 
-          {/* Droite : infos — flex-1 sur mobile = prend tout l'espace restant */}
-          <div className="w-full md:w-1/2 p-4 md:p-10 flex flex-col bg-white flex-1 md:h-[80vh] min-h-0">
+          {/* Droite : infos — mobile 62vh, desktop 80vh */}
+          <div className="w-full md:w-1/2 p-4 md:p-10 flex flex-col bg-white h-[62vh] md:h-[80vh] min-h-0">
             <button
               type="button"
               onClick={onClose}

@@ -1,0 +1,20 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: clos-ingress
+  namespace: {{ include "clos.namespace" . }}
+  labels:
+    {{- include "clos.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: "Host(`leclosdelareine.com`)"
+      kind: Rule
+      services:
+        - name: clos-de-la-reine-front
+          port: 80
+      middlewares:
+        - name: security-headers
+        - name: crowdsec-bouncer
+          namespace: kube-system

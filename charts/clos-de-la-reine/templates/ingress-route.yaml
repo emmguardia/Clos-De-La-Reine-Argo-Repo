@@ -9,7 +9,7 @@ spec:
   entryPoints:
     - web
   routes:
-    - match: "Host(`leclosdelareine.com`)"
+    - match: "Host(`{{ .Values.hostname }}`)"
       kind: Rule
       services:
         - name: clos-de-la-reine-front

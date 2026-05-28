@@ -8,6 +8,7 @@
 # Tant que encryptedData est vide, crÃ©e le secret Ã  la main (legacy).
 
 namespace: clos-de-la-reine-dev
+hostname: closdev.zenixweb.fr
 
 sealedSecret:
   enabled: true

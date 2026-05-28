@@ -2,6 +2,7 @@
 # Les images sont mises à jour par la CI (workflow build-and-push)
 
 namespace: clos-de-la-reine
+hostname: leclosdelareine.com
 
 # En prod on déploie le secret via SealedSecret (chiffré dans le repo)
 sealedSecret:
@@ -12,7 +13,7 @@ imagePullSecrets:
 
 # Backend (Node)
 backend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:4f3b547137d20f42041f298f386476cd4230dea5c8b3f513186321b550acdc62
+  image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:ee80200914846081b02e3fc5e46bbc8045e62a2f1df581e3834a61c591623940
   imagePullPolicy: IfNotPresent
   replicas: 1
   strategy:
@@ -46,7 +47,7 @@ backend:
 
 # Frontend (nginx)
 frontend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:08f92e1c41d344b44de52f7f99c34f3d0cb1a5747fa96a14f58d082a0f898e80
+  image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:6246aa747a1248b8c1fb372d8e6ea38d982e41aca99f1b8450771f48f900060b
   replicas: 1
   strategy:
     rollingUpdate:

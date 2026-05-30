@@ -80,12 +80,12 @@ export default function CartPage() {
                 const itemKey = `${item.id}-${item.size || ''}`;
                 const isSameItem = (p: typeof item) => p.id === item.id && (p.size || '') === (item.size || '');
                 return (
-                <div key={itemKey} className="flex gap-4 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
-                  <img src={item.image} alt={item.name} loading="lazy" className="w-20 h-20 object-cover rounded-lg" />
-                  <div className="flex-1">
+                <div key={itemKey} className="flex gap-3 sm:gap-4 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
+                  <img src={item.image} alt={item.name} loading="lazy" className="w-20 h-20 object-cover rounded-lg flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
                     <h3 className="font-medium text-gray-900">{item.name}</h3>
                     <p className="text-sm text-gray-600">
-                      {item.unitPrice.toFixed(2)} €
+                      <span className="whitespace-nowrap">{item.unitPrice.toFixed(2)}&nbsp;€</span>
                       {item.size && (
                         <span className="ml-2 text-gray-500">· {formatSize(item.size)}</span>
                       )}
@@ -113,8 +113,8 @@ export default function CartPage() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end justify-between">
-                    <p className="font-medium">{(item.unitPrice * item.quantity).toFixed(2)} €</p>
+                  <div className="flex flex-col items-end justify-between flex-shrink-0">
+                    <p className="font-medium whitespace-nowrap">{(item.unitPrice * item.quantity).toFixed(2)}&nbsp;€</p>
                     <button
                       onClick={() => {
                       trackEvent('cart_remove_item', { product_id: item.id, product_name: item.name, quantity: item.quantity });
@@ -130,7 +130,7 @@ export default function CartPage() {
               <div className="pt-4 border-t border-gray-200">
                 <div className="flex justify-between text-lg font-medium mb-4">
                   <span>Total</span>
-                  <span>{total.toFixed(2)} €</span>
+                  <span className="whitespace-nowrap">{total.toFixed(2)}&nbsp;€</span>
                 </div>
                 <button
                   onClick={() => {

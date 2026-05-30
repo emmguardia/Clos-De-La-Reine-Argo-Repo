@@ -51,7 +51,7 @@ export default function ProductCard({ product, showCollection = true, compact = 
         }
       }}
     >
-      <div className={`${compact ? 'h-52' : 'h-56'} relative overflow-hidden`}>
+      <div className={`${compact ? 'h-52' : 'h-40 sm:h-56'} relative overflow-hidden`}>
         <img
           src={product.image}
           alt={`${product.name} — ${product.category} pour chien artisanal | Clos de la Reine`}
@@ -75,18 +75,18 @@ export default function ProductCard({ product, showCollection = true, compact = 
           <Heart className={`w-5 h-5 ${favorite ? 'fill-current' : ''}`} />
         </button>
       </div>
-      <div className="p-6 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-lg font-light text-gray-900 group-hover:text-gray-600 transition-colors duration-200">
+      <div className="p-4 sm:p-6 space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2">
+          <h3 className="text-base sm:text-lg font-light text-gray-900 group-hover:text-gray-600 transition-colors duration-200">
             {product.name}
           </h3>
           {showCollection && (
-            <span className="text-xs px-3 py-1 rounded-full bg-[#f2dedd] text-gray-900">
+            <span className="self-start sm:self-auto text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-[#f2dedd] text-gray-900 whitespace-nowrap">
               {product.collection}
             </span>
           )}
         </div>
-        <p className="text-sm text-gray-500">
+        <p className="text-xs sm:text-sm text-gray-500">
           Couleur {Array.isArray(product.color)
             ? product.color.length <= 2
               ? product.color.join(' et ')
@@ -96,16 +96,16 @@ export default function ProductCard({ product, showCollection = true, compact = 
             : product.sizes[0]}
         </p>
         <div className="flex items-center justify-between pt-2">
-          <span className="text-2xl font-light text-gray-900">{product.price.toFixed(0)}€</span>
+          <span className="text-xl sm:text-2xl font-light text-gray-900">{product.price.toFixed(0)}€</span>
           {!readonlyMode && (
             isUnavailable ? (
               <span className="text-xs text-red-500 font-medium">Non disponible</span>
             ) : (
               <button
                 onClick={handleAddToCart}
-                className="bg-gray-900 text-white p-3 rounded-full hover:bg-gray-800 transition-all duration-300 transform hover:scale-110 hover:rotate-12"
+                className="bg-gray-900 text-white p-2 sm:p-3 rounded-full hover:bg-gray-800 transition-all duration-300 transform hover:scale-110 hover:rotate-12"
               >
-                <ShoppingCart className="w-5 h-5" />
+                <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             )
           )}

@@ -160,29 +160,30 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb] py-12 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="bg-white/90 backdrop-blur-lg rounded-3xl shadow-xl shadow-black/10 overflow-hidden">
-          <div className="bg-gradient-to-r from-[#f2dedd] to-[#e5f2eb] px-8 py-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-light text-gray-900 mb-2">
+          <div className="bg-gradient-to-r from-[#f2dedd] to-[#e5f2eb] px-4 py-5 sm:px-8 sm:py-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-2xl sm:text-3xl font-light text-gray-900 mb-2 truncate">
                   Bonjour {user.firstName} 👋
                 </h1>
-                <p className="text-sm text-gray-600">{user.email}</p>
+                <p className="text-sm text-gray-600 truncate">{user.email}</p>
               </div>
               <button
                 onClick={handleLogout}
-                className="flex items-center space-x-2 px-4 py-2 bg-white/80 hover:bg-white rounded-2xl text-sm text-gray-700 transition-all duration-200"
+                aria-label="Déconnexion"
+                className="flex items-center gap-2 flex-shrink-0 px-3 sm:px-4 py-2 bg-white/80 hover:bg-white rounded-2xl text-sm text-gray-700 transition-all duration-200 whitespace-nowrap"
               >
                 <LogOut className="w-4 h-4" />
-                <span>Déconnexion</span>
+                <span className="hidden sm:inline">Déconnexion</span>
               </button>
             </div>
           </div>
 
           <div className="border-b border-gray-200">
-            <div className="flex space-x-1 px-8">
+            <div className="flex space-x-1 px-4 sm:px-8 overflow-x-auto">
               <button
                 onClick={() => setActiveTab('informations')}
-                className={`px-6 py-4 text-sm font-medium transition-all duration-200 relative ${
+                className={`flex-shrink-0 whitespace-nowrap px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all duration-200 relative ${
                   activeTab === 'informations'
                     ? 'text-gray-900'
                     : 'text-gray-500 hover:text-gray-700'
@@ -198,7 +199,7 @@ export default function ProfilePage() {
               </button>
               <button
                 onClick={() => setActiveTab('commandes')}
-                className={`px-6 py-4 text-sm font-medium transition-all duration-200 relative ${
+                className={`flex-shrink-0 whitespace-nowrap px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all duration-200 relative ${
                   activeTab === 'commandes'
                     ? 'text-gray-900'
                     : 'text-gray-500 hover:text-gray-700'
@@ -214,7 +215,7 @@ export default function ProfilePage() {
               </button>
               <button
                 onClick={() => setActiveTab('historique')}
-                className={`px-6 py-4 text-sm font-medium transition-all duration-200 relative ${
+                className={`flex-shrink-0 whitespace-nowrap px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-all duration-200 relative ${
                   activeTab === 'historique'
                     ? 'text-gray-900'
                     : 'text-gray-500 hover:text-gray-700'
@@ -231,14 +232,14 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="p-8">
+          <div className="p-4 sm:p-8">
             {activeTab === 'informations' && (
               <InformationsTab user={user} setUser={setUser} />
             )}
 
             {activeTab === 'commandes' && (
               <div className="space-y-6">
-                <div className="mb-8 bg-white/90 backdrop-blur-lg rounded-3xl shadow-xl shadow-black/10 p-8 border border-black/5">
+                <div className="mb-8 bg-white/90 backdrop-blur-lg rounded-3xl shadow-xl shadow-black/10 p-4 sm:p-8 border border-black/5">
                   <h2 className="text-2xl font-light text-gray-900 mb-6 text-center">Comment se déroule votre commande ?</h2>
                   <div className="grid md:grid-cols-4 gap-6">
                     <div className="text-center">

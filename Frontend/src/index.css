@@ -3,6 +3,11 @@
 
 @import "tailwindcss";
 
+/* Tailwind v4 a manqué de générer .grid-cols-3 en prod malgré sa présence
+   dans BoutiquePage.tsx (probable cache de scan entre builds). On force la
+   génération de ces utilities critiques via @source inline. */
+@source inline("grid-cols-3 grid-cols-2 grid-cols-4 sm:grid-cols-2 sm:grid-cols-3 sm:grid-cols-4 md:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 lg:grid-cols-4");
+
 :root {
   --cream: #f8f4ef;
   --blush: #f2dedd;

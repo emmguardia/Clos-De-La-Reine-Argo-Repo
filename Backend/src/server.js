@@ -101,26 +101,45 @@ app.use(cors({
 const CSRF_MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 app.use((req, res, next) => {
   if (!CSRF_MUTATING_METHODS.has(req.method)) return next();
-  // Stripe webhooks et health checks : pas de CSRF possible (pas de cookie auth utilisé)
+  // Stripe webhooks : auth via signature, pas de CSRF possible (pas de cookie utilisé)
   if (req.path === '/api/stripe/webhook') return next();
+
   const origin = req.headers.origin;
   const referer = req.headers.referer;
-  // Pas d'Origin ni Referer : requête possiblement legit en server-to-server, on laisse passer
-  // si pas de cookie d'auth, sinon on rejette (un browser doit forcément avoir l'un des deux).
+
+  // Pas d'Origin ni Referer : possiblement server-to-server. On laisse passer si pas
+  // de cookie d'auth, sinon on rejette (un browser doit avoir au moins l'un des deux).
   if (!origin && !referer) {
     if (req.cookies?.authToken || req.cookies?.adminAuthToken) {
       return res.status(403).json({ error: 'Origin/Referer manquant' });
     }
     return next();
   }
-  const source = origin || (() => {
-    try { return new URL(referer).origin; } catch { return null; }
-  })();
-  if (!source || !corsAllowedOrigins.includes(source)) {
-    req.log?.warn({ origin, referer, ip: req.ip, route: req.originalUrl }, '[CSRF] Origin/Referer rejeté');
-    return res.status(403).json({ error: 'Origin non autorisée' });
-  }
-  next();
+
+  // Extrait l'origine source (priorité à Origin, fallback Referer)
+  let sourceHost = null;
+  let sourceOrigin = null;
+  try {
+    if (origin) {
+      sourceOrigin = origin;
+      sourceHost = new URL(origin).host;
+    } else if (referer) {
+      const u = new URL(referer);
+      sourceOrigin = u.origin;
+      sourceHost = u.host;
+    }
+  } catch { /* malformed */ }
+
+  // Cas 1 — Same-origin : host source == host requête (via X-Forwarded-Host derrière proxy).
+  // Pas de CSRF possible : une attaque cross-site aurait un host différent.
+  const requestHost = req.headers['x-forwarded-host'] || req.headers.host;
+  if (sourceHost && requestHost && sourceHost === requestHost) return next();
+
+  // Cas 2 — Cross-origin : doit être dans la whitelist CORS
+  if (sourceOrigin && corsAllowedOrigins.includes(sourceOrigin)) return next();
+
+  req.log?.warn({ origin, referer, requestHost, sourceHost, ip: req.ip, route: req.originalUrl }, '[CSRF] Origin/Referer rejeté');
+  return res.status(403).json({ error: 'Origin non autorisée' });
 });
 
 // ---------------------------------------------------------------------------

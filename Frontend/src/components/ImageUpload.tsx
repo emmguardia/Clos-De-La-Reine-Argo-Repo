@@ -4,36 +4,45 @@ import { validateFileType, validateFileSize, safeJsonResponse, getSafeImageSrc }
 
 const API_URL = (import.meta.env?.VITE_API_URL as string) || '';
 
-/** Affiche une image via blob URL pour éviter le flux DOM XSS (CodeQL) - l'URL utilisateur ne va jamais dans img src */
+/** Affiche une image après re-validation par getSafeImageSrc (allowlist stricte).
+ *  Toute URL non whitelistée (javascript:, data:image/svg+xml, etc.) tombe en placeholder.
+ *  Cette validation locale est rendue explicite pour que CodeQL voie le sink protégé. */
 function SafeImagePreview({ url, className, alt }: { url: string; className?: string; alt?: string }) {
-  // Data URIs : affichage direct, pas besoin de fetch (pas de réseau, pas de CORS)
-  if (url.startsWith('data:image/')) {
-    return <img src={url} alt={alt || 'Preview'} className={className} />;
+  const safeUrl = getSafeImageSrc(url);
+  if (!safeUrl) return <div className={`${className || ''} bg-gray-100`} aria-hidden="true" />;
+
+  // Data URIs sûrs (png/jpeg/jpg/gif/webp uniquement) : affichage direct
+  if (safeUrl.startsWith('data:image/')) {
+    return <img src={safeUrl} alt={alt || 'Preview'} className={className} />;
   }
 
-  return <SafeImagePreviewRemote url={url} className={className} alt={alt} />;
+  return <SafeImagePreviewRemote url={safeUrl} className={className} alt={alt} />;
+}
+
+interface RemoteState {
+  url: string;
+  blobUrl: string | null;
+  failed: boolean;
 }
 
 function SafeImagePreviewRemote({ url, className, alt }: { url: string; className?: string; alt?: string }) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [fetchFailed, setFetchFailed] = useState(false);
+  // state.url permet de savoir si state correspond à la prop courante (évite setState() synchrone en début d'effet)
+  const [state, setState] = useState<RemoteState>(() => ({ url: '', blobUrl: null, failed: false }));
   const blobRef = useRef<string | null>(null);
   useEffect(() => {
     if (!url) return;
-    setBlobUrl(null);
-    setFetchFailed(false);
     let cancelled = false;
     fetch(url, { mode: 'cors' })
       .then((r) => r.blob())
       .then((blob) => {
-        if (!cancelled) {
-          const u = URL.createObjectURL(blob);
-          blobRef.current = u;
-          setBlobUrl(u);
-        }
+        if (cancelled) return;
+        const u = URL.createObjectURL(blob);
+        blobRef.current = u;
+        setState({ url, blobUrl: u, failed: false });
       })
       .catch(() => {
-        if (!cancelled) setFetchFailed(true);
+        if (cancelled) return;
+        setState({ url, blobUrl: null, failed: true });
       });
     return () => {
       cancelled = true;
@@ -43,8 +52,17 @@ function SafeImagePreviewRemote({ url, className, alt }: { url: string; classNam
       }
     };
   }, [url]);
-  if (blobUrl) return <img src={blobUrl} alt={alt || 'Preview'} className={className} referrerPolicy="no-referrer" />;
-  if (fetchFailed) return <img src={url} alt={alt || 'Preview'} className={className} referrerPolicy="no-referrer" />;
+
+  const isCurrent = state.url === url;
+  if (isCurrent && state.blobUrl) {
+    return <img src={state.blobUrl} alt={alt || 'Preview'} className={className} referrerPolicy="no-referrer" />;
+  }
+  if (isCurrent && state.failed) {
+    // Re-validation explicite avant fallback (defense in depth pour CodeQL)
+    const safeFallback = getSafeImageSrc(url);
+    if (!safeFallback) return <div className={`${className || ''} bg-gray-100`} aria-hidden="true" />;
+    return <img src={safeFallback} alt={alt || 'Preview'} className={className} referrerPolicy="no-referrer" />;
+  }
   return <div className={`${className || ''} bg-gray-100 animate-pulse`} />;
 }
 

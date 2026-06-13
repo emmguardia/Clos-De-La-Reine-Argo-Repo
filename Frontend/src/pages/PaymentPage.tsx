@@ -58,11 +58,8 @@ function StripePaymentForm({
     setSubmitting(true);
     onError('');
     try {
-      try {
-        sessionStorage.setItem(`payment_address_${orderId}`, JSON.stringify(shippingAddress));
-      } catch {
-        /* ignore */
-      }
+      // L'adresse de livraison est déjà persistée côté serveur sur l'order
+      // (POST /api/orders au checkout). Pas de stockage local de PII.
       const { error } = await stripe.confirmPayment({
         elements,
         confirmParams: {
@@ -207,25 +204,9 @@ export default function PaymentPage() {
 
   useEffect(() => {
     if (!orderId || loading) return;
-    let next: Partial<Record<string, string>> = {};
-    try {
-      const saved = sessionStorage.getItem(`payment_address_${orderId}`);
-      if (saved) {
-        const ship = JSON.parse(saved) as Record<string, string>;
-        next = {
-          firstName: ship.firstName ?? '',
-          lastName: ship.lastName ?? '',
-          email: ship.email ?? '',
-          phone: ship.phone ?? '',
-          address: ship.address ?? '',
-          city: ship.city ?? '',
-          postalCode: ship.postalCode ?? '',
-          country: ship.country ?? 'France'
-        };
-      }
-    } catch {
-      /* ignore */
-    }
+    // L'adresse de l'order (côté serveur) est déjà chargée par fetchOrder().
+    // On ne complète que les champs encore vides depuis le profil user.
+    const next: Partial<Record<string, string>> = {};
     try {
       const userStr = localStorage.getItem('user');
       if (userStr) {
@@ -314,17 +295,21 @@ export default function PaymentPage() {
       setError('Session expirée. Connectez-vous pour confirmer le paiement.');
       return;
     }
-    let ship: Record<string, string> = {};
-    try {
-      const saved = sessionStorage.getItem(`payment_address_${orderId}`);
-      if (saved) {
-        ship = JSON.parse(saved) as Record<string, string>;
-      }
-    } catch {
-      /* ignore */
-    }
     (async () => {
       try {
+        // Récupère l'adresse depuis l'order serveur (source de vérité, pas de PII dans sessionStorage)
+        let ship: Record<string, string> = {};
+        try {
+          const orderRes = await fetch(`${API_URL}/api/orders`, { credentials: 'include' });
+          if (orderRes.ok) {
+            const data = await safeJsonResponse(orderRes, {} as { orders?: Array<{ id: string; shippingAddress?: Record<string, string> }> });
+            const found = (data.orders || []).find(o => o.id === orderId);
+            if (found?.shippingAddress) ship = found.shippingAddress;
+          }
+        } catch {
+          /* ignore */
+        }
+
         const url = `${API_URL}/api/orders/${orderId}/payment`;
         const res = await fetch(url, {
           method: 'POST',
@@ -335,7 +320,6 @@ export default function PaymentPage() {
         if (res.ok) {
           try {
             sessionStorage.removeItem(sentKey);
-            sessionStorage.removeItem(`payment_address_${orderId}`);
           } catch {
             /* ignore */
           }
@@ -358,11 +342,6 @@ export default function PaymentPage() {
           });
           setAddressQuery(ship.address ?? '');
           setClientSecret(null);
-          try {
-            sessionStorage.setItem(`payment_address_${orderId}`, JSON.stringify(ship));
-          } catch {
-            /* ignore */
-          }
         }
       } catch (_err) {
         setError('Impossible de joindre le serveur. Vérifiez votre connexion.');

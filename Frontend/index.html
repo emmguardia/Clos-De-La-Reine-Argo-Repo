@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/webp" href="/Images/Logo.webp" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Google Fonts : preconnect + link stylesheet déclenchent le téléchargement
+         en parallèle du JS bundle (sinon l'@import dans index.css attend le CSS).
+         Évite le FOUC ("Layout forced before page loaded"). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap" />
     <title>Le Clos De La Reine — Colliers, harnais et laisses pour chiens</title>
     <meta name="description" content="Le Clos de la Reine : accessoires pour chiens en cuir végétal. Colliers, harnais et laisses de qualité, finitions sellier, production atelier française." />
     <meta name="keywords" content="collier chien, harnais chien, laisse chien, cuir végétal, accessoires chiens, Le Clos de la Reine" />

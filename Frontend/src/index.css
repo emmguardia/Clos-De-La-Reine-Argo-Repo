@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap');
+/* Google Fonts chargées en parallèle du JS via <link> dans index.html
+   (preconnect + stylesheet) pour éviter le FOUC. Ne pas re-importer ici. */
 
 @import "tailwindcss";
 

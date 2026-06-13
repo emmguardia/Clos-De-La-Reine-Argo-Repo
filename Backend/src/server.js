@@ -93,6 +93,56 @@ app.use(cors({
 }));
 
 // ---------------------------------------------------------------------------
+// Anti-CSRF — vérifie Origin/Referer sur les méthodes mutantes (POST/PUT/PATCH/DELETE)
+// Plus simple que csurf (deprecated) : pas de token à propager côté front, et
+// efficace contre CSRF puisque les navigateurs envoient toujours Origin sur ces
+// méthodes. Combiné avec sameSite=lax sur les cookies, couvre les vecteurs CSRF.
+// ---------------------------------------------------------------------------
+const CSRF_MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+app.use((req, res, next) => {
+  if (!CSRF_MUTATING_METHODS.has(req.method)) return next();
+  // Stripe webhooks : auth via signature, pas de CSRF possible (pas de cookie utilisé)
+  if (req.path === '/api/stripe/webhook') return next();
+
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+
+  // Pas d'Origin ni Referer : possiblement server-to-server. On laisse passer si pas
+  // de cookie d'auth, sinon on rejette (un browser doit avoir au moins l'un des deux).
+  if (!origin && !referer) {
+    if (req.cookies?.authToken || req.cookies?.adminAuthToken) {
+      return res.status(403).json({ error: 'Origin/Referer manquant' });
+    }
+    return next();
+  }
+
+  // Extrait l'origine source (priorité à Origin, fallback Referer)
+  let sourceHost = null;
+  let sourceOrigin = null;
+  try {
+    if (origin) {
+      sourceOrigin = origin;
+      sourceHost = new URL(origin).host;
+    } else if (referer) {
+      const u = new URL(referer);
+      sourceOrigin = u.origin;
+      sourceHost = u.host;
+    }
+  } catch { /* malformed */ }
+
+  // Cas 1 — Same-origin : host source == host requête (via X-Forwarded-Host derrière proxy).
+  // Pas de CSRF possible : une attaque cross-site aurait un host différent.
+  const requestHost = req.headers['x-forwarded-host'] || req.headers.host;
+  if (sourceHost && requestHost && sourceHost === requestHost) return next();
+
+  // Cas 2 — Cross-origin : doit être dans la whitelist CORS
+  if (sourceOrigin && corsAllowedOrigins.includes(sourceOrigin)) return next();
+
+  req.log?.warn({ origin, referer, requestHost, sourceHost, ip: req.ip, route: req.originalUrl }, '[CSRF] Origin/Referer rejeté');
+  return res.status(403).json({ error: 'Origin non autorisée' });
+});
+
+// ---------------------------------------------------------------------------
 // Body parsing — limite générale 1 Mo ; route upload images tolère 10 Mo
 // ---------------------------------------------------------------------------
 app.use((req, res, next) => {
@@ -136,6 +186,14 @@ const strictLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
   message: { error: 'Trop de requêtes. Veuillez réessayer plus tard.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const sitemapLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: 'Trop de requêtes sitemap' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -339,7 +397,7 @@ app.get('/health', (req, res) => {
 // Sitemap XML dynamique — inclut les pages statiques + dernière modif produit
 // Nginx proxifie /sitemap.xml vers ce backend (cf. configmap nginx)
 // ---------------------------------------------------------------------------
-app.get('/sitemap.xml', async (req, res) => {
+app.get('/sitemap.xml', sitemapLimiter, async (req, res) => {
   try {
     const BASE_URL = 'https://leclosdelareine.com';
     const today = new Date().toISOString().split('T')[0];
@@ -479,8 +537,10 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
 
     const result = await db.collection('users').insertOne(user);
     
+    // JWT payload : seulement userId, pas d'email (PII en clair) — l'email est récupéré
+    // depuis la DB via authenticateToken si nécessaire. CodeQL: clear-text-storage.
     const token = jwt.sign(
-      { userId: result.insertedId.toString(), email: user.email },
+      { userId: result.insertedId.toString() },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -555,8 +615,9 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
     const tokenExpiration = rememberMe === true ? '30d' : '1d';
     const cookieMaxAge = rememberMe === true ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+    // JWT payload : seulement userId, pas d'email — éviter PII en clair dans le token.
     const token = jwt.sign(
-      { userId: user._id.toString(), email: user.email },
+      { userId: user._id.toString() },
       JWT_SECRET,
       { expiresIn: tokenExpiration }
     );

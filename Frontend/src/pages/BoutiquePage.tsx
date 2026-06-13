@@ -192,7 +192,7 @@ export default function BoutiquePage() {
               </h2>
               <div className="h-px w-16 bg-gray-900" aria-hidden="true" />
             </header>
-            <div className="grid grid-cols-3 gap-2 sm:gap-6">
+            <div className="boutique-grid">
               {products.map((product) => (
                 <ProductCard 
                   key={product.id} 

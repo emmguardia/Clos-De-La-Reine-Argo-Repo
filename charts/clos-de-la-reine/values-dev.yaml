@@ -31,7 +31,7 @@ imagePullSecrets:
   - name: ghcr-secret
 
 backend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:a330e902f9807f932ecf5460a37b8298324dcd27336c0142bdd678f6425106f3
+  image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:0bbaa3ebc17e0e1d7fb7e231c2db05df947e2bcce2281a986017a3f59c48011e
   imagePullPolicy: Always
   replicas: 1
   strategy:
@@ -57,7 +57,7 @@ backend:
     enabled: false  # Pas d'HPA en dev (replicas gÃ©rÃ©s Ã  la main)
 
 frontend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:24a82fb010af1194640c9c8136b58d9bb5b958fd85ddf3d496123cf800e0b6bf
+  image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:7cbc437d7501e4db5cfa761f4f0e380f4d065519bd7a367612b38fd9b5fc2531
   imagePullPolicy: Always
   replicas: 1
   strategy:

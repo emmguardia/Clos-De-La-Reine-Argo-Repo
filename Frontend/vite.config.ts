@@ -14,7 +14,11 @@ export default defineConfig({
     modulePreload: { polyfill: false },
     rollupOptions: {
       output: {
-        assetFileNames: 'assets/[name].[ext]',
+        // [hash] critique : sans ça, index.css garde le même nom à chaque deploy
+        // alors que nginx + Cloudflare le cachent 1 an (max-age=31536000) → impossible
+        // d'invalider sans purge manuelle. Avec [hash], l'URL change à chaque rebuild
+        // et le cache long est sûr.
+        assetFileNames: 'assets/[name]-[hash].[ext]',
         manualChunks(id) {
           if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
             return 'vendor';

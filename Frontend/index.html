@@ -23,10 +23,9 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Le Clos De La Reine — Colliers, harnais et laisses pour chiens" />
     <meta name="twitter:description" content="Accessoires pour chiens en cuir végétal. Colliers, harnais et laisses de qualité, finitions sellier." />
-    <!-- Preload de l'image hero de la home uniquement (header2.webp n'est utilisé
-         que sur boutique/faq/contact, son preload global gaspille de la bande
-         passante et provoque un warning "preloaded but not used" sur les autres pages). -->
-    <link rel="preload" as="image" href="/Images/header.webp" fetchpriority="high" />
+    <!-- Pas de preload d'image hero global : header.webp n'est utilisé que sur
+         la home et provoque "preloaded but not used" sur toutes les autres pages.
+         Le coût d'un fetch normal sur la home est négligeable (~100ms). -->
     <!-- Umami Analytics - Privacy-first, no cookies required -->
     <script defer src="https://analytics.zenixweb.fr/script.js" data-website-id="53018c31-1508-409b-99bd-04e8938a473c"></script>
   </head>

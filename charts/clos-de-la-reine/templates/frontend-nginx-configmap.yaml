@@ -26,7 +26,7 @@ data:
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
         add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://js.stripe.com https://analytics.zenixweb.fr; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.stripe.com https://api-adresse.data.gouv.fr https://analytics.zenixweb.fr; frame-src https://js.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self';" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://js.stripe.com https://analytics.zenixweb.fr; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://api.stripe.com https://api-adresse.data.gouv.fr https://analytics.zenixweb.fr; frame-src https://js.stripe.com https://hooks.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self';" always;
 
         gzip on;
         gzip_vary on;

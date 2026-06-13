@@ -92,3 +92,17 @@ h1, h2, h3, h4 {
     height: 80vh;
   }
 }
+
+/* Grille produits boutique : colonnes serrées, lignes plus aérées sur mobile */
+.boutique-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 0.5rem;
+  row-gap: 1rem;
+}
+@media (min-width: 640px) {
+  .boutique-grid {
+    column-gap: 1.5rem;
+    row-gap: 1.5rem;
+  }
+}

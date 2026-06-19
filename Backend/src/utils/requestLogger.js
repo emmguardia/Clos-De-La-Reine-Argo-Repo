@@ -19,7 +19,7 @@ export const httpLogger = pinoHttp({
   logger,
   // Ne pas loguer les health-checks pour éviter le bruit (sondes K8s toutes les 10 s)
   autoLogging: {
-    ignore: (req) => req.url === '/api/health' || req.url === '/api/metrics',
+    ignore: (req) => req.url === '/health' || req.url === '/api/health' || req.url === '/api/metrics',
   },
   customSuccessMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,
   customErrorMessage: (req, res, err) => `${req.method} ${req.url} ${res.statusCode} — ${err?.message || 'error'}`,

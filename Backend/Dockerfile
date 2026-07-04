@@ -49,12 +49,14 @@ RUN npm install -g picomatch@latest \
        done \
     && npm cache clean --force
 
-# Patch sécurité: forcer undici@6.27.0 (CVE-2026-12151 DoS via WebSocket, bundlé dans npm)
-RUN npm install -g undici@6.27.0 \
+# Patch sécurité: forcer undici@6.27.0 (CVE-2026-12151) et sigstore@latest (CVE-2026-48815)
+RUN npm install -g undici@6.27.0 sigstore@latest \
     && G="/usr/local/lib/node_modules" \
-    && for d in $(find "$G" -name "undici" -type d 2>/dev/null); do \
-         [ "$d" = "$G/undici" ] && continue; \
-         rm -rf "$d" && cp -r "$G/undici" "$d"; \
+    && for pkg in undici sigstore; do \
+         for d in $(find "$G" -name "$pkg" -type d 2>/dev/null); do \
+           [ "$d" = "$G/$pkg" ] && continue; \
+           rm -rf "$d" && cp -r "$G/$pkg" "$d"; \
+         done; \
        done \
     && npm cache clean --force
 
@@ -79,10 +81,12 @@ RUN for d in $(find /usr/local/lib/node_modules /app/node_modules -name "picomat
       rm -rf "$d" && cp -r /usr/local/lib/node_modules/picomatch "$d"; \
     done
 
-# Re-patch undici après npm ci (remplace par 6.27.0, corrige CVE-2026-12151)
-RUN for d in $(find /usr/local/lib/node_modules /app/node_modules -name "undici" -type d 2>/dev/null); do \
-      [ "$d" = "/usr/local/lib/node_modules/undici" ] && continue; \
-      rm -rf "$d" && cp -r /usr/local/lib/node_modules/undici "$d"; \
+# Re-patch undici + sigstore après npm ci
+RUN for pkg in undici sigstore; do \
+      for d in $(find /usr/local/lib/node_modules /app/node_modules -name "$pkg" -type d 2>/dev/null); do \
+        [ "$d" = "/usr/local/lib/node_modules/$pkg" ] && continue; \
+        rm -rf "$d" && cp -r "/usr/local/lib/node_modules/$pkg" "$d"; \
+      done; \
     done
 
 COPY dist/src/ ./src/

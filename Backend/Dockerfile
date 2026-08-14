@@ -1,95 +1,87 @@
-# Alpine ~5MB vs Debian ~1GB : surface d'attaque réduite
-FROM node:26-alpine
+# syntax=docker/dockerfile:1.7
+#
+# Build multi-stage : on installe les deps dans un stage build, on ne garde dans
+# l'image finale que node + node_modules + le code.
+#
+# ── POURQUOI CE FICHIER A PERDU ~70 LIGNES DE PATCHS MANUELS
+#
+# La version précédente réinstallait « en latest » tar, minimatch, cross-spawn,
+# glob, picomatch, undici (CVE-2026-12151) et sigstore (CVE-2026-48815), puis
+# recopiait chaque version corrigée par-dessus TOUTES les copies imbriquées
+# trouvées avec `find`, deux fois (avant et après le npm ci).
+#
+# Aucun de ces paquets ne vient de l'application : vérifié, ils sont absents de
+# pnpm-lock.yaml et présents dans /usr/local/lib/node_modules/npm/node_modules.
+# Ce sont les dépendances bundlées de npm lui-même.
+#
+# Or le runtime n'exécute que `node src/server.js`. npm, npx et corepack n'y
+# servent à rien. En les supprimant de l'image finale, toutes leurs CVE
+# disparaissent d'un coup — undici et sigstore compris. C'est une élimination
+# structurelle et non un patch : rien à re-maintenir à la prochaine CVE, et
+# plus de `cp -r` sur un chemin trouvé par `find` risquant d'écraser autre chose.
 
-ENV NODE_ENV=production
-ENV NPM_CONFIG_LOGLEVEL=error
-ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+# ── Stage 1 : install des dépendances prod ───────────────────────────────────
+FROM node:26-alpine AS deps
+
+ENV NODE_ENV=production \
+    PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH
+
+# Maj des paquets Alpine (correctifs sécurité système)
+RUN apk update && apk upgrade --no-cache
+
+# Chaîne de compilation pour les modules natifs : bcrypt ne publie pas toujours
+# de binaire prébuild pour musl et retombe alors sur node-gyp. Ces paquets
+# restent dans ce stage et n'atterrissent jamais dans l'image finale.
+RUN apk add --no-cache python3 make g++
+
+# Installe pnpm épinglé. On n'utilise pas corepack ici car il a été retiré du
+# bundle Node à partir de Node 25/26.
+RUN npm install -g pnpm@10.33.4 --no-audit --no-fund
 
 WORKDIR /app
 
-# Patch sécurité: forcer tar@latest (corrige les CVE connues)
-RUN npm install -g tar@latest \
-    && NPM_TAR="/usr/local/lib/node_modules/npm/node_modules/tar" \
-    && rm -rf "$NPM_TAR" \
-    && mkdir -p "$(dirname "$NPM_TAR")" \
-    && cp -r /usr/local/lib/node_modules/tar "$NPM_TAR" \
-    && npm cache clean --force
+# Les manifestes viennent de dist/, produit par `pnpm build` (build.js) qui y
+# recopie package.json, pnpm-lock.yaml et .npmrc.
+# .npmrc porte ignore-scripts=true : seuls les paquets listés dans
+# pnpm.onlyBuiltDependencies (ici bcrypt) ont le droit de builder.
+COPY dist/package.json dist/pnpm-lock.yaml dist/.npmrc ./
 
-# Patch sécurité: forcer minimatch@latest (corrige les CVE connues)
-RUN npm install -g minimatch@latest \
-    && NPM_MM="/usr/local/lib/node_modules/npm/node_modules/minimatch" \
-    && rm -rf "$NPM_MM" \
-    && mkdir -p "$(dirname "$NPM_MM")" \
-    && cp -r /usr/local/lib/node_modules/minimatch "$NPM_MM" \
-    && (find /usr/local/lib/node_modules -name "minimatch" -type d 2>/dev/null | while read d; do \
-         [ "$d" = "/usr/local/lib/node_modules/minimatch" ] && continue; \
-         rm -rf "$d" && cp -r /usr/local/lib/node_modules/minimatch "$d"; \
-       done) \
-    && npm cache clean --force
+RUN pnpm install --prod --frozen-lockfile \
+    && pnpm store prune 2>/dev/null || true
 
-# Patch sécurité: forcer cross-spawn@latest et glob@latest (corrige les CVE connues)
-RUN npm install -g cross-spawn@latest glob@latest \
-    && G="/usr/local/lib/node_modules" \
-    && for d in $(find "$G" -name "cross-spawn" -type d 2>/dev/null); do \
-         [ "$d" = "$G/cross-spawn" ] && continue; \
-         rm -rf "$d" && cp -r "$G/cross-spawn" "$d"; \
-       done \
-    && for d in $(find "$G" -name "glob" -type d 2>/dev/null); do \
-         [ "$d" = "$G/glob" ] && continue; \
-         rm -rf "$d" && cp -r "$G/glob" "$d"; \
-       done \
-    && npm cache clean --force
+# ── Stage 2 : image runtime minimale ─────────────────────────────────────────
+FROM node:26-alpine AS runtime
 
-# Patch sécurité: forcer picomatch@latest (CVE-2026-33671 ReDoS via extglob patterns)
-RUN npm install -g picomatch@latest \
-    && G="/usr/local/lib/node_modules" \
-    && for d in $(find "$G" -name "picomatch" -type d 2>/dev/null); do \
-         [ "$d" = "$G/picomatch" ] && continue; \
-         rm -rf "$d" && cp -r "$G/picomatch" "$d"; \
-       done \
-    && npm cache clean --force
+ENV NODE_ENV=production
 
-# Patch sécurité: forcer undici@6.27.0 (CVE-2026-12151) et sigstore@latest (CVE-2026-48815)
-RUN npm install -g undici@6.27.0 sigstore@latest \
-    && G="/usr/local/lib/node_modules" \
-    && for pkg in undici sigstore; do \
-         for d in $(find "$G" -name "$pkg" -type d 2>/dev/null); do \
-           [ "$d" = "$G/$pkg" ] && continue; \
-           rm -rf "$d" && cp -r "$G/$pkg" "$d"; \
-         done; \
-       done \
-    && npm cache clean --force
+# Maj sécu Alpine
+RUN apk update && apk upgrade --no-cache
 
-RUN echo "update-notifier=false" > .npmrc && echo "loglevel=error" >> .npmrc
+# HARDENING SUPPLY-CHAIN : on retire npm, npx, corepack et leurs deps bundlées
+# (tar, cross-spawn, glob, minimatch, picomatch, etc.) car le runtime n'en a pas
+# besoin. C'est ce qui remplace les 50 lignes de patchs manuels d'avant.
+RUN rm -rf \
+      /usr/local/lib/node_modules/npm \
+      /usr/local/lib/node_modules/corepack \
+      /usr/local/bin/npm \
+      /usr/local/bin/npx \
+      /usr/local/bin/corepack \
+      /opt/yarn-* \
+      /usr/local/bin/yarn \
+      /usr/local/bin/yarnpkg \
+    && rm -rf /root/.npm /root/.cache 2>/dev/null || true
 
-COPY dist/package*.json ./
+WORKDIR /app
 
-# apk upgrade juste avant npm ci : cache Docker optimisé + correctifs Alpine frais à chaque changement de deps
-RUN apk update && apk upgrade --no-cache \
-    && (if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit --no-fund --loglevel=error 2>&1 | grep -v "npm notice" || true; else npm install --omit=dev --no-audit --no-fund --loglevel=error 2>&1 | grep -v "npm notice" || true; fi) \
-    && npm cache clean --force 2>/dev/null || true
+# L'utilisateur `node` (uid 1000) est fourni par l'image officielle.
+# L'image précédente tournait en root : le port 3000 étant > 1024, rien
+# n'imposait ce privilège.
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node dist/package.json ./
+COPY --chown=node:node dist/src/ ./src/
 
-# Re-patch minimatch après npm ci (remplace par la version latest)
-RUN for d in $(find /usr/local/lib/node_modules /app/node_modules -name "minimatch" -type d 2>/dev/null); do \
-      [ "$d" = "/usr/local/lib/node_modules/minimatch" ] && continue; \
-      rm -rf "$d" && cp -r /usr/local/lib/node_modules/minimatch "$d"; \
-    done
-
-# Re-patch picomatch après npm ci (remplace par la version latest, corrige CVE-2026-33671)
-RUN for d in $(find /usr/local/lib/node_modules /app/node_modules -name "picomatch" -type d 2>/dev/null); do \
-      [ "$d" = "/usr/local/lib/node_modules/picomatch" ] && continue; \
-      rm -rf "$d" && cp -r /usr/local/lib/node_modules/picomatch "$d"; \
-    done
-
-# Re-patch undici + sigstore après npm ci
-RUN for pkg in undici sigstore; do \
-      for d in $(find /usr/local/lib/node_modules /app/node_modules -name "$pkg" -type d 2>/dev/null); do \
-        [ "$d" = "/usr/local/lib/node_modules/$pkg" ] && continue; \
-        rm -rf "$d" && cp -r "/usr/local/lib/node_modules/$pkg" "$d"; \
-      done; \
-    done
-
-COPY dist/src/ ./src/
+USER node
 
 EXPOSE 3000
 

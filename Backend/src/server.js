@@ -143,11 +143,13 @@ app.use((req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
-// Body parsing — limite générale 1 Mo ; route upload images tolère 10 Mo
+// Body parsing — limite générale 1 Mo ; routes portant des images base64
+// (upload, produits, galerie) tolèrent 25 Mo (≈ 3 images de 5 Mo)
 // ---------------------------------------------------------------------------
+const LARGE_BODY_PATHS = ['/api/images/upload', '/api/products', '/api/gallery'];
 app.use((req, res, next) => {
-  const limit = req.path === '/api/images/upload' ? '10mb' : '1mb';
-  express.json({ limit, strict: true })(req, res, next);
+  const isLargeBody = LARGE_BODY_PATHS.some((p) => req.path === p || req.path.startsWith(p + '/'));
+  express.json({ limit: isLargeBody ? '25mb' : '1mb', strict: true })(req, res, next);
 });
 app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 100 }));
 

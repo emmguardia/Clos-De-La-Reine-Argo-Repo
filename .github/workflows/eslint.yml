@@ -1,5 +1,22 @@
 name: ESLint
 
+# Analyse statique du frontend, avec remontée dans l'onglet Security via SARIF.
+#
+# ── CE WORKFLOW NE FAISAIT RIEN AVANT ────────────────────────────────────────
+# Trois défauts cumulés le rendaient purement décoratif :
+#   1. `--ext .js,.jsx,.ts,.tsx` — option SUPPRIMÉE dans ESLint 9 (flat config).
+#      Le repo est en ESLint 10 : la commande échouait à chaque exécution.
+#      Les extensions analysées sont déclarées dans eslint.config.js.
+#   2. `continue-on-error: true` masquait cet échec, le job restait vert.
+#   3. Aucun `setup-node` : le job utilisait le Node par défaut du runner et un
+#      `npm install` sans lockfile.
+# Résultat : le SARIF envoyé à l'onglet Security était vide ou absent.
+#
+# Le lint bloquant, lui, est dans build-and-push.yml (`pnpm lint`) : c'est lui
+# qui empêche un déploiement. Ce workflow-ci sert au rapport et aux annotations
+# de PR, d'où le `|| true` — un échec de lint ne doit pas empêcher l'upload du
+# rapport qui explique justement ce qui ne va pas.
+
 on:
   push:
     branches: [ "main" ]
@@ -8,41 +25,55 @@ on:
 
 jobs:
   eslint:
-    name: Run eslint scanning
+    name: Run ESLint scanning
     runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
       actions: read
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      # 1. Installation des dépendances dans le dossier spécifique
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.4
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+          cache: 'pnpm'
+          cache-dependency-path: Frontend/pnpm-lock.yaml
+
       - name: Install Dependencies
-        run: npm install
         working-directory: ./Frontend
+        run: pnpm install --frozen-lockfile
 
-      # 2. Installation du formateur SARIF (nécessaire pour l'onglet Security)
+      # Le formateur SARIF est installé à la volée plutôt que d'alourdir les
+      # devDependencies du projet pour un usage exclusivement CI.
       - name: Install SARIF Formatter
-        run: npm install @microsoft/eslint-formatter-sarif@3.1.0
         working-directory: ./Frontend
+        run: pnpm add -D @microsoft/eslint-formatter-sarif@3.1.0
 
-      # 3. Exécution d'ESLint
+      # Le SARIF vide est écrit d'abord : si eslint plante avant d'avoir produit
+      # son rapport, l'upload a quand même un fichier valide à envoyer au lieu
+      # de faire échouer le job sur un fichier manquant.
       - name: Run ESLint
+        working-directory: ./Frontend
         env:
           SARIF_ESLINT_IGNORE_SUPPRESSED: "true"
         run: |
-          npx eslint . \
-          --ext .js,.jsx,.ts,.tsx \
-          --format @microsoft/eslint-formatter-sarif \
-          --output-file eslint-results.sarif
-        working-directory: ./Frontend
-        continue-on-error: true
+          echo '{"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[{"tool":{"driver":{"name":"ESLint","rules":[]}},"results":[]}]}' > eslint-results.sarif
+          pnpm exec eslint . \
+            --format @microsoft/eslint-formatter-sarif \
+            --output-file eslint-results.sarif || true
 
-      # 4. Envoi du rapport vers l'onglet Security de GitHub
       - name: Upload analysis results to GitHub
         uses: github/codeql-action/upload-sarif@v4
+        if: always()
         with:
           sarif_file: ./Frontend/eslint-results.sarif
           wait-for-processing: true

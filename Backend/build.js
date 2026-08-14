@@ -28,9 +28,20 @@ function copyRecursiveSync(src, dest) {
 }
 
 copyRecursiveSync(srcDir, path.join(distDir, srcDir));
-fs.copyFileSync('package.json', path.join(distDir, 'package.json'));
-if (fs.existsSync('package-lock.json')) {
-  fs.copyFileSync('package-lock.json', path.join(distDir, 'package-lock.json'));
+
+// Le Dockerfile installe les dépendances de production depuis dist/, il lui
+// faut donc les trois fichiers dont pnpm a besoin :
+//   - package.json    : les dépendances et le bloc pnpm (overrides, onlyBuiltDependencies)
+//   - pnpm-lock.yaml  : l'install en --frozen-lockfile échoue sans lui
+//   - .npmrc          : porte ignore-scripts=true, qui doit aussi s'appliquer
+//                       pendant le build de l'image
+const manifests = ['package.json', 'pnpm-lock.yaml', '.npmrc'];
+for (const file of manifests) {
+  if (!fs.existsSync(file)) {
+    console.error(`❌ Fichier manquant : ${file}`);
+    process.exit(1);
+  }
+  fs.copyFileSync(file, path.join(distDir, file));
 }
 
 console.log('✅ Build terminé : dist/ créé');

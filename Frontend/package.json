@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -40,12 +45,20 @@
     "typescript-eslint": "^8.60.1",
     "vite": "^8.0.16"
   },
-  "overrides": {
-    "rimraf": "^5.0.5",
-    "glob": "^10.3.10",
-    "minimatch": "10.2.5",
-    "ajv": "^6.14.0",
-    "tar": ">=7.5.8",
-    "picomatch": ">=4.0.4"
+  "pnpm": {
+    "overrides": {
+      "rimraf": "^5.0.5",
+      "glob": "^10.3.10",
+      "minimatch": "10.2.5",
+      "ajv": "^6.14.0",
+      "tar": ">=7.5.8",
+      "picomatch": ">=4.0.4"
+    },
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ],
+    "auditConfig": {
+      "ignoreGhsas": []
+    }
   }
 }

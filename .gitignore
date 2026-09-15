@@ -28,3 +28,6 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Store pnpm local (créé par les installs en conteneur)
+.pnpm-store/

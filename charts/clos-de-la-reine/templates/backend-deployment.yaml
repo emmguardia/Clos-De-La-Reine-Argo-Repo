@@ -56,31 +56,28 @@ spec:
         - name: FRONTEND_URL
           value: {{ .Values.backend.env.FRONTEND_URL | quote }}
         {{- end }}
-        - name: MONGODB_URI
+        - name: MARIADB_PORT
+          value: {{ .Values.backend.env.MARIADB_PORT | quote }}
+        - name: MARIADB_HOST
           valueFrom:
             secretKeyRef:
               name: {{ .Values.backend.secretName }}
-              key: mongodb-uri
-        - name: MONGODB_USER
+              key: mariadb-host
+        - name: MARIADB_USER
           valueFrom:
             secretKeyRef:
               name: {{ .Values.backend.secretName }}
-              key: mongodb-user
-        - name: MONGODB_PASSWORD
+              key: mariadb-user
+        - name: MARIADB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: {{ .Values.backend.secretName }}
-              key: mongodb-password
-        - name: MONGODB_DB
+              key: mariadb-password
+        - name: MARIADB_DATABASE
           valueFrom:
             secretKeyRef:
               name: {{ .Values.backend.secretName }}
-              key: mongodb-db
-        - name: MONGODB_HOST
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.backend.secretName }}
-              key: mongodb-host
+              key: mariadb-database
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:

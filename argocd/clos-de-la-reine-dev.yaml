@@ -12,7 +12,7 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  project: default
+  project: siteweb
   source:
     repoURL: https://github.com/emmguardia/Clos-De-La-Reine-Argo-Repo
     targetRevision: develop

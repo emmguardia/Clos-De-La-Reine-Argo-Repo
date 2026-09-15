@@ -12,7 +12,9 @@
     "build": "node build.js",
     "start": "node dist/src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node -e \"process.exit(0)\""
+    "test": "node -e \"process.exit(0)\"",
+    "init-db": "node scripts/init-db.js",
+    "migrate:from-mongo": "node scripts/migrate-mongo-to-mariadb.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
@@ -23,7 +25,7 @@
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
-    "mongodb": "^7.2.0",
+    "mariadb": "^3.4.6",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
     "prom-client": "^15.1.3",
@@ -31,7 +33,8 @@
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
-    "minimatch": "10.2.5"
+    "minimatch": "10.2.5",
+    "mongodb": "^7.2.0"
   },
   "pnpm": {
     "overrides": {

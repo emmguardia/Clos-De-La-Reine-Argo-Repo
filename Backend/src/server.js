@@ -3,7 +3,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import { MongoClient, ObjectId } from 'mongodb';
+import { randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
@@ -13,6 +13,11 @@ import Stripe from 'stripe';
 import logger from './utils/logger.js';
 import { register as metricsRegister, rateLimitHitsTotal } from './utils/metrics.js';
 import { httpLogger, prometheusMiddleware } from './utils/requestLogger.js';
+import {
+  createPool, ensureSchema, closePool,
+  query, queryOne, transaction,
+  parseJson, toJson, toBool, toNum, escapeLike, placeholders,
+} from './config/database.js';
 
 logger.info({ version: process.version, env: process.env.NODE_ENV || 'development' }, '[BOOT] Démarrage du serveur');
 
@@ -27,11 +32,6 @@ process.on('unhandledRejection', (reason, promise) => {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MONGODB_URI = process.env.MONGODB_URI;
-const MONGODB_USER = process.env.MONGODB_USER;
-const MONGODB_PASSWORD = process.env.MONGODB_PASSWORD;
-const MONGODB_DB = process.env.MONGODB_DB || 'clos_de_la_reine_db';
-const MONGODB_HOST = process.env.MONGODB_HOST;
 const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? null : 'dev-only-secret-changez-moi');
 if (!JWT_SECRET) {
   console.error('[BOOT] FATAL: JWT_SECRET manquant en production. Arrêt du serveur.');
@@ -153,10 +153,25 @@ app.use((req, res, next) => {
 });
 app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 100 }));
 
+// Anti-bruteforce des routes d'authentification non authentifiées (login,
+// inscription). Monté UNIQUEMENT en middleware de route : un app.use('/api/auth')
+// en plus ferait compter deux fois chaque login, et ferait consommer le quota
+// par les simples lectures de profil.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
   message: { error: 'Trop de tentatives, veuillez réessayer plus tard' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Routes de compte qui revérifient le mot de passe (changement de mot de passe,
+// suppression de compte). Compteur distinct d'authLimiter : modifier son profil
+// ne doit pas épuiser le quota de connexion.
+const accountLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Trop de requêtes. Veuillez réessayer dans quelques minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -221,18 +236,13 @@ const apiLimiter = rateLimit({
   },
 });
 
-function escapeMongoRegex(str) {
-  if (typeof str !== 'string') return '';
-  return str.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&').slice(0, 200);
-}
-
 // ── Endpoints d'observabilité ─────────────────────────────────────────────────
 // Déclarés AVANT apiLimiter pour ne pas être rate-limités (sondes K8s toutes les 10 s)
 // et AVANT le middleware "DB-required" pour rester dispos quand la DB est down.
 app.get('/api/health', async (_req, res) => {
-  if (!db) return res.status(503).json({ status: 'error', db: 'disconnected', timestamp: new Date().toISOString() });
+  if (!dbReady) return res.status(503).json({ status: 'error', db: 'disconnected', timestamp: new Date().toISOString() });
   try {
-    await db.command({ ping: 1 });
+    await query('SELECT 1');
     res.json({ status: 'ok', db: 'connected', timestamp: new Date().toISOString() });
   } catch {
     res.status(503).json({ status: 'error', db: 'disconnected', timestamp: new Date().toISOString() });
@@ -257,55 +267,205 @@ app.get('/api/metrics', async (req, res) => {
 });
 
 app.use('/api', apiLimiter);
-// Limiter strict sur toutes les routes d'authentification utilisateur
-// (login + register ont en plus authLimiter en tant que middleware de route)
-app.use('/api/auth', authLimiter);
 
 const SALT_ROUNDS = 12;
 const ADMIN_JWT_EXPIRATION = '8h';
 
-let client;
-let db;
+// dbReady remplace la variable `db` du client Mongo : les routes /api sont
+// refusées en 503 tant que le pool n'a pas répondu au moins une fois.
+let dbReady = false;
+
+async function connectToDatabase() {
+  try {
+    createPool();
+    await query('SELECT 1');
+    await ensureSchema();
+    dbReady = true;
+    logger.info({
+      host: process.env.MARIADB_HOST || 'localhost',
+      database: process.env.MARIADB_DATABASE || 'clos_de_la_reine',
+    }, '✅ Connecté à MariaDB');
+    startSecurityRowsPurge();
+  } catch (error) {
+    dbReady = false;
+    logger.error({ err: error }, '❌ Erreur de connexion MariaDB');
+    setTimeout(connectToDatabase, 5000);
+  }
+}
+
+// Remplace les index TTL de Mongo (expireAfterSeconds) : MariaDB n'a pas
+// d'expiration de ligne, et l'event scheduler n'est pas garanti actif sur le
+// serveur partagé — la purge est donc portée par l'application.
+let purgeTimer = null;
+function startSecurityRowsPurge() {
+  if (purgeTimer) return;
+  const purge = async () => {
+    try {
+      await query('DELETE FROM admin_login_attempts WHERE timestamp < NOW(3) - INTERVAL 24 HOUR');
+      await query('DELETE FROM ip_bans WHERE expires_at < NOW(3)');
+    } catch (err) {
+      logger.warn({ err }, '[PURGE] Nettoyage des tables de sécurité impossible');
+    }
+  };
+  purge();
+  purgeTimer = setInterval(purge, 60 * 60 * 1000);
+  purgeTimer.unref();
+}
+
+// ---------------------------------------------------------------------------
+// Mappers SQL → JSON de l'API
+//
+// Le contrat du frontend est inchangé depuis MongoDB : mêmes noms de champs en
+// camelCase, mêmes valeurs par défaut. Ces fonctions sont le seul endroit où la
+// convention snake_case des colonnes est traduite.
+// ---------------------------------------------------------------------------
+
+function defaultSizes(category) {
+  if (category === 'laisses') return ['1m', '1m20'];
+  if (category === 'colliers' || category === 'harnais') return ['XS', 'S', 'M', 'L', 'XL'];
+  return [];
+}
+
+function mapProduct(row, { minimal = false } = {}) {
+  const sizes = parseJson(row.sizes, []);
+  const base = {
+    id: row.id,
+    name: row.name,
+    price: toNum(row.price),
+    image: row.image,
+    category: row.category,
+    collection: row.collection,
+    color: parseJson(row.color, []),
+    sizes: sizes.length ? sizes : defaultSizes(row.category),
+    surcharge1m20: toNum(row.surcharge_1m20),
+    surchargeSurMesure: toNum(row.surcharge_sur_mesure),
+    isNew: toBool(row.is_new),
+    briefDescription: row.brief_description || undefined,
+    disponible: toBool(row.disponible),
+  };
+  if (minimal) return base;
+  return {
+    ...base,
+    secondImage: row.second_image,
+    additionalImages: parseJson(row.additional_images, []),
+  };
+}
+
+/** Produit complet (GET /api/products/:id et retour d'admin) — inclut les dates. */
+function mapProductFull(row) {
+  return {
+    ...mapProduct(row),
+    briefDescription: row.brief_description || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapShippingAddress(row) {
+  return {
+    firstName: row.ship_first_name,
+    lastName: row.ship_last_name,
+    email: row.ship_email,
+    phone: row.ship_phone,
+    address: row.ship_address,
+    city: row.ship_city,
+    postalCode: row.ship_postal_code,
+    country: row.ship_country,
+  };
+}
+
+function mapDogInfo(row) {
+  return {
+    breed: row.dog_breed,
+    age: row.dog_age,
+    tourDeCou: row.dog_tour_de_cou,
+    tourDeTaille: row.dog_tour_de_taille,
+    surMesureCollier: toBool(row.dog_sur_mesure_collier),
+    surMesureHarnais: toBool(row.dog_sur_mesure_harnais),
+  };
+}
+
+function mapOrderItem(row) {
+  return {
+    productId: row.product_id,
+    quantity: row.quantity,
+    price: toNum(row.price),
+    size: row.size ?? null,
+  };
+}
+
+function mapOrder(row, items) {
+  return {
+    id: row.id,
+    orderNumber: row.order_number || null,
+    userId: row.user_id,
+    items,
+    shippingAddress: mapShippingAddress(row),
+    dogInfo: mapDogInfo(row),
+    notes: row.notes || '',
+    total: toNum(row.total),
+    originalTotal: toNum(row.original_total),
+    promoCode: parseJson(row.promo_code, null),
+    shippingAmount: toNum(row.shipping_amount),
+    feesAmount: toNum(row.fees_amount),
+    status: row.status,
+    counterProposal: parseJson(row.counter_proposal, null),
+    paymentInfo: parseJson(row.payment_info, null),
+    rejectionReason: row.rejection_reason ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** Charge une commande et ses lignes. */
+async function findOrderById(orderId) {
+  const row = await queryOne('SELECT * FROM orders WHERE id = ?', [orderId]);
+  if (!row) return null;
+  const items = await query(
+    'SELECT product_id, quantity, price, size FROM order_items WHERE order_id = ? ORDER BY position, id',
+    [orderId]
+  );
+  return mapOrder(row, items.map(mapOrderItem));
+}
+
+/** Remplace toutes les lignes d'une commande (acceptation d'une contre-proposition). */
+async function replaceOrderItems(conn, orderId, items) {
+  await conn.query('DELETE FROM order_items WHERE order_id = ?', [orderId]);
+  let position = 0;
+  for (const item of items || []) {
+    await conn.query(
+      'INSERT INTO order_items (order_id, product_id, quantity, price, size, position) VALUES (?, ?, ?, ?, ?, ?)',
+      [orderId, item.productId, item.quantity, item.price, item.size ?? null, position++]
+    );
+  }
+}
+
+function mapPromoCode(row) {
+  return {
+    id: row.id,
+    name: row.name || null,
+    code: row.code,
+    discountType: row.discount_type,
+    discountValue: toNum(row.discount_value),
+    maxUses: row.max_uses,
+    currentUses: row.current_uses || 0,
+    isActive: toBool(row.is_active),
+    startDate: row.start_date || null,
+    endDate: row.end_date || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 async function getProductMapByIds(productIds) {
   if (!productIds || productIds.length === 0) return {};
   const ids = [...new Set(productIds.filter(Boolean))];
-  const products = await db.collection('products').find({ id: { $in: ids } }, { projection: { id: 1, name: 1, collection: 1, category: 1 } }).toArray();
-  return Object.fromEntries((products || []).map(p => [p.id, p]));
-}
-
-async function connectToDatabase() {
-  try {
-    const host = MONGODB_HOST || 'localhost';
-    const uri = MONGODB_URI || `mongodb://${MONGODB_USER}:${encodeURIComponent(MONGODB_PASSWORD)}@${host}:27017/${MONGODB_DB}?authSource=${MONGODB_DB}`;
-    client = new MongoClient(uri, {
-      serverSelectionTimeoutMS: 10000,
-      connectTimeoutMS: 10000
-    });
-    await client.connect();
-    db = client.db(MONGODB_DB);
-    const productsCol = db.collection('products');
-    await productsCol.createIndex({ id: 1 }).catch(() => {});
-    await productsCol.createIndex({ category: 1 }).catch(() => {});
-    await productsCol.createIndex({ collection: 1 }).catch(() => {});
-    await productsCol.createIndex({ isNew: 1 }).catch(() => {});
-    await db.collection('carts').createIndex({ userId: 1 }).catch(() => {});
-    await db.collection('favorites').createIndex({ userId: 1 }).catch(() => {});
-    await db.collection('orders').createIndex({ userId: 1 }).catch(() => {});
-    // unique + partial pour ignorer les anciens docs sans orderNumber.
-    // S'il existait déjà un index non-unique, on le warn (ne casse pas le boot).
-    await db.collection('orders').createIndex(
-      { orderNumber: 1 },
-      { unique: true, partialFilterExpression: { orderNumber: { $type: 'string' } } }
-    ).catch((e) => console.warn('[index orderNumber unique] non créé:', e.message));
-    await db.collection('counters').createIndex({ _id: 1 }).catch(() => {});
-    await db.collection('ip_bans').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }).catch(() => {});
-    await db.collection('admin_login_attempts').createIndex({ timestamp: 1 }, { expireAfterSeconds: 86400 }).catch(() => {});
-    console.log('✅ Connecté à MongoDB');
-  } catch (error) {
-    console.error('❌ Erreur de connexion MongoDB:', error);
-    setTimeout(connectToDatabase, 5000);
-  }
+  if (ids.length === 0) return {};
+  const products = await query(
+    `SELECT id, name, \`collection\`, category FROM products WHERE id IN (${placeholders(ids.length)})`,
+    ids
+  );
+  return Object.fromEntries(products.map(p => [p.id, p]));
 }
 
 function validateEmail(email) {
@@ -371,12 +531,12 @@ async function authenticateAdmin(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    
+
     if (!decoded.isAdmin) {
       return res.status(403).json({ error: 'Accès admin requis' });
     }
 
-    const adminAuth = await db.collection('admin_auth').findOne({});
+    const adminAuth = await queryOne('SELECT id FROM admin_auth LIMIT 1');
     if (!adminAuth) {
       return res.status(403).json({ error: 'Configuration admin introuvable' });
     }
@@ -405,18 +565,16 @@ app.get('/sitemap.xml', sitemapLimiter, async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     let productsLastMod = today;
 
-    if (db) {
+    if (dbReady) {
       try {
-        const [latest] = await db.collection('products')
-          .find({}, { projection: { updatedAt: 1, createdAt: 1 } })
-          .sort({ updatedAt: -1, createdAt: -1 })
-          .limit(1)
-          .toArray();
+        const latest = await queryOne(
+          'SELECT updated_at, created_at FROM products ORDER BY updated_at DESC, created_at DESC LIMIT 1'
+        );
         if (latest) {
-          const d = latest.updatedAt || latest.createdAt;
+          const d = latest.updated_at || latest.created_at;
           if (d) productsLastMod = new Date(d).toISOString().split('T')[0];
         }
-      } catch (_) { /* si la collection est vide, on garde today */ }
+      } catch (_) { /* si la table est vide, on garde today */ }
     }
 
     const pages = [
@@ -456,7 +614,7 @@ app.get('/api/config', (req, res) => {
 
 app.use('/api', (req, res, next) => {
   if (req.path === '/config') return next();
-  if (!db) return res.status(503).json({ error: 'Service temporairement indisponible' });
+  if (!dbReady) return res.status(503).json({ error: 'Service temporairement indisponible' });
   next();
 });
 
@@ -521,28 +679,37 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Le prénom et le nom doivent contenir au moins 2 caractères' });
     }
 
-    const existingUser = await db.collection('users').findOne({ email: email.toLowerCase().trim() });
+    const existingUser = await queryOne('SELECT id FROM users WHERE email = ?', [email.toLowerCase().trim()]);
     if (existingUser) {
       return res.status(409).json({ error: 'Cet email est déjà utilisé' });
     }
 
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
     const user = {
+      id: randomUUID(),
       email: email.toLowerCase().trim(),
       password: hashedPassword,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      createdAt: new Date(),
-      lastLogin: null,
-      isActive: true
     };
 
-    const result = await db.collection('users').insertOne(user);
-    
+    try {
+      await query(
+        'INSERT INTO users (id, email, password, first_name, last_name, is_active) VALUES (?, ?, ?, ?, ?, 1)',
+        [user.id, user.email, user.password, user.firstName, user.lastName]
+      );
+    } catch (err) {
+      // Course entre deux inscriptions simultanées : la contrainte UNIQUE tranche.
+      if (err.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ error: 'Cet email est déjà utilisé' });
+      }
+      throw err;
+    }
+
     // JWT payload : seulement userId, pas d'email (PII en clair) — l'email est récupéré
     // depuis la DB via authenticateToken si nécessaire. CodeQL: clear-text-storage.
     const token = jwt.sign(
-      { userId: result.insertedId.toString() },
+      { userId: user.id },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -552,7 +719,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     res.status(201).json({
       message: 'Inscription réussie',
       user: {
-        id: result.insertedId.toString(),
+        id: user.id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName
@@ -567,7 +734,6 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
 app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const { email, password, rememberMe } = req.body;
-    const clientIp = req.ip || req.socket?.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
 
     if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
       await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
@@ -586,7 +752,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     }
 
     const startTime = Date.now();
-    const user = await db.collection('users').findOne({ email: emailLower });
+    const user = await queryOne('SELECT * FROM users WHERE email = ?', [emailLower]);
     const elapsedTime = Date.now() - startTime;
 
     if (!user) {
@@ -595,7 +761,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Identifiants invalides' });
     }
 
-    if (!user.isActive) {
+    if (!toBool(user.is_active)) {
       await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500));
       return res.status(403).json({ error: 'Compte désactivé' });
     }
@@ -610,16 +776,13 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Identifiants invalides' });
     }
 
-    await db.collection('users').updateOne(
-      { _id: user._id },
-      { $set: { lastLogin: new Date() } }
-    );
+    await query('UPDATE users SET last_login = NOW(3) WHERE id = ?', [user.id]);
 
     const tokenExpiration = rememberMe === true ? '30d' : '1d';
     const cookieMaxAge = rememberMe === true ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
     // JWT payload : seulement userId, pas d'email — éviter PII en clair dans le token.
     const token = jwt.sign(
-      { userId: user._id.toString() },
+      { userId: user.id },
       JWT_SECRET,
       { expiresIn: tokenExpiration }
     );
@@ -629,10 +792,10 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     res.json({
       message: 'Connexion réussie',
       user: {
-        id: user._id.toString(),
+        id: user.id,
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName
+        firstName: user.first_name,
+        lastName: user.last_name
       }
     });
   } catch (error) {
@@ -643,9 +806,9 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const user = await db.collection('users').findOne(
-      { _id: new ObjectId(req.user.userId) },
-      { projection: { password: 0 } }
+    const user = await queryOne(
+      'SELECT id, email, first_name, last_name, created_at, last_login FROM users WHERE id = ?',
+      [req.user.userId]
     );
 
     if (!user) {
@@ -653,12 +816,12 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     }
 
     res.json({
-      id: user._id.toString(),
+      id: user.id,
       email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      createdAt: user.createdAt,
-      lastLogin: user.lastLogin
+      firstName: user.first_name,
+      lastName: user.last_name,
+      createdAt: user.created_at,
+      lastLogin: user.last_login
     });
   } catch (error) {
     console.error('Erreur lors de la récupération du profil:', error);
@@ -671,28 +834,31 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ message: 'Déconnexion réussie' });
 });
 
-app.put('/api/auth/me', authenticateToken, async (req, res) => {
+app.put('/api/auth/me', accountLimiter, authenticateToken, async (req, res) => {
   try {
     const { firstName, lastName, email, currentPassword, newPassword } = req.body;
-    const userId = new ObjectId(req.user.userId);
+    const userId = req.user.userId;
 
-    const user = await db.collection('users').findOne({ _id: userId });
+    const user = await queryOne('SELECT * FROM users WHERE id = ?', [userId]);
 
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur non trouvé' });
     }
 
-    const updateData = {};
+    const updates = [];
+    const values = [];
     const errors = [];
 
     if (firstName && firstName.trim().length >= 2) {
-      updateData.firstName = firstName.trim();
+      updates.push('first_name = ?');
+      values.push(firstName.trim());
     } else if (firstName) {
       errors.push('Le prénom doit contenir au moins 2 caractères');
     }
 
     if (lastName && lastName.trim().length >= 2) {
-      updateData.lastName = lastName.trim();
+      updates.push('last_name = ?');
+      values.push(lastName.trim());
     } else if (lastName) {
       errors.push('Le nom doit contenir au moins 2 caractères');
     }
@@ -700,14 +866,12 @@ app.put('/api/auth/me', authenticateToken, async (req, res) => {
     if (email && validateEmail(email)) {
       const emailLower = email.toLowerCase().trim();
       if (emailLower !== user.email) {
-        const existingUser = await db.collection('users').findOne({ 
-          email: emailLower,
-          _id: { $ne: userId }
-        });
+        const existingUser = await queryOne('SELECT id FROM users WHERE email = ? AND id <> ?', [emailLower, userId]);
         if (existingUser) {
           errors.push('Cet email est déjà utilisé');
         } else {
-          updateData.email = emailLower;
+          updates.push('email = ?');
+          values.push(emailLower);
         }
       }
     } else if (email) {
@@ -724,7 +888,8 @@ app.put('/api/auth/me', authenticateToken, async (req, res) => {
         } else if (!validatePassword(newPassword)) {
           errors.push('Le nouveau mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule et un chiffre');
         } else {
-          updateData.password = await bcrypt.hash(newPassword, SALT_ROUNDS);
+          updates.push('password = ?');
+          values.push(await bcrypt.hash(newPassword, SALT_ROUNDS));
         }
       }
     }
@@ -733,31 +898,28 @@ app.put('/api/auth/me', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: errors.join(', ') });
     }
 
-    if (Object.keys(updateData).length === 0) {
+    if (updates.length === 0) {
       return res.status(400).json({ error: 'Aucune modification à apporter' });
     }
 
-    updateData.updatedAt = new Date();
+    updates.push('updated_at = NOW(3)');
+    values.push(userId);
+    await query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
 
-    await db.collection('users').updateOne(
-      { _id: userId },
-      { $set: updateData }
-    );
-
-    const updatedUser = await db.collection('users').findOne(
-      { _id: userId },
-      { projection: { password: 0 } }
+    const updatedUser = await queryOne(
+      'SELECT id, email, first_name, last_name, created_at, last_login FROM users WHERE id = ?',
+      [userId]
     );
 
     res.json({
       message: 'Profil mis à jour avec succès',
       user: {
-        id: updatedUser._id.toString(),
+        id: updatedUser.id,
         email: updatedUser.email,
-        firstName: updatedUser.firstName,
-        lastName: updatedUser.lastName,
-        createdAt: updatedUser.createdAt,
-        lastLogin: updatedUser.lastLogin
+        firstName: updatedUser.first_name,
+        lastName: updatedUser.last_name,
+        createdAt: updatedUser.created_at,
+        lastLogin: updatedUser.last_login
       }
     });
   } catch (error) {
@@ -768,18 +930,21 @@ app.put('/api/auth/me', authenticateToken, async (req, res) => {
 
 app.get('/api/auth/export', authenticateToken, async (req, res) => {
   try {
-    const user = await db.collection('users').findOne(
-      { _id: new ObjectId(req.user.userId) },
-      { projection: { password: 0 } }
-    );
+    const user = await queryOne('SELECT * FROM users WHERE id = ?', [req.user.userId]);
 
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur non trouvé' });
     }
 
     const exportData = {
-      ...user,
-      id: user._id.toString(),
+      id: user.id,
+      email: user.email,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      isActive: toBool(user.is_active),
+      createdAt: user.created_at,
+      updatedAt: user.updated_at,
+      lastLogin: user.last_login,
       exportedAt: new Date().toISOString()
     };
 
@@ -792,7 +957,7 @@ app.get('/api/auth/export', authenticateToken, async (req, res) => {
   }
 });
 
-app.delete('/api/auth/me', authenticateToken, async (req, res) => {
+app.delete('/api/auth/me', accountLimiter, authenticateToken, async (req, res) => {
   try {
     const { password } = req.body;
 
@@ -800,7 +965,7 @@ app.delete('/api/auth/me', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Mot de passe requis pour supprimer le compte' });
     }
 
-    const user = await db.collection('users').findOne({ _id: new ObjectId(req.user.userId) });
+    const user = await queryOne('SELECT id, password FROM users WHERE id = ?', [req.user.userId]);
 
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur non trouvé' });
@@ -811,7 +976,9 @@ app.delete('/api/auth/me', authenticateToken, async (req, res) => {
       return res.status(401).json({ error: 'Mot de passe incorrect' });
     }
 
-    await db.collection('users').deleteOne({ _id: new ObjectId(req.user.userId) });
+    // Panier et favoris tombent avec le compte (ON DELETE CASCADE). Les
+    // commandes sont volontairement conservées : obligation comptable de 10 ans.
+    await query('DELETE FROM users WHERE id = ?', [req.user.userId]);
 
     res.json({ message: 'Compte supprimé avec succès' });
   } catch (error) {
@@ -831,63 +998,57 @@ app.get('/api/products', async (req, res) => {
     const categoryRaw = req.query.category;
     const category = (typeof categoryRaw === 'string' && ALLOWED_CATEGORIES.includes(categoryRaw)) ? categoryRaw : null;
     const collectionRaw = req.query.collection;
-    const collection = (typeof collectionRaw === 'string' && !collectionRaw.includes('$') && !collectionRaw.includes('.')) ? collectionRaw.slice(0, 100) : null;
+    const collection = typeof collectionRaw === 'string' ? collectionRaw.slice(0, 100) : null;
     const colorRaw = req.query.color;
-    const color = (typeof colorRaw === 'string' && !colorRaw.includes('$') && !colorRaw.includes('.')) ? colorRaw.slice(0, 50) : null;
+    const color = typeof colorRaw === 'string' ? colorRaw.slice(0, 50) : null;
     const isNew = req.query.isNew === '1' || req.query.isNew === 'true';
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
     const includeFilters = req.query.includeFilters === '1' || req.query.includeFilters === 'true';
 
-    let filter = {};
+    const where = [];
+    const params = [];
     if (idsParam && typeof idsParam === 'string') {
       const ids = idsParam.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
-      if (ids.length > 0) filter = { id: { $in: ids } };
+      if (ids.length > 0) {
+        where.push(`id IN (${placeholders(ids.length)})`);
+        params.push(...ids);
+      }
     } else {
-      if (category) filter.category = category;
-      if (collection) filter.collection = collection;
-      if (color) filter.$or = [{ color: color }, { color: { $in: [color] } }];
-      if (isNew) filter.isNew = true;
+      if (category) { where.push('category = ?'); params.push(category); }
+      if (collection) { where.push('`collection` = ?'); params.push(collection); }
+      // color est un tableau JSON : JSON_CONTAINS remplace le $or scalaire/$in de Mongo.
+      if (color) { where.push('JSON_CONTAINS(color, JSON_QUOTE(?))'); params.push(color); }
+      if (isNew) { where.push('is_new = 1'); }
       if (search) {
-        const escaped = escapeMongoRegex(search);
-        if (escaped) {
-          const searchFilter = { $or: [
-            { name: { $regex: escaped, $options: 'i' } },
-            { collection: { $regex: escaped, $options: 'i' } }
-          ]};
-          filter = Object.keys(filter).length > 0 ? { $and: [filter, searchFilter] } : searchFilter;
-        }
+        const like = `%${escapeLike(search)}%`;
+        where.push("(name LIKE ? ESCAPE '\\\\' OR `collection` LIKE ? ESCAPE '\\\\')");
+        params.push(like, like);
       }
     }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-    const projection = minimal ? { secondImage: 0, additionalImages: 0 } : {};
-    const filterForMeta = category ? { category } : {};
-    const [products, total, metaProducts] = await Promise.all([
-      db.collection('products').find(filter, { projection }).skip(skip).limit(idsParam ? 500 : limit).toArray(),
-      idsParam ? Promise.resolve(0) : db.collection('products').countDocuments(filter),
-      (includeFilters && page === 1 && !idsParam) ? db.collection('products').find(filterForMeta, { projection: { collection: 1, color: 1 } }).toArray() : Promise.resolve(null)
+    // Les colonnes image sont des LONGTEXT base64 : en mode minimal on ne
+    // remonte pas secondImage / additionalImages (allègement de la réponse).
+    const columns = minimal
+      ? 'id, name, price, image, category, `collection`, color, sizes, surcharge_1m20, surcharge_sur_mesure, is_new, brief_description, disponible'
+      : '*';
+
+    const [products, totalRows, metaProducts] = await Promise.all([
+      query(
+        `SELECT ${columns} FROM products ${whereSql} ORDER BY id ASC LIMIT ? OFFSET ?`,
+        [...params, idsParam ? 500 : limit, skip]
+      ),
+      idsParam ? Promise.resolve(null) : query(`SELECT COUNT(*) AS total FROM products ${whereSql}`, params),
+      (includeFilters && page === 1 && !idsParam)
+        ? query(
+            `SELECT \`collection\`, color FROM products ${category ? 'WHERE category = ?' : ''}`,
+            category ? [category] : []
+          )
+        : Promise.resolve(null)
     ]);
 
-    const formattedProducts = products.map(product => {
-      const cat = product.category;
-      const sizes = product.sizes?.length ? product.sizes : (cat === 'laisses' ? ['1m', '1m20'] : (cat === 'colliers' || cat === 'harnais') ? ['XS', 'S', 'M', 'L', 'XL'] : []);
-      const base = {
-        id: product.id || product._id?.toString() || product._id,
-        name: product.name,
-        price: product.price,
-        image: product.image,
-        category: product.category,
-        collection: product.collection,
-        color: product.color,
-        sizes,
-        surcharge1m20: product.surcharge1m20 ?? null,
-        surchargeSurMesure: product.surchargeSurMesure ?? null,
-        isNew: product.isNew || false,
-        briefDescription: product.briefDescription || undefined,
-        disponible: product.disponible !== false
-      };
-      if (minimal) return base;
-      return { ...base, secondImage: product.secondImage, additionalImages: product.additionalImages || [] };
-    });
+    const total = totalRows ? Number(totalRows[0].total) : 0;
+    const formattedProducts = products.map(p => mapProduct(p, { minimal }));
 
     if (idsParam) {
       res.json(formattedProducts);
@@ -895,7 +1056,7 @@ app.get('/api/products', async (req, res) => {
       const payload = { products: formattedProducts, total };
       if (metaProducts) {
         payload.collections = [...new Set(metaProducts.map(p => p.collection).filter(Boolean))].sort();
-        payload.colors = [...new Set(metaProducts.flatMap(p => Array.isArray(p.color) ? p.color : [p.color]).filter(Boolean))].sort();
+        payload.colors = [...new Set(metaProducts.flatMap(p => parseJson(p.color, [])).filter(Boolean))].sort();
       }
       res.json(payload);
     }
@@ -910,10 +1071,12 @@ app.get('/api/products/filters', async (req, res) => {
     const ALLOWED_CATEGORIES = ['colliers', 'harnais', 'laisses'];
     const categoryRaw = req.query.category;
     const category = (typeof categoryRaw === 'string' && ALLOWED_CATEGORIES.includes(categoryRaw)) ? categoryRaw : null;
-    const filter = category ? { category } : {};
-    const products = await db.collection('products').find(filter, { projection: { collection: 1, color: 1 } }).toArray();
+    const products = await query(
+      `SELECT \`collection\`, color FROM products ${category ? 'WHERE category = ?' : ''}`,
+      category ? [category] : []
+    );
     const collections = [...new Set(products.map(p => p.collection).filter(Boolean))].sort();
-    const colors = [...new Set(products.flatMap(p => Array.isArray(p.color) ? p.color : [p.color]).filter(Boolean))].sort();
+    const colors = [...new Set(products.flatMap(p => parseJson(p.color, [])).filter(Boolean))].sort();
     res.json({ collections, colors });
   } catch (error) {
     console.error('Erreur lors de la récupération des filtres:', error);
@@ -924,9 +1087,8 @@ app.get('/api/products/filters', async (req, res) => {
 app.get('/api/products/ids', async (req, res) => {
   try {
     res.set('Cache-Control', 'public, max-age=300');
-    const products = await db.collection('products').find({}, { projection: { id: 1, _id: 0 } }).toArray();
-    const ids = products.map(p => p.id ?? p._id).filter(Boolean);
-    res.json({ ids });
+    const products = await query('SELECT id FROM products ORDER BY id ASC');
+    res.json({ ids: products.map(p => p.id) });
   } catch (error) {
     console.error('Erreur lors de la récupération des IDs:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -935,11 +1097,11 @@ app.get('/api/products/ids', async (req, res) => {
 
 app.get('/api/products/:id', async (req, res) => {
   try {
-    const product = await db.collection('products').findOne({ id: parseInt(req.params.id) });
+    const product = await queryOne('SELECT * FROM products WHERE id = ?', [parseInt(req.params.id, 10)]);
     if (!product) {
       return res.status(404).json({ error: 'Produit non trouvé' });
     }
-    res.json(product);
+    res.json(mapProductFull(product));
   } catch (error) {
     console.error('Erreur lors de la récupération du produit:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -954,32 +1116,41 @@ app.post('/api/products', authenticateAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Champs requis manquants' });
     }
 
-    const maxDoc = await db.collection('products').find({}).sort({ id: -1 }).limit(1).toArray();
-    const maxId = maxDoc.length > 0 ? (maxDoc[0].id || 0) : 0;
-
-    const sizes = category === 'laisses' ? ['1m', '1m20'] : (category === 'colliers' || category === 'harnais') ? ['XS', 'S', 'M', 'L', 'XL'] : [];
-    const product = {
-      id: maxId + 1,
+    const sizes = defaultSizes(category);
+    const colors = Array.isArray(color) ? color : (color ? color.split(',').map(c => c.trim()) : []);
+    const values = {
       name,
       price: parseFloat(price),
       image,
-      secondImage: secondImage || null,
-      additionalImages: additionalImages || [],
+      second_image: secondImage || null,
+      additional_images: toJson(additionalImages || []),
       category,
       collection,
-      color: Array.isArray(color) ? color : (color ? color.split(',').map(c => c.trim()) : []),
-      sizes,
-      surcharge1m20: surcharge1m20 !== undefined && surcharge1m20 !== '' && surcharge1m20 !== null ? parseFloat(String(surcharge1m20).replace(',', '.')) : null,
-      surchargeSurMesure: surchargeSurMesure !== undefined && surchargeSurMesure !== '' && surchargeSurMesure !== null ? parseFloat(String(surchargeSurMesure).replace(',', '.')) : null,
-      isNew: isNew || false,
-      disponible: disponible !== undefined ? Boolean(disponible) : true,
-      briefDescription: briefDescription ? String(briefDescription).trim().slice(0, 500) : '',
-      createdAt: new Date(),
-      updatedAt: new Date()
+      color: toJson(colors),
+      sizes: toJson(sizes),
+      surcharge_1m20: surcharge1m20 !== undefined && surcharge1m20 !== '' && surcharge1m20 !== null ? parseFloat(String(surcharge1m20).replace(',', '.')) : null,
+      surcharge_sur_mesure: surchargeSurMesure !== undefined && surchargeSurMesure !== '' && surchargeSurMesure !== null ? parseFloat(String(surchargeSurMesure).replace(',', '.')) : null,
+      is_new: isNew ? 1 : 0,
+      disponible: disponible !== undefined ? (disponible ? 1 : 0) : 1,
+      brief_description: briefDescription ? String(briefDescription).trim().slice(0, 500) : '',
     };
 
-    const result = await db.collection('products').insertOne(product);
-    res.status(201).json({ id: product.id, ...product });
+    // id métier incrémental : MAX(id)+1 dans une transaction, pour que deux
+    // créations concurrentes ne retombent pas sur le même numéro.
+    const newId = await transaction(async (conn) => {
+      const [{ next_id: nextId }] = await conn.query('SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM products FOR UPDATE');
+      await conn.query(
+        'INSERT INTO products (id, name, price, image, second_image, additional_images, category, `collection`, color, sizes, surcharge_1m20, surcharge_sur_mesure, is_new, disponible, brief_description) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [nextId, values.name, values.price, values.image, values.second_image, values.additional_images,
+         values.category, values.collection, values.color, values.sizes, values.surcharge_1m20,
+         values.surcharge_sur_mesure, values.is_new, values.disponible, values.brief_description]
+      );
+      return Number(nextId);
+    });
+
+    const product = await queryOne('SELECT * FROM products WHERE id = ?', [newId]);
+    res.status(201).json(mapProductFull(product));
   } catch (error) {
     console.error('Erreur lors de la création du produit:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -988,56 +1159,54 @@ app.post('/api/products', authenticateAdmin, async (req, res) => {
 
 app.put('/api/products/:id', authenticateAdmin, async (req, res) => {
   try {
-    const productId = parseInt(req.params.id);
+    const productId = parseInt(req.params.id, 10);
     const { name, price, image, secondImage, additionalImages, category, collection, color, isNew, briefDescription, surcharge1m20, surchargeSurMesure, disponible } = req.body;
 
-    const updateData = {
-      updatedAt: new Date()
-    };
+    const updates = ['updated_at = NOW(3)'];
+    const values = [];
 
-    if (name) updateData.name = name;
-    if (price !== undefined) updateData.price = parseFloat(price);
-    if (image !== undefined) updateData.image = image;
-    if (secondImage !== undefined) updateData.secondImage = secondImage;
+    if (name) { updates.push('name = ?'); values.push(name); }
+    if (price !== undefined) { updates.push('price = ?'); values.push(parseFloat(price)); }
+    if (image !== undefined) { updates.push('image = ?'); values.push(image); }
+    if (secondImage !== undefined) { updates.push('second_image = ?'); values.push(secondImage); }
     if (additionalImages !== undefined) {
       const list = Array.isArray(additionalImages) ? additionalImages : [];
-      updateData.additionalImages = list.filter((u) => typeof u === 'string' && u.trim().length > 0);
+      updates.push('additional_images = ?');
+      values.push(toJson(list.filter((u) => typeof u === 'string' && u.trim().length > 0)));
     }
     if (category) {
-      updateData.category = category;
-      updateData.sizes = category === 'laisses' ? ['1m', '1m20'] : (category === 'colliers' || category === 'harnais') ? ['XS', 'S', 'M', 'L', 'XL'] : [];
+      updates.push('category = ?', 'sizes = ?');
+      values.push(category, toJson(defaultSizes(category)));
     }
-    if (collection) updateData.collection = collection;
+    if (collection) { updates.push('`collection` = ?'); values.push(collection); }
     if (color !== undefined) {
-      updateData.color = Array.isArray(color) ? color : (color ? color.split(',').map(c => c.trim()) : []);
+      updates.push('color = ?');
+      values.push(toJson(Array.isArray(color) ? color : (color ? color.split(',').map(c => c.trim()) : [])));
     }
     if (surcharge1m20 !== undefined) {
-      updateData.surcharge1m20 = surcharge1m20 !== '' && surcharge1m20 !== null ? parseFloat(String(surcharge1m20).replace(',', '.')) : null;
+      updates.push('surcharge_1m20 = ?');
+      values.push(surcharge1m20 !== '' && surcharge1m20 !== null ? parseFloat(String(surcharge1m20).replace(',', '.')) : null);
     }
     if (surchargeSurMesure !== undefined) {
-      updateData.surchargeSurMesure = surchargeSurMesure !== '' && surchargeSurMesure !== null ? parseFloat(String(surchargeSurMesure).replace(',', '.')) : null;
+      updates.push('surcharge_sur_mesure = ?');
+      values.push(surchargeSurMesure !== '' && surchargeSurMesure !== null ? parseFloat(String(surchargeSurMesure).replace(',', '.')) : null);
     }
     if (briefDescription !== undefined) {
-      updateData.briefDescription = briefDescription ? String(briefDescription).trim().slice(0, 500) : '';
+      updates.push('brief_description = ?');
+      values.push(briefDescription ? String(briefDescription).trim().slice(0, 500) : '');
     }
-    if (isNew !== undefined) {
-      updateData.isNew = Boolean(isNew);
-    }
-    if (disponible !== undefined) {
-      updateData.disponible = Boolean(disponible);
-    }
+    if (isNew !== undefined) { updates.push('is_new = ?'); values.push(isNew ? 1 : 0); }
+    if (disponible !== undefined) { updates.push('disponible = ?'); values.push(disponible ? 1 : 0); }
 
-    const result = await db.collection('products').updateOne(
-      { id: productId },
-      { $set: updateData }
-    );
+    values.push(productId);
+    const result = await query(`UPDATE products SET ${updates.join(', ')} WHERE id = ?`, values);
 
-    if (result.matchedCount === 0) {
+    if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Produit non trouvé' });
     }
 
-    const updatedProduct = await db.collection('products').findOne({ id: productId });
-    res.json({ message: 'Produit mis à jour', product: updatedProduct });
+    const updatedProduct = await queryOne('SELECT * FROM products WHERE id = ?', [productId]);
+    res.json({ message: 'Produit mis à jour', product: mapProductFull(updatedProduct) });
   } catch (error) {
     console.error('Erreur lors de la mise à jour du produit:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -1046,8 +1215,8 @@ app.put('/api/products/:id', authenticateAdmin, async (req, res) => {
 
 app.delete('/api/products/:id', authenticateAdmin, async (req, res) => {
   try {
-    const result = await db.collection('products').deleteOne({ id: parseInt(req.params.id) });
-    if (result.deletedCount === 0) {
+    const result = await query('DELETE FROM products WHERE id = ?', [parseInt(req.params.id, 10)]);
+    if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Produit non trouvé' });
     }
     res.json({ message: 'Produit supprimé' });
@@ -1069,15 +1238,13 @@ app.post('/api/images/upload', authenticateAdmin, async (req, res) => {
     if (name.length > 255 || image.length > 10 * 1024 * 1024) {
       return res.status(400).json({ error: 'Données trop volumineuses' });
     }
-    const imageDoc = {
-      name: name.slice(0, 255),
-      data: image,
-      uploadedBy: 'admin',
-      uploadedAt: new Date(),
-      type: 'product'
-    };
-    const result = await db.collection('images').insertOne(imageDoc);
-    res.status(201).json({ id: result.insertedId.toString(), name: imageDoc.name, url: `data:image/jpeg;base64,${image}` });
+    const id = randomUUID();
+    const imageName = name.slice(0, 255);
+    await query(
+      "INSERT INTO images (id, name, data, uploaded_by, type) VALUES (?, ?, ?, 'admin', 'product')",
+      [id, imageName, image]
+    );
+    res.status(201).json({ id, name: imageName, url: `data:image/jpeg;base64,${image}` });
   } catch (error) {
     console.error('Erreur lors de l\'upload de l\'image:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -1089,20 +1256,23 @@ app.get('/api/gallery', async (req, res) => {
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const skip = (page - 1) * limit;
-    const total = await db.collection('gallery').countDocuments({});
-    const images = await db.collection('gallery').find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray();
+    const [{ total }] = await query('SELECT COUNT(*) AS total FROM gallery');
+    const images = await query(
+      'SELECT id, name, data, type, created_at FROM gallery ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?',
+      [limit, skip]
+    );
     res.set('Cache-Control', 'private, max-age=60');
     res.json({
       images: images.map(img => ({
-        id: img._id.toString(),
+        id: img.id,
         name: img.name,
         data: img.data,
         type: img.type,
-        createdAt: img.createdAt
+        createdAt: img.created_at
       })),
-      total,
+      total: Number(total),
       page,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(Number(total) / limit)
     });
   } catch (error) {
     console.error('Erreur lors de la récupération de la galerie:', error);
@@ -1122,16 +1292,24 @@ app.post('/api/gallery', authenticateAdmin, async (req, res) => {
     if (typeof image !== 'string' || image.length > 10 * 1024 * 1024) {
       return res.status(400).json({ error: 'Image trop volumineuse (max 10MB)' });
     }
+    const id = randomUUID();
     const galleryItem = {
       name: name.trim(),
       data: image,
       type: type === 'professional' || type === 'client' ? type : 'professional',
       uploadedBy: 'admin',
-      createdAt: new Date(),
-      updatedAt: new Date()
     };
-    const result = await db.collection('gallery').insertOne(galleryItem);
-    res.status(201).json({ id: result.insertedId.toString(), ...galleryItem });
+    await query(
+      "INSERT INTO gallery (id, name, data, type, uploaded_by) VALUES (?, ?, ?, ?, 'admin')",
+      [id, galleryItem.name, galleryItem.data, galleryItem.type]
+    );
+    const created = await queryOne('SELECT created_at, updated_at FROM gallery WHERE id = ?', [id]);
+    res.status(201).json({
+      id,
+      ...galleryItem,
+      createdAt: created.created_at,
+      updatedAt: created.updated_at
+    });
   } catch (error) {
     console.error('Erreur lors de l\'ajout à la galerie:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -1144,19 +1322,15 @@ app.put('/api/gallery/:id', authenticateAdmin, async (req, res) => {
     if (!name || name.trim().length < 1 || name.trim().length > 200) {
       return res.status(400).json({ error: 'Nom requis (1-200 caractères)' });
     }
-    const updateData = {
-      name: name.trim(),
-      type: type === 'professional' || type === 'client' ? type : 'professional',
-      updatedAt: new Date()
-    };
+    const updates = ['name = ?', 'type = ?', 'updated_at = NOW(3)'];
+    const values = [name.trim(), type === 'professional' || type === 'client' ? type : 'professional'];
     if (image) {
-      updateData.data = image;
+      updates.push('data = ?');
+      values.push(image);
     }
-    const result = await db.collection('gallery').updateOne(
-      { _id: new ObjectId(req.params.id) },
-      { $set: updateData }
-    );
-    if (result.matchedCount === 0) {
+    values.push(req.params.id);
+    const result = await query(`UPDATE gallery SET ${updates.join(', ')} WHERE id = ?`, values);
+    if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Image non trouvée' });
     }
     res.json({ message: 'Image mise à jour' });
@@ -1168,8 +1342,8 @@ app.put('/api/gallery/:id', authenticateAdmin, async (req, res) => {
 
 app.delete('/api/gallery/:id', authenticateAdmin, async (req, res) => {
   try {
-    const result = await db.collection('gallery').deleteOne({ _id: new ObjectId(req.params.id) });
-    if (result.deletedCount === 0) {
+    const result = await query('DELETE FROM gallery WHERE id = ?', [req.params.id]);
+    if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Image non trouvée' });
     }
     res.json({ message: 'Image supprimée' });
@@ -1181,12 +1355,12 @@ app.delete('/api/gallery/:id', authenticateAdmin, async (req, res) => {
 
 app.get('/api/collections', async (req, res) => {
   try {
-    const collections = await db.collection('collections').find({}).sort({ name: 1 }).toArray();
+    const collections = await query('SELECT id, name, created_at, updated_at FROM collections ORDER BY name ASC');
     res.json(collections.map(col => ({
-      id: col._id.toString(),
+      id: col.id,
       name: col.name,
-      createdAt: col.createdAt,
-      updatedAt: col.updatedAt
+      createdAt: col.created_at,
+      updatedAt: col.updated_at
     })));
   } catch (error) {
     console.error('Erreur lors de la récupération des collections:', error);
@@ -1200,19 +1374,18 @@ app.post('/api/collections', authenticateAdmin, async (req, res) => {
     if (!name || name.trim().length < 1 || name.trim().length > 100) {
       return res.status(400).json({ error: 'Nom requis (1-100 caractères)' });
     }
-    const existingCollection = await db.collection('collections').findOne({ 
-      name: { $regex: new RegExp(`^${name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
-    });
-    if (existingCollection) {
-      return res.status(409).json({ error: 'Une collection avec ce nom existe déjà' });
+    const id = randomUUID();
+    try {
+      // La collation utf8mb4_unicode_ci rend l'unicité insensible à la casse.
+      await query('INSERT INTO collections (id, name) VALUES (?, ?)', [id, name.trim()]);
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ error: 'Une collection avec ce nom existe déjà' });
+      }
+      throw err;
     }
-    const collection = {
-      name: name.trim(),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-    const result = await db.collection('collections').insertOne(collection);
-    res.status(201).json({ id: result.insertedId.toString(), name: collection.name, createdAt: collection.createdAt, updatedAt: collection.updatedAt });
+    const created = await queryOne('SELECT name, created_at, updated_at FROM collections WHERE id = ?', [id]);
+    res.status(201).json({ id, name: created.name, createdAt: created.created_at, updatedAt: created.updated_at });
   } catch (error) {
     console.error('Erreur lors de la création de la collection:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -1225,23 +1398,21 @@ app.put('/api/collections/:id', authenticateAdmin, async (req, res) => {
     if (!name || name.trim().length < 1 || name.trim().length > 100) {
       return res.status(400).json({ error: 'Nom requis (1-100 caractères)' });
     }
-    const existingCollection = await db.collection('collections').findOne({ 
-      _id: { $ne: new ObjectId(req.params.id) },
-      name: { $regex: new RegExp(`^${name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
-    });
-    if (existingCollection) {
-      return res.status(409).json({ error: 'Une collection avec ce nom existe déjà' });
+    let result;
+    try {
+      result = await query(
+        'UPDATE collections SET name = ?, updated_at = NOW(3) WHERE id = ?',
+        [name.trim(), req.params.id]
+      );
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ error: 'Une collection avec ce nom existe déjà' });
+      }
+      throw err;
     }
-    const updateData = {
-      name: name.trim(),
-      updatedAt: new Date()
-    };
-    const result = await db.collection('collections').updateOne(
-      { _id: new ObjectId(req.params.id) },
-      { $set: updateData }
-    );
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ error: 'Collection non trouvée' });
+    if (result.affectedRows === 0) {
+      const exists = await queryOne('SELECT id FROM collections WHERE id = ?', [req.params.id]);
+      if (!exists) return res.status(404).json({ error: 'Collection non trouvée' });
     }
     res.json({ message: 'Collection mise à jour' });
   } catch (error) {
@@ -1252,16 +1423,16 @@ app.put('/api/collections/:id', authenticateAdmin, async (req, res) => {
 
 app.delete('/api/collections/:id', authenticateAdmin, async (req, res) => {
   try {
-    const collection = await db.collection('collections').findOne({ _id: new ObjectId(req.params.id) });
+    const collection = await queryOne('SELECT name FROM collections WHERE id = ?', [req.params.id]);
     if (!collection) {
       return res.status(404).json({ error: 'Collection non trouvée' });
     }
-    const productsCount = await db.collection('products').countDocuments({ collection: collection.name });
-    if (productsCount > 0) {
+    const [{ total }] = await query('SELECT COUNT(*) AS total FROM products WHERE `collection` = ?', [collection.name]);
+    if (Number(total) > 0) {
       return res.status(400).json({ error: 'Impossible de supprimer cette collection car elle est utilisée par des produits' });
     }
-    const result = await db.collection('collections').deleteOne({ _id: new ObjectId(req.params.id) });
-    if (result.deletedCount === 0) {
+    const result = await query('DELETE FROM collections WHERE id = ?', [req.params.id]);
+    if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Collection non trouvée' });
     }
     res.json({ message: 'Collection supprimée' });
@@ -1273,19 +1444,17 @@ app.delete('/api/collections/:id', authenticateAdmin, async (req, res) => {
 
 app.get('/api/faq', async (req, res) => {
   try {
-    const faqs = await db.collection('faq').find({}).toArray();
-    faqs.sort((a, b) => (a.sortOrder ?? 999999) - (b.sortOrder ?? 999999));
-    let sortIdx = 0;
+    const faqs = await query('SELECT * FROM faq ORDER BY sort_order ASC, created_at ASC');
     res.json(faqs.map(faq => ({
-      id: faq._id.toString(),
+      id: faq.id,
       category: faq.category,
       question: faq.question,
       answer: faq.answer,
-      order: faq.order || 0,
-      categoryOrder: faq.categoryOrder || 0,
-      sortOrder: faq.sortOrder ?? sortIdx++,
-      createdAt: faq.createdAt,
-      updatedAt: faq.updatedAt
+      order: faq.display_order || 0,
+      categoryOrder: faq.category_order || 0,
+      sortOrder: faq.sort_order,
+      createdAt: faq.created_at,
+      updatedAt: faq.updated_at
     })));
   } catch (error) {
     console.error('Erreur lors de la récupération de la FAQ:', error);
@@ -1305,20 +1474,22 @@ app.post('/api/faq', authenticateAdmin, async (req, res) => {
     if (!answer || answer.trim().length < 1 || answer.trim().length > 5000) {
       return res.status(400).json({ error: 'Réponse requise (1-5000 caractères)' });
     }
-    const maxSort = await db.collection('faq').find({}).sort({ sortOrder: -1 }).limit(1).toArray();
-    const nextSortOrder = (maxSort[0]?.sortOrder ?? -1) + 1;
+    const [{ next_sort: nextSortOrder }] = await query('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_sort FROM faq');
+    const id = randomUUID();
     const faqItem = {
       category: category.trim(),
       question: question.trim(),
       answer: answer.trim(),
       order: order || 0,
       categoryOrder: categoryOrder || 0,
-      sortOrder: nextSortOrder,
-      createdAt: new Date(),
-      updatedAt: new Date()
+      sortOrder: Number(nextSortOrder),
     };
-    const result = await db.collection('faq').insertOne(faqItem);
-    res.status(201).json({ id: result.insertedId.toString(), ...faqItem });
+    await query(
+      'INSERT INTO faq (id, category, question, answer, display_order, category_order, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, faqItem.category, faqItem.question, faqItem.answer, faqItem.order, faqItem.categoryOrder, faqItem.sortOrder]
+    );
+    const created = await queryOne('SELECT created_at, updated_at FROM faq WHERE id = ?', [id]);
+    res.status(201).json({ id, ...faqItem, createdAt: created.created_at, updatedAt: created.updated_at });
   } catch (error) {
     console.error('Erreur lors de la création de la FAQ:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -1337,20 +1508,13 @@ app.put('/api/faq/:id', authenticateAdmin, async (req, res) => {
     if (!answer || answer.trim().length < 1 || answer.trim().length > 5000) {
       return res.status(400).json({ error: 'Réponse requise (1-5000 caractères)' });
     }
-    const updateData = {
-      category: category.trim(),
-      question: question.trim(),
-      answer: answer.trim(),
-      order: order || 0,
-      categoryOrder: categoryOrder || 0,
-      updatedAt: new Date()
-    };
-    const result = await db.collection('faq').updateOne(
-      { _id: new ObjectId(req.params.id) },
-      { $set: updateData }
+    const result = await query(
+      'UPDATE faq SET category = ?, question = ?, answer = ?, display_order = ?, category_order = ?, updated_at = NOW(3) WHERE id = ?',
+      [category.trim(), question.trim(), answer.trim(), order || 0, categoryOrder || 0, req.params.id]
     );
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ error: 'FAQ non trouvée' });
+    if (result.affectedRows === 0) {
+      const exists = await queryOne('SELECT id FROM faq WHERE id = ?', [req.params.id]);
+      if (!exists) return res.status(404).json({ error: 'FAQ non trouvée' });
     }
     res.json({ message: 'FAQ mise à jour' });
   } catch (error) {
@@ -1365,14 +1529,13 @@ app.patch('/api/faq/reorder', authenticateAdmin, async (req, res) => {
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'items requis (tableau [{ id, sortOrder }])' });
     }
-    for (const it of items) {
-      const { id, sortOrder } = it;
-      if (!id || typeof sortOrder !== 'number') continue;
-      await db.collection('faq').updateOne(
-        { _id: new ObjectId(id) },
-        { $set: { sortOrder, updatedAt: new Date() } }
-      );
-    }
+    await transaction(async (conn) => {
+      for (const it of items) {
+        const { id, sortOrder } = it;
+        if (!id || typeof sortOrder !== 'number') continue;
+        await conn.query('UPDATE faq SET sort_order = ?, updated_at = NOW(3) WHERE id = ?', [sortOrder, id]);
+      }
+    });
     res.json({ message: 'Ordre mis à jour' });
   } catch (error) {
     console.error('Erreur lors du réordonnancement FAQ:', error);
@@ -1382,8 +1545,8 @@ app.patch('/api/faq/reorder', authenticateAdmin, async (req, res) => {
 
 app.delete('/api/faq/:id', authenticateAdmin, async (req, res) => {
   try {
-    const result = await db.collection('faq').deleteOne({ _id: new ObjectId(req.params.id) });
-    if (result.deletedCount === 0) {
+    const result = await query('DELETE FROM faq WHERE id = ?', [req.params.id]);
+    if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'FAQ non trouvée' });
     }
     res.json({ message: 'FAQ supprimée' });
@@ -1396,11 +1559,11 @@ app.delete('/api/faq/:id', authenticateAdmin, async (req, res) => {
 // Settings (surmesurecollier, surmesureharnais, laisse1m20) - modifiables dans l'admin
 app.get('/api/settings', async (req, res) => {
   try {
-    const doc = await db.collection('settings').findOne({ _id: 'pricing' });
+    const doc = await queryOne('SELECT * FROM settings WHERE id = ?', ['pricing']);
     res.json({
-      surmesurecollier: doc?.surmesurecollier ?? null,
-      surmesureharnais: doc?.surmesureharnais ?? null,
-      laisse1m20: doc?.laisse1m20 ?? null
+      surmesurecollier: toNum(doc?.surmesurecollier),
+      surmesureharnais: toNum(doc?.surmesureharnais),
+      laisse1m20: toNum(doc?.laisse_1m20)
     });
   } catch (error) {
     console.error('Erreur settings:', error);
@@ -1411,20 +1574,35 @@ app.get('/api/settings', async (req, res) => {
 app.put('/api/settings', authenticateAdmin, async (req, res) => {
   try {
     const { surmesurecollier, surmesureharnais, laisse1m20 } = req.body;
-    const update = {};
-    if (surmesurecollier !== undefined) update.surmesurecollier = surmesurecollier === '' || surmesurecollier === null ? null : parseFloat(String(surmesurecollier).replace(',', '.'));
-    if (surmesureharnais !== undefined) update.surmesureharnais = surmesureharnais === '' || surmesureharnais === null ? null : parseFloat(String(surmesureharnais).replace(',', '.'));
-    if (laisse1m20 !== undefined) update.laisse1m20 = laisse1m20 === '' || laisse1m20 === null ? null : parseFloat(String(laisse1m20).replace(',', '.'));
-    await db.collection('settings').updateOne(
-      { _id: 'pricing' },
-      { $set: { ...update, updatedAt: new Date() } },
-      { upsert: true }
-    );
-    const doc = await db.collection('settings').findOne({ _id: 'pricing' });
+    const parsePrice = (v) => (v === '' || v === null ? null : parseFloat(String(v).replace(',', '.')));
+    const columns = { surmesurecollier: 'surmesurecollier', surmesureharnais: 'surmesureharnais', laisse1m20: 'laisse_1m20' };
+    const provided = { surmesurecollier, surmesureharnais, laisse1m20 };
+
+    const setColumns = [];
+    const setValues = [];
+    for (const [key, column] of Object.entries(columns)) {
+      if (provided[key] !== undefined) {
+        setColumns.push(column);
+        setValues.push(parsePrice(provided[key]));
+      }
+    }
+
+    // Upsert de la ligne unique 'pricing' (équivalent du { upsert: true } Mongo).
+    if (setColumns.length > 0) {
+      await query(
+        `INSERT INTO settings (id, ${setColumns.join(', ')}, updated_at) VALUES (?, ${placeholders(setColumns.length)}, NOW(3)) `
+        + `ON DUPLICATE KEY UPDATE ${setColumns.map(c => `${c} = VALUES(${c})`).join(', ')}, updated_at = NOW(3)`,
+        ['pricing', ...setValues]
+      );
+    } else {
+      await query('INSERT INTO settings (id, updated_at) VALUES (?, NOW(3)) ON DUPLICATE KEY UPDATE updated_at = NOW(3)', ['pricing']);
+    }
+
+    const doc = await queryOne('SELECT * FROM settings WHERE id = ?', ['pricing']);
     res.json({
-      surmesurecollier: doc?.surmesurecollier ?? null,
-      surmesureharnais: doc?.surmesureharnais ?? null,
-      laisse1m20: doc?.laisse1m20 ?? null
+      surmesurecollier: toNum(doc?.surmesurecollier),
+      surmesureharnais: toNum(doc?.surmesureharnais),
+      laisse1m20: toNum(doc?.laisse_1m20)
     });
   } catch (error) {
     console.error('Erreur mise à jour settings:', error);
@@ -1432,10 +1610,26 @@ app.put('/api/settings', authenticateAdmin, async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Panier — une ligne par (user, produit, taille).
+// La taille absente est stockée en chaîne vide (une clé primaire ne dédupliquerait
+// pas des NULL) et omise de la réponse JSON, comme le faisait le tableau Mongo.
+// ---------------------------------------------------------------------------
+async function getCartItems(userId) {
+  const rows = await query(
+    'SELECT product_id, quantity, size FROM cart_items WHERE user_id = ? ORDER BY added_at ASC, product_id ASC',
+    [userId]
+  );
+  return rows.map(row => {
+    const item = { productId: row.product_id, quantity: row.quantity };
+    if (row.size) item.size = row.size;
+    return item;
+  });
+}
+
 app.get('/api/cart', authenticateToken, async (req, res) => {
   try {
-    const cart = await db.collection('carts').findOne({ userId: req.user.userId });
-    res.json(cart ? cart.items : []);
+    res.json(await getCartItems(req.user.userId));
   } catch (error) {
     console.error('Erreur lors de la récupération du panier:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -1448,25 +1642,18 @@ app.post('/api/cart', authenticateToken, async (req, res) => {
     if (!productId || !quantity) {
       return res.status(400).json({ error: 'Produit et quantité requis' });
     }
-    const cart = await db.collection('carts').findOne({ userId: req.user.userId });
-    const items = cart ? cart.items : [];
-    const sizeKey = size != null && size !== '' ? String(size) : undefined;
-    const existingIndex = items.findIndex(item =>
-      item.productId === productId && (item.size || undefined) === sizeKey
-    );
-    if (existingIndex >= 0) {
-      items[existingIndex].quantity += quantity;
-    } else {
-      const newItem = { productId, quantity };
-      if (sizeKey) newItem.size = sizeKey;
-      items.push(newItem);
+    const productIdInt = parseInt(productId, 10);
+    const quantityInt = parseInt(quantity, 10);
+    if (!Number.isInteger(productIdInt) || !Number.isInteger(quantityInt)) {
+      return res.status(400).json({ error: 'Produit et quantité invalides' });
     }
-    await db.collection('carts').updateOne(
-      { userId: req.user.userId },
-      { $set: { items, updatedAt: new Date() } },
-      { upsert: true }
+    const sizeKey = size != null && size !== '' ? String(size).slice(0, 20) : '';
+    await query(
+      'INSERT INTO cart_items (user_id, product_id, size, quantity) VALUES (?, ?, ?, ?) '
+      + 'ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity), updated_at = NOW(3)',
+      [req.user.userId, productIdInt, sizeKey, quantityInt]
     );
-    res.json({ items });
+    res.json({ items: await getCartItems(req.user.userId) });
   } catch (error) {
     console.error('Erreur lors de l\'ajout au panier:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -1476,25 +1663,28 @@ app.post('/api/cart', authenticateToken, async (req, res) => {
 app.put('/api/cart/:productId', authenticateToken, async (req, res) => {
   try {
     const { quantity, size } = req.body;
-    const cart = await db.collection('carts').findOne({ userId: req.user.userId });
-    if (!cart) {
+    const [{ total }] = await query('SELECT COUNT(*) AS total FROM cart_items WHERE user_id = ?', [req.user.userId]);
+    if (Number(total) === 0) {
       return res.status(404).json({ error: 'Panier non trouvé' });
     }
-    const sizeKey = size != null && size !== '' ? String(size) : undefined;
-    const productId = parseInt(req.params.productId);
-    const items = cart.items.filter(item =>
-      !(item.productId === productId && (item.size || undefined) === sizeKey)
-    );
-    if (quantity > 0) {
-      const newItem = { productId, quantity };
-      if (sizeKey) newItem.size = sizeKey;
-      items.push(newItem);
+    const sizeKey = size != null && size !== '' ? String(size).slice(0, 20) : '';
+    const productId = parseInt(req.params.productId, 10);
+    if (!Number.isInteger(productId)) {
+      return res.status(400).json({ error: 'Produit invalide' });
     }
-    await db.collection('carts').updateOne(
-      { userId: req.user.userId },
-      { $set: { items, updatedAt: new Date() } }
-    );
-    res.json({ items });
+    if (quantity > 0) {
+      await query(
+        'INSERT INTO cart_items (user_id, product_id, size, quantity) VALUES (?, ?, ?, ?) '
+        + 'ON DUPLICATE KEY UPDATE quantity = VALUES(quantity), updated_at = NOW(3)',
+        [req.user.userId, productId, sizeKey, parseInt(quantity, 10)]
+      );
+    } else {
+      await query(
+        'DELETE FROM cart_items WHERE user_id = ? AND product_id = ? AND size = ?',
+        [req.user.userId, productId, sizeKey]
+      );
+    }
+    res.json({ items: await getCartItems(req.user.userId) });
   } catch (error) {
     console.error('Erreur lors de la mise à jour du panier:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -1504,30 +1694,37 @@ app.put('/api/cart/:productId', authenticateToken, async (req, res) => {
 app.delete('/api/cart/:productId', authenticateToken, async (req, res) => {
   try {
     const size = req.query.size;
-    const cart = await db.collection('carts').findOne({ userId: req.user.userId });
-    if (!cart) {
+    const [{ total }] = await query('SELECT COUNT(*) AS total FROM cart_items WHERE user_id = ?', [req.user.userId]);
+    if (Number(total) === 0) {
       return res.status(404).json({ error: 'Panier non trouvé' });
     }
-    const sizeKey = size != null && size !== '' ? String(size) : undefined;
-    const productId = parseInt(req.params.productId);
-    const items = cart.items.filter(item =>
-      !(item.productId === productId && (item.size || undefined) === sizeKey)
+    const sizeKey = size != null && size !== '' ? String(size).slice(0, 20) : '';
+    const productId = parseInt(req.params.productId, 10);
+    if (!Number.isInteger(productId)) {
+      return res.status(400).json({ error: 'Produit invalide' });
+    }
+    await query(
+      'DELETE FROM cart_items WHERE user_id = ? AND product_id = ? AND size = ?',
+      [req.user.userId, productId, sizeKey]
     );
-    await db.collection('carts').updateOne(
-      { userId: req.user.userId },
-      { $set: { items, updatedAt: new Date() } }
-    );
-    res.json({ items });
+    res.json({ items: await getCartItems(req.user.userId) });
   } catch (error) {
     console.error('Erreur lors de la suppression du panier:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
+async function getFavoriteIds(userId) {
+  const rows = await query(
+    'SELECT product_id FROM favorites WHERE user_id = ? ORDER BY created_at ASC, product_id ASC',
+    [userId]
+  );
+  return rows.map(row => row.product_id);
+}
+
 app.get('/api/favorites', authenticateToken, async (req, res) => {
   try {
-    const favorites = await db.collection('favorites').findOne({ userId: req.user.userId });
-    res.json(favorites ? favorites.productIds : []);
+    res.json(await getFavoriteIds(req.user.userId));
   } catch (error) {
     console.error('Erreur lors de la récupération des favoris:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -1540,17 +1737,15 @@ app.post('/api/favorites', authenticateToken, async (req, res) => {
     if (!productId) {
       return res.status(400).json({ error: 'Produit requis' });
     }
-    const favorites = await db.collection('favorites').findOne({ userId: req.user.userId });
-    const productIds = favorites ? favorites.productIds : [];
-    if (!productIds.includes(productId)) {
-      productIds.push(productId);
+    const productIdInt = parseInt(productId, 10);
+    if (!Number.isInteger(productIdInt)) {
+      return res.status(400).json({ error: 'Produit invalide' });
     }
-    await db.collection('favorites').updateOne(
-      { userId: req.user.userId },
-      { $set: { productIds, updatedAt: new Date() } },
-      { upsert: true }
+    await query(
+      'INSERT IGNORE INTO favorites (user_id, product_id) VALUES (?, ?)',
+      [req.user.userId, productIdInt]
     );
-    res.json({ productIds });
+    res.json({ productIds: await getFavoriteIds(req.user.userId) });
   } catch (error) {
     console.error('Erreur lors de l\'ajout aux favoris:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -1559,16 +1754,15 @@ app.post('/api/favorites', authenticateToken, async (req, res) => {
 
 app.delete('/api/favorites/:productId', authenticateToken, async (req, res) => {
   try {
-    const favorites = await db.collection('favorites').findOne({ userId: req.user.userId });
-    if (!favorites) {
+    const [{ total }] = await query('SELECT COUNT(*) AS total FROM favorites WHERE user_id = ?', [req.user.userId]);
+    if (Number(total) === 0) {
       return res.status(404).json({ error: 'Favoris non trouvés' });
     }
-    const productIds = favorites.productIds.filter(id => id !== parseInt(req.params.productId));
-    await db.collection('favorites').updateOne(
-      { userId: req.user.userId },
-      { $set: { productIds, updatedAt: new Date() } }
+    await query(
+      'DELETE FROM favorites WHERE user_id = ? AND product_id = ?',
+      [req.user.userId, parseInt(req.params.productId, 10)]
     );
-    res.json({ productIds });
+    res.json({ productIds: await getFavoriteIds(req.user.userId) });
   } catch (error) {
     console.error('Erreur lors de la suppression des favoris:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -1599,7 +1793,11 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
     if (productIds.length !== items.length) {
       return res.status(400).json({ error: 'IDs de produits invalides' });
     }
-    const dbProducts = await db.collection('products').find({ id: { $in: productIds } }).toArray();
+    const uniqueIds = [...new Set(productIds)];
+    const dbProducts = await query(
+      `SELECT id, price, category, surcharge_1m20, surcharge_sur_mesure FROM products WHERE id IN (${placeholders(uniqueIds.length)})`,
+      uniqueIds
+    );
     const productMap = Object.fromEntries(dbProducts.map(p => [p.id, p]));
 
     let subtotal = 0;
@@ -1610,15 +1808,17 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         return res.status(400).json({ error: `Produit #${item.productId} introuvable` });
       }
       const qty = Math.max(1, Math.min(99, parseInt(item.quantity) || 1));
-      let unitPrice = product.price;
-      if (product.category === 'laisses' && item.size === '1m20' && (product.surcharge1m20 ?? 0) > 0) {
-        unitPrice += product.surcharge1m20;
+      let unitPrice = toNum(product.price);
+      const surcharge1m20 = toNum(product.surcharge_1m20) ?? 0;
+      const surchargeSurMesure = toNum(product.surcharge_sur_mesure) ?? 0;
+      if (product.category === 'laisses' && item.size === '1m20' && surcharge1m20 > 0) {
+        unitPrice += surcharge1m20;
       }
-      if (product.category === 'colliers' && dogInfo.surMesureCollier && (product.surchargeSurMesure ?? 0) > 0) {
-        unitPrice += product.surchargeSurMesure;
+      if (product.category === 'colliers' && dogInfo.surMesureCollier && surchargeSurMesure > 0) {
+        unitPrice += surchargeSurMesure;
       }
-      if (product.category === 'harnais' && dogInfo.surMesureHarnais && (product.surchargeSurMesure ?? 0) > 0) {
-        unitPrice += product.surchargeSurMesure;
+      if (product.category === 'harnais' && dogInfo.surMesureHarnais && surchargeSurMesure > 0) {
+        unitPrice += surchargeSurMesure;
       }
       subtotal += unitPrice * qty;
       validatedItems.push({ productId: item.productId, quantity: qty, price: unitPrice, size: item.size || null });
@@ -1630,83 +1830,78 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
 
     let validatedPromoCode = null;
     if (promoCode && typeof promoCode === 'string' && promoCode.trim() !== '') {
-      const promo = await db.collection('promo_codes').findOne({ 
-        code: promoCode.toUpperCase().trim() 
-      });
-      
-      if (promo && promo.isActive !== false && promo.currentUses < promo.maxUses) {
+      const promo = await queryOne('SELECT * FROM promo_codes WHERE code = ?', [promoCode.toUpperCase().trim()]);
+
+      if (promo && toBool(promo.is_active) && promo.current_uses < promo.max_uses) {
         const now = new Date();
-        const isValidDate = (!promo.startDate || new Date(promo.startDate) <= now) && 
-                           (!promo.endDate || new Date(promo.endDate) >= now);
-        
+        const isValidDate = (!promo.start_date || new Date(promo.start_date) <= now) &&
+                           (!promo.end_date || new Date(promo.end_date) >= now);
+
         if (isValidDate) {
           validatedPromoCode = {
             code: promo.code,
             name: promo.name,
-            discountType: promo.discountType,
-            discountValue: promo.discountValue
+            discountType: promo.discount_type,
+            discountValue: toNum(promo.discount_value)
           };
         }
       }
     }
-    
-    const order = {
-      userId: req.user.userId,
-      items: validatedItems,
-      shippingAddress,
-      dogInfo: {
-        breed: dogInfo.breed,
-        age: dogInfo.age,
-        tourDeCou: dogInfo.tourDeCou || null,
-        tourDeTaille: dogInfo.tourDeTaille || null,
-        surMesureCollier: !!dogInfo.surMesureCollier,
-        surMesureHarnais: !!dogInfo.surMesureHarnais
-      },
-      notes: notes || '',
-      total: parseFloat(total),
-      originalTotal: validatedPromoCode ? parseFloat(total) : null,
-      promoCode: validatedPromoCode,
-      shippingAmount: shippingAmount != null ? parseFloat(shippingAmount) : null,
-      feesAmount: feesAmount != null ? parseFloat(feesAmount) : null,
-      status: 'pending_validation',
-      counterProposal: null,
-      paymentInfo: null,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-    
+
+    const orderId = randomUUID();
+    const ship = shippingAddress || {};
+
     // Numérotation atomique (art. 242 nonies A CGI: séquence sans rupture).
-    // findOneAndUpdate avec $inc est une opération atomique single-doc côté Mongo.
+    // INSERT ... ON DUPLICATE KEY UPDATE seq = LAST_INSERT_ID(seq + 1) est atomique
+    // et, pris dans la transaction, ne consomme pas de numéro si l'insertion échoue.
     const now = new Date();
     const year = now.getFullYear().toString();
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const day = now.getDate().toString().padStart(2, '0');
     const dayPrefix = `${year}${month}${day}`;
 
-    const counterDoc = await db.collection('counters').findOneAndUpdate(
-      { _id: `orders:${dayPrefix}` },
-      { $inc: { seq: 1 }, $setOnInsert: { createdAt: now } },
-      { upsert: true, returnDocument: 'after' }
-    );
-    const seq = counterDoc?.seq ?? counterDoc?.value?.seq;
-    if (!Number.isInteger(seq) || seq < 1) {
-      throw new Error('Compteur de numérotation indisponible');
-    }
-    const orderNumber = `${dayPrefix}${seq.toString().padStart(4, '0')}`;
-    order.orderNumber = orderNumber;
-    const result = await db.collection('orders').insertOne(order);
-    await db.collection('carts').updateOne(
-      { userId: req.user.userId },
-      { $set: { items: [], updatedAt: new Date() } }
-    );
+    const orderNumber = await transaction(async (conn) => {
+      const counterResult = await conn.query(
+        'INSERT INTO counters (name, seq) VALUES (?, 1) ON DUPLICATE KEY UPDATE seq = LAST_INSERT_ID(seq + 1)',
+        [`orders:${dayPrefix}`]
+      );
+      // affectedRows 1 = ligne créée (seq = 1) ; 2 = ligne incrémentée (seq = insertId)
+      const seq = counterResult.affectedRows === 1 ? 1 : Number(counterResult.insertId);
+      if (!Number.isInteger(seq) || seq < 1) {
+        throw new Error('Compteur de numérotation indisponible');
+      }
+      const number = `${dayPrefix}${seq.toString().padStart(4, '0')}`;
+
+      await conn.query(
+        'INSERT INTO orders (id, order_number, user_id, ship_first_name, ship_last_name, ship_email, ship_phone, '
+        + 'ship_address, ship_city, ship_postal_code, ship_country, dog_breed, dog_age, dog_tour_de_cou, '
+        + 'dog_tour_de_taille, dog_sur_mesure_collier, dog_sur_mesure_harnais, notes, total, original_total, '
+        + 'promo_code, shipping_amount, fees_amount, status) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          orderId, number, req.user.userId,
+          ship.firstName ?? null, ship.lastName ?? null, ship.email ?? null, ship.phone ?? null,
+          ship.address ?? null, ship.city ?? null, ship.postalCode ?? null, ship.country ?? null,
+          dogInfo.breed, dogInfo.age, dogInfo.tourDeCou || null, dogInfo.tourDeTaille || null,
+          dogInfo.surMesureCollier ? 1 : 0, dogInfo.surMesureHarnais ? 1 : 0,
+          notes || '', total, validatedPromoCode ? total : null,
+          toJson(validatedPromoCode), shippingAmount, feesAmount, 'pending_validation'
+        ]
+      );
+      await replaceOrderItems(conn, orderId, validatedItems);
+      await conn.query('DELETE FROM cart_items WHERE user_id = ?', [req.user.userId]);
+      return number;
+    });
+
+    const order = await findOrderById(orderId);
 
     try {
-      const user = await db.collection('users').findOne(
-        { _id: new ObjectId(req.user.userId) },
-        { projection: { email: 1, firstName: 1, lastName: 1 } }
+      const user = await queryOne(
+        'SELECT email, first_name, last_name FROM users WHERE id = ?',
+        [req.user.userId]
       );
       const productMap = await getProductMapByIds((order.items || []).map(i => i.productId));
-      const ship = order.shippingAddress || {};
+      const shipOut = order.shippingAddress || {};
       const itemsForEmail = (order.items || []).map(item => ({
         name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
         quantity: item.quantity,
@@ -1716,15 +1911,15 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
       const dogInfoStr = order.dogInfo ? `Race: ${order.dogInfo.breed || ''}\nÂge: ${order.dogInfo.age || ''}${order.dogInfo.tourDeCou ? `\nTour de cou: ${order.dogInfo.tourDeCou}` : ''}${order.dogInfo.tourDeTaille ? `\nTour de taille: ${order.dogInfo.tourDeTaille}` : ''}` : '';
       const orderData = {
         orderNumber: orderNumber,
-        firstName: ship.firstName || user?.firstName || '',
-        lastName: ship.lastName || user?.lastName || '',
+        firstName: shipOut.firstName || user?.first_name || '',
+        lastName: shipOut.lastName || user?.last_name || '',
         items: itemsForEmail,
         totalAmount: Number(order.total),
         shippingCost,
-        shippingAddress: ship,
-        customerName: [ship.firstName, ship.lastName].filter(Boolean).join(' ') || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Client'),
-        customerEmail: ship.email || user?.email || '',
-        customerPhone: ship.phone || '',
+        shippingAddress: shipOut,
+        customerName: [shipOut.firstName, shipOut.lastName].filter(Boolean).join(' ') || (user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : 'Client'),
+        customerEmail: shipOut.email || user?.email || '',
+        customerPhone: shipOut.phone || '',
         paymentMethod: 'En attente de validation',
         dogInfo: dogInfoStr || undefined,
         notes: order.notes || undefined
@@ -1734,35 +1929,40 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
       console.error('Erreur envoi email nouvelle commande (non-bloquant):', emailErr);
     }
 
-    res.status(201).json({ id: result.insertedId.toString(), orderNumber, ...order });
+    res.status(201).json(order);
   } catch (error) {
     console.error('Erreur lors de la création de la commande:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
+/** Charge les lignes de plusieurs commandes en une requête, groupées par commande. */
+async function getItemsByOrderIds(orderIds) {
+  if (orderIds.length === 0) return {};
+  const rows = await query(
+    `SELECT order_id, product_id, quantity, price, size FROM order_items `
+    + `WHERE order_id IN (${placeholders(orderIds.length)}) ORDER BY position, id`,
+    orderIds
+  );
+  const grouped = Object.fromEntries(orderIds.map(id => [id, []]));
+  for (const row of rows) {
+    grouped[row.order_id].push(mapOrderItem(row));
+  }
+  return grouped;
+}
+
 app.get('/api/orders', authenticateToken, async (req, res) => {
   try {
-    const orders = await db.collection('orders').find({ userId: req.user.userId }).sort({ createdAt: -1 }).toArray();
-    res.json(orders.map(order => ({
-      id: order._id.toString(),
-      orderNumber: order.orderNumber || null,
-      items: order.items,
-      shippingAddress: order.shippingAddress,
-      dogInfo: order.dogInfo,
-      notes: order.notes,
-      total: order.total,
-      originalTotal: order.originalTotal || null,
-      promoCode: order.promoCode || null,
-      shippingAmount: order.shippingAmount ?? null,
-      feesAmount: order.feesAmount ?? null,
-      status: order.status,
-      counterProposal: order.counterProposal,
-      paymentInfo: order.paymentInfo,
-      rejectionReason: order.rejectionReason,
-      createdAt: order.createdAt,
-      updatedAt: order.updatedAt
-    })));
+    const rows = await query(
+      'SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC, id DESC',
+      [req.user.userId]
+    );
+    const itemsByOrder = await getItemsByOrderIds(rows.map(r => r.id));
+    res.json(rows.map(row => {
+      const order = mapOrder(row, itemsByOrder[row.id]);
+      delete order.userId;
+      return order;
+    }));
   } catch (error) {
     console.error('Erreur lors de la récupération des commandes:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -1771,22 +1971,25 @@ app.get('/api/orders', authenticateToken, async (req, res) => {
 
 app.get('/api/orders/admin', authenticateAdmin, async (req, res) => {
   try {
-    const orders = await db.collection('orders').find({}).sort({ createdAt: -1 }).toArray();
-    const userIds = [...new Set(orders.map(o => o.userId).filter(Boolean))];
-    const userObjectIds = userIds.map(id => { try { return new ObjectId(id); } catch { return null; } }).filter(Boolean);
-    const users = userObjectIds.length > 0
-      ? await db.collection('users').find(
-          { _id: { $in: userObjectIds } },
-          { projection: { email: 1, firstName: 1, lastName: 1 } }
-        ).toArray()
+    const rows = await query('SELECT * FROM orders ORDER BY created_at DESC, id DESC');
+    const itemsByOrder = await getItemsByOrderIds(rows.map(r => r.id));
+
+    const userIds = [...new Set(rows.map(o => o.user_id).filter(Boolean))];
+    const users = userIds.length > 0
+      ? await query(
+          `SELECT id, email, first_name, last_name FROM users WHERE id IN (${placeholders(userIds.length)})`,
+          userIds
+        )
       : [];
-    const userMap = Object.fromEntries(users.map(u => [u._id.toString(), u]));
-    const ordersWithUsers = orders.map((order) => {
-      const user = userMap[order.userId] || null;
+    const userMap = Object.fromEntries(users.map(u => [u.id, u]));
+
+    res.json(rows.map((row) => {
+      const user = userMap[row.user_id] || null;
+      const order = mapOrder(row, itemsByOrder[row.id]);
       return {
-        id: order._id.toString(),
-        orderNumber: order.orderNumber || null,
-        user: user ? { email: user.email, firstName: user.firstName, lastName: user.lastName } : null,
+        id: order.id,
+        orderNumber: order.orderNumber,
+        user: user ? { email: user.email, firstName: user.first_name, lastName: user.last_name } : null,
         items: order.items,
         shippingAddress: order.shippingAddress,
         dogInfo: order.dogInfo,
@@ -1799,13 +2002,42 @@ app.get('/api/orders/admin', authenticateAdmin, async (req, res) => {
         createdAt: order.createdAt,
         updatedAt: order.updatedAt
       };
-    });
-    res.json(ordersWithUsers);
+    }));
   } catch (error) {
     console.error('Erreur lors de la récupération des commandes admin:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+
+/** Construit le payload email d'une commande validée / payée. */
+async function buildOrderEmailData(order, { withContact = false, withNames = true } = {}) {
+  const user = await queryOne('SELECT email, first_name, last_name FROM users WHERE id = ?', [order.userId]);
+  const productMap = await getProductMapByIds((order.items || []).map(i => i.productId));
+  const ship = order.shippingAddress || {};
+  const itemsForEmail = (order.items || []).map(item => ({
+    name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
+    quantity: item.quantity,
+    price: item.price
+  }));
+  const shippingCost = order.shippingAmount != null ? Number(order.shippingAmount) : 5.9;
+  const orderData = {
+    orderNumber: order.orderNumber || order.id,
+    ...(withNames ? {
+      firstName: ship.firstName || user?.first_name || '',
+      lastName: ship.lastName || user?.last_name || '',
+    } : {}),
+    items: itemsForEmail,
+    totalAmount: Number(order.total),
+    shippingCost,
+    customerName: [ship.firstName, ship.lastName].filter(Boolean).join(' ') || (user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : 'Client')
+  };
+  if (withContact) {
+    orderData.shippingAddress = ship;
+    orderData.customerEmail = ship.email || user?.email || '';
+    orderData.customerPhone = ship.phone || '';
+  }
+  return { orderData, clientEmail: ship.email || user?.email };
+}
 
 app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
   try {
@@ -1814,70 +2046,58 @@ app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Statut invalide' });
     }
-    const order = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+    const order = await findOrderById(req.params.id);
     if (!order) {
       return res.status(404).json({ error: 'Commande non trouvée' });
     }
-    const updateData = {
-      status,
-      updatedAt: new Date()
-    };
+
+    const updates = ['status = ?', 'updated_at = NOW(3)'];
+    const values = [status];
+    let itemsToReplace = null;
+
     if (status === 'rejected' && rejectionReason) {
-      updateData.rejectionReason = rejectionReason;
-      updateData.counterProposal = null;
+      updates.push('rejection_reason = ?', 'counter_proposal = NULL');
+      values.push(rejectionReason);
     }
     if (status === 'pending_validation' && counterProposal) {
-      updateData.counterProposal = {
+      updates.push('counter_proposal = ?');
+      values.push(toJson({
         items: counterProposal.items,
         total: counterProposal.total,
         message: counterProposal.message || '',
         proposedAt: new Date()
-      };
-      updateData.status = 'pending_counter_proposal';
+      }));
+      values[0] = 'pending_counter_proposal';
     }
     if (status === 'validated') {
       if (order.counterProposal) {
-        updateData.items = order.counterProposal.items;
-        updateData.total = order.counterProposal.total;
+        itemsToReplace = order.counterProposal.items;
+        updates.push('total = ?');
+        values.push(order.counterProposal.total);
       }
-      updateData.counterProposal = null;
+      updates.push('counter_proposal = NULL');
     }
     if (status === 'paid') {
-      updateData.paymentInfo = { method: 'admin', paidAt: new Date(), ...(order.paymentInfo || {}) };
+      // Les champs déjà présents priment : un paiement Stripe validé ne doit pas
+      // être réécrit en « admin » par un simple changement de statut.
+      updates.push('payment_info = ?');
+      values.push(toJson({ method: 'admin', paidAt: new Date(), ...(order.paymentInfo || {}) }));
     }
-    const result = await db.collection('orders').updateOne(
-      { _id: new ObjectId(req.params.id) },
-      { $set: updateData }
-    );
-    if (result.matchedCount === 0) {
+
+    values.push(req.params.id);
+    const result = await transaction(async (conn) => {
+      const r = await conn.query(`UPDATE orders SET ${updates.join(', ')} WHERE id = ?`, values);
+      if (itemsToReplace) await replaceOrderItems(conn, req.params.id, itemsToReplace);
+      return r;
+    });
+    if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Commande non trouvée' });
     }
 
     if (status === 'validated') {
       try {
-        const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
-        const user = await db.collection('users').findOne(
-          { _id: new ObjectId(updatedOrder.userId) },
-          { projection: { email: 1, firstName: 1, lastName: 1 } }
-        );
-        const productMap = await getProductMapByIds((updatedOrder.items || []).map(i => i.productId));
-        const ship = updatedOrder.shippingAddress || {};
-        const itemsForEmail = (updatedOrder.items || []).map(item => ({
-          name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
-          quantity: item.quantity,
-          price: item.price
-        }));
-        const shippingCost = updatedOrder.shippingAmount != null ? Number(updatedOrder.shippingAmount) : 5.9;
-        const orderData = {
-          orderNumber: updatedOrder.orderNumber || updatedOrder._id.toString(),
-          firstName: ship.firstName || user?.firstName || '',
-          lastName: ship.lastName || user?.lastName || '',
-          items: itemsForEmail,
-          totalAmount: Number(updatedOrder.total),
-          shippingCost,
-          customerName: [ship.firstName, ship.lastName].filter(Boolean).join(' ') || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Client')
-        };
-        const clientEmail = ship.email || user?.email;
+        const updatedOrder = await findOrderById(req.params.id);
+        const { orderData, clientEmail } = await buildOrderEmailData(updatedOrder);
         if (clientEmail) {
           await sendOrderValidatedEmail(clientEmail, orderData);
         }
@@ -1887,7 +2107,7 @@ app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
     }
 
     if (status === 'paid') {
-      const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+      const updatedOrder = await findOrderById(req.params.id);
       await insertPaymentStat(updatedOrder);
     }
 
@@ -1901,7 +2121,7 @@ app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
 app.put('/api/orders/:id/counter-proposal', authenticateToken, async (req, res) => {
   try {
     const { accept, newProposal } = req.body;
-    const order = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+    const order = await findOrderById(req.params.id);
     if (!order) {
       return res.status(404).json({ error: 'Commande non trouvée' });
     }
@@ -1912,39 +2132,16 @@ app.put('/api/orders/:id/counter-proposal', authenticateToken, async (req, res) 
       return res.status(400).json({ error: 'La commande n\'est pas en attente de contre-proposition' });
     }
     if (accept) {
-      const updateData = {
-        items: order.counterProposal.items,
-        total: order.counterProposal.total,
-        status: 'validated',
-        counterProposal: null,
-        updatedAt: new Date()
-      };
-      await db.collection('orders').updateOne(
-        { _id: new ObjectId(req.params.id) },
-        { $set: updateData }
-      );
-      try {
-        const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
-        const user = await db.collection('users').findOne(
-          { _id: new ObjectId(updatedOrder.userId) },
-          { projection: { email: 1, firstName: 1, lastName: 1 } }
+      await transaction(async (conn) => {
+        await conn.query(
+          "UPDATE orders SET total = ?, status = 'validated', counter_proposal = NULL, updated_at = NOW(3) WHERE id = ?",
+          [order.counterProposal.total, req.params.id]
         );
-        const productMap = await getProductMapByIds((updatedOrder.items || []).map(i => i.productId));
-        const ship = updatedOrder.shippingAddress || {};
-        const itemsForEmail = (updatedOrder.items || []).map(item => ({
-          name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
-          quantity: item.quantity,
-          price: item.price
-        }));
-        const shippingCost = updatedOrder.shippingAmount != null ? Number(updatedOrder.shippingAmount) : 5.9;
-        const orderData = {
-          orderNumber: updatedOrder.orderNumber || updatedOrder._id.toString(),
-          items: itemsForEmail,
-          totalAmount: Number(updatedOrder.total),
-          shippingCost,
-          customerName: [ship.firstName, ship.lastName].filter(Boolean).join(' ') || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Client')
-        };
-        const clientEmail = ship.email || user?.email;
+        await replaceOrderItems(conn, req.params.id, order.counterProposal.items);
+      });
+      try {
+        const updatedOrder = await findOrderById(req.params.id);
+        const { orderData, clientEmail } = await buildOrderEmailData(updatedOrder, { withNames: false });
         if (clientEmail) {
           await sendOrderValidatedEmail(clientEmail, orderData);
         }
@@ -1953,19 +2150,14 @@ app.put('/api/orders/:id/counter-proposal', authenticateToken, async (req, res) 
       }
       res.json({ message: 'Contre-proposition acceptée', status: 'validated' });
     } else if (newProposal) {
-      const updateData = {
-        counterProposal: {
+      await query(
+        "UPDATE orders SET counter_proposal = ?, status = 'pending_validation', updated_at = NOW(3) WHERE id = ?",
+        [toJson({
           items: newProposal.items,
           total: newProposal.total,
           message: newProposal.message || '',
           proposedAt: new Date()
-        },
-        status: 'pending_validation',
-        updatedAt: new Date()
-      };
-      await db.collection('orders').updateOne(
-        { _id: new ObjectId(req.params.id) },
-        { $set: updateData }
+        }), req.params.id]
       );
       res.json({ message: 'Nouvelle contre-proposition envoyée', status: 'pending_validation' });
     } else {
@@ -1979,18 +2171,19 @@ app.put('/api/orders/:id/counter-proposal', authenticateToken, async (req, res) 
 
 app.delete('/api/orders/:id', authenticateToken, async (req, res) => {
   try {
-    const order = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+    const order = await queryOne('SELECT user_id, status FROM orders WHERE id = ?', [req.params.id]);
     if (!order) {
       return res.status(404).json({ error: 'Commande non trouvée' });
     }
-    if (order.userId !== req.user.userId) {
+    if (order.user_id !== req.user.userId) {
       return res.status(403).json({ error: 'Non autorisé' });
     }
     const deletableStatuses = ['pending_validation', 'pending_counter_proposal', 'validated', 'rejected'];
     if (!deletableStatuses.includes(order.status)) {
       return res.status(400).json({ error: 'Cette commande ne peut pas être supprimée (déjà payée ou en cours)' });
     }
-    await db.collection('orders').deleteOne({ _id: new ObjectId(req.params.id) });
+    // order_items suit par ON DELETE CASCADE
+    await query('DELETE FROM orders WHERE id = ?', [req.params.id]);
     res.json({ message: 'Commande supprimée avec succès' });
   } catch (error) {
     console.error('Erreur lors de la suppression de la commande:', error);
@@ -2000,25 +2193,20 @@ app.delete('/api/orders/:id', authenticateToken, async (req, res) => {
 
 app.put('/api/orders/:id/cancel', authenticateToken, async (req, res) => {
   try {
-    const order = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+    const order = await queryOne('SELECT user_id, status FROM orders WHERE id = ?', [req.params.id]);
     if (!order) {
       return res.status(404).json({ error: 'Commande non trouvée' });
     }
-    if (order.userId !== req.user.userId) {
+    if (order.user_id !== req.user.userId) {
       return res.status(403).json({ error: 'Non autorisé' });
     }
     const nonPayableStatuses = ['pending_validation', 'pending_counter_proposal', 'validated'];
     if (!nonPayableStatuses.includes(order.status)) {
       return res.status(400).json({ error: 'Cette commande ne peut pas être annulée (déjà payée ou en cours)' });
     }
-    const updateData = {
-      status: 'rejected',
-      rejectionReason: 'Annulée par le client',
-      updatedAt: new Date()
-    };
-    await db.collection('orders').updateOne(
-      { _id: new ObjectId(req.params.id) },
-      { $set: updateData }
+    await query(
+      "UPDATE orders SET status = 'rejected', rejection_reason = 'Annulée par le client', updated_at = NOW(3) WHERE id = ?",
+      [req.params.id]
     );
     res.json({ message: 'Commande annulée avec succès', status: 'rejected' });
   } catch (error) {
@@ -2057,7 +2245,7 @@ app.post('/api/admin/login', adminLoginLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Identifiants invalides' });
     }
 
-    const adminAuth = await db.collection('admin_auth').findOne({});
+    const adminAuth = await queryOne('SELECT id, password_hash FROM admin_auth LIMIT 1');
     if (!adminAuth) {
       await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
       await logAdminAttempt(clientIp, false, { reason: 'Configuration admin introuvable', userAgent });
@@ -2065,7 +2253,7 @@ app.post('/api/admin/login', adminLoginLimiter, async (req, res) => {
     }
 
     const startTime = Date.now();
-    const passwordMatch = await bcrypt.compare(password, adminAuth.passwordHash);
+    const passwordMatch = await bcrypt.compare(password, adminAuth.password_hash);
     const elapsedTime = Date.now() - startTime;
 
     if (!passwordMatch) {
@@ -2085,10 +2273,7 @@ app.post('/api/admin/login', adminLoginLimiter, async (req, res) => {
     );
 
     await logAdminAttempt(clientIp, true, { reason: 'Connexion réussie', userAgent });
-    await db.collection('admin_auth').updateOne(
-      { _id: adminAuth._id },
-      { $set: { lastLogin: new Date(), lastLoginIp: clientIp } }
-    );
+    await query('UPDATE admin_auth SET last_login = NOW(3), last_login_ip = ? WHERE id = ?', [clientIp, adminAuth.id]);
 
     await detectBotPattern();
 
@@ -2113,10 +2298,7 @@ app.post('/api/admin/logout', (req, res) => {
 
 async function isIpBanned(ip) {
   try {
-    const ban = await db.collection('ip_bans').findOne({
-      ip: ip,
-      expiresAt: { $gt: new Date() }
-    });
+    const ban = await queryOne('SELECT ip FROM ip_bans WHERE ip = ? AND expires_at > NOW(3)', [ip]);
     return !!ban;
   } catch (error) {
     console.error('Erreur lors de la vérification du ban:', error);
@@ -2127,17 +2309,10 @@ async function isIpBanned(ip) {
 async function banIp(ip, durationMinutes = 60) {
   try {
     const expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000);
-    await db.collection('ip_bans').updateOne(
-      { ip: ip },
-      { 
-        $set: { 
-          ip: ip,
-          bannedAt: new Date(),
-          expiresAt: expiresAt,
-          reason: 'Trop de tentatives échouées'
-        }
-      },
-      { upsert: true }
+    await query(
+      'INSERT INTO ip_bans (ip, banned_at, expires_at, reason) VALUES (?, NOW(3), ?, ?) '
+      + 'ON DUPLICATE KEY UPDATE banned_at = NOW(3), expires_at = VALUES(expires_at), reason = VALUES(reason)',
+      [ip, expiresAt, 'Trop de tentatives échouées']
     );
     console.warn(`🚫 IP ${ip} bannie jusqu'à ${expiresAt.toISOString()}`);
   } catch (error) {
@@ -2147,23 +2322,24 @@ async function banIp(ip, durationMinutes = 60) {
 
 async function getCooldownTime(ip) {
   try {
-    const recentAttempts = await db.collection('admin_login_attempts').find({
-      ip: ip,
-      timestamp: { $gte: new Date(Date.now() - 60 * 60 * 1000) }
-    }).sort({ timestamp: -1 }).limit(5).toArray();
+    const recentAttempts = await query(
+      'SELECT success, timestamp FROM admin_login_attempts WHERE ip = ? AND timestamp >= NOW(3) - INTERVAL 1 HOUR '
+      + 'ORDER BY timestamp DESC LIMIT 5',
+      [ip]
+    );
 
     if (recentAttempts.length === 0) return 0;
 
-    const failures = recentAttempts.filter(a => !a.success);
+    const failures = recentAttempts.filter(a => !toBool(a.success));
     if (failures.length === 0) return 0;
 
     const lastFailure = failures[0];
-    const timeSinceLastFailure = Date.now() - lastFailure.timestamp.getTime();
-    
+    const timeSinceLastFailure = Date.now() - new Date(lastFailure.timestamp).getTime();
+
     if (failures.length === 1) return Math.max(0, 5000 - timeSinceLastFailure);
     if (failures.length === 2) return Math.max(0, 30000 - timeSinceLastFailure);
     if (failures.length >= 3) return Math.max(0, 300000 - timeSinceLastFailure);
-    
+
     return 0;
   } catch (error) {
     console.error('Erreur lors du calcul du cooldown:', error);
@@ -2175,21 +2351,18 @@ async function logAdminAttempt(ip, success, reason) {
   try {
     const reasonText = typeof reason === 'string' ? reason : reason.reason || 'Unknown';
     const userAgent = typeof reason === 'object' && reason.userAgent ? reason.userAgent : 'unknown';
-    
-    await db.collection('admin_login_attempts').insertOne({
-      ip: ip,
-      success: success,
-      reason: reasonText,
-      timestamp: new Date(),
-      userAgent: userAgent
-    });
+
+    await query(
+      'INSERT INTO admin_login_attempts (ip, success, reason, user_agent) VALUES (?, ?, ?, ?)',
+      [ip, success ? 1 : 0, String(reasonText).slice(0, 255), String(userAgent).slice(0, 512)]
+    );
 
     if (!success) {
-      const recentFailures = await db.collection('admin_login_attempts').countDocuments({
-        ip: ip,
-        success: false,
-        timestamp: { $gte: new Date(Date.now() - 15 * 60 * 1000) }
-      });
+      const [{ total }] = await query(
+        'SELECT COUNT(*) AS total FROM admin_login_attempts WHERE ip = ? AND success = 0 AND timestamp >= NOW(3) - INTERVAL 15 MINUTE',
+        [ip]
+      );
+      const recentFailures = Number(total);
 
       if (recentFailures >= 3) {
         await banIp(ip, 60);
@@ -2206,27 +2379,11 @@ async function logAdminAttempt(ip, success, reason) {
 
 async function detectBotPattern() {
   try {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const attempts = await db.collection('admin_login_attempts').aggregate([
-      {
-        $match: {
-          timestamp: { $gte: oneHourAgo },
-          success: false
-        }
-      },
-      {
-        $group: {
-          _id: '$ip',
-          count: { $sum: 1 },
-          uniqueUserAgents: { $addToSet: '$userAgent' }
-        }
-      },
-      {
-        $match: {
-          count: { $gte: 10 }
-        }
-      }
-    ]).toArray();
+    const attempts = await query(
+      'SELECT ip AS _id, COUNT(*) AS count, COUNT(DISTINCT user_agent) AS uniqueUserAgents '
+      + 'FROM admin_login_attempts WHERE timestamp >= NOW(3) - INTERVAL 1 HOUR AND success = 0 '
+      + 'GROUP BY ip HAVING count >= 10'
+    );
 
     const totalUniqueIps = attempts.length;
     if (totalUniqueIps >= 5) {
@@ -2261,7 +2418,31 @@ app.get('/api/stats', authenticateAdmin, async (req, res) => {
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
-    const allRecords = await db.collection('payment_stats').find({}).sort({ date: 1 }).toArray();
+    // Un enregistrement = une commande payée, avec le détail de ses lignes.
+    const statRows = await query('SELECT id, date, total_amount FROM payment_stats ORDER BY date ASC');
+    const itemRows = statRows.length > 0
+      ? await query(
+          `SELECT payment_stat_id, product_id, \`collection\`, category, quantity, price, item_total `
+          + `FROM payment_stat_items WHERE payment_stat_id IN (${placeholders(statRows.length)}) ORDER BY id`,
+          statRows.map(r => r.id)
+        )
+      : [];
+    const itemsByStat = Object.fromEntries(statRows.map(r => [r.id, []]));
+    for (const item of itemRows) {
+      itemsByStat[item.payment_stat_id].push({
+        productId: item.product_id,
+        collection: item.collection,
+        category: item.category,
+        quantity: item.quantity,
+        price: toNum(item.price),
+        itemTotal: toNum(item.item_total),
+      });
+    }
+    const allRecords = statRows.map(r => ({
+      date: r.date,
+      totalAmount: toNum(r.total_amount),
+      items: itemsByStat[r.id],
+    }));
 
     // Global monthly KPIs (never filtered — stable reference)
     let totalRevenue = 0, totalOrders = 0;
@@ -2365,11 +2546,11 @@ app.get('/api/stats', authenticateAdmin, async (req, res) => {
 
 async function insertPaymentStat(order) {
   try {
-    if (!db) {
+    if (!dbReady) {
       console.error('❌ [PAYMENT_STATS] DB non initialisée');
       return;
     }
-    const existing = await db.collection('payment_stats').findOne({ orderId: order._id });
+    const existing = await queryOne('SELECT id FROM payment_stats WHERE order_id = ?', [order.id]);
     if (existing) return;
 
     const productMap = await getProductMapByIds((order.items || []).map(i => i.productId));
@@ -2386,15 +2567,25 @@ async function insertPaymentStat(order) {
       return { productId: item.productId, collection, category, quantity, price, itemTotal };
     });
 
-    await db.collection('payment_stats').insertOne({
-      orderId: order._id,
-      date: new Date(date),
-      totalAmount,
-      items,
-      createdAt: new Date()
+    const statId = randomUUID();
+    await transaction(async (conn) => {
+      await conn.query(
+        'INSERT INTO payment_stats (id, order_id, date, total_amount) VALUES (?, ?, ?, ?)',
+        [statId, order.id, new Date(date), totalAmount]
+      );
+      for (const item of items) {
+        await conn.query(
+          'INSERT INTO payment_stat_items (payment_stat_id, product_id, `collection`, category, quantity, price, item_total) '
+          + 'VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [statId, item.productId, item.collection, item.category, item.quantity, item.price, item.itemTotal]
+        );
+      }
     });
-    console.log('✅ [PAYMENT_STATS] Enregistrement ajouté pour commande', order._id.toString());
+    console.log('✅ [PAYMENT_STATS] Enregistrement ajouté pour commande', order.id);
   } catch (error) {
+    // La contrainte UNIQUE absorbe les doubles appels concurrents (statut « paid »
+    // posé par l'admin pendant que le webhook Stripe enregistre le paiement).
+    if (error.code === 'ER_DUP_ENTRY') return;
     console.error('Erreur lors de l\'insertion payment_stats:', error);
   }
 }
@@ -2466,22 +2657,8 @@ function validatePromoCodeInput(data) {
 
 app.get('/api/promo-codes', authenticateAdmin, async (req, res) => {
   try {
-    const promoCodes = await db.collection('promo_codes').find({}).sort({ createdAt: -1 }).toArray();
-    const formattedCodes = promoCodes.map(code => ({
-      id: code._id.toString(),
-      name: code.name || null,
-      code: code.code,
-      discountType: code.discountType,
-      discountValue: code.discountValue,
-      maxUses: code.maxUses,
-      currentUses: code.currentUses || 0,
-      isActive: code.isActive !== false,
-      startDate: code.startDate || null,
-      endDate: code.endDate || null,
-      createdAt: code.createdAt,
-      updatedAt: code.updatedAt
-    }));
-    res.json(formattedCodes);
+    const promoCodes = await query('SELECT * FROM promo_codes ORDER BY created_at DESC, id DESC');
+    res.json(promoCodes.map(mapPromoCode));
   } catch (error) {
     console.error('Erreur lors de la récupération des codes promo:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -2511,7 +2688,7 @@ app.post('/api/promo-codes', authenticateAdmin, async (req, res) => {
       let attempts = 0;
       do {
         finalCode = generatePromoCode(8);
-        const existing = await db.collection('promo_codes').findOne({ code: finalCode });
+        const existing = await queryOne('SELECT id FROM promo_codes WHERE code = ?', [finalCode]);
         if (!existing) break;
         attempts++;
         if (attempts > 10) {
@@ -2520,34 +2697,40 @@ app.post('/api/promo-codes', authenticateAdmin, async (req, res) => {
       } while (true);
     } else {
       finalCode = finalCode.toUpperCase().trim();
-      const existing = await db.collection('promo_codes').findOne({ code: finalCode });
+      const existing = await queryOne('SELECT id FROM promo_codes WHERE code = ?', [finalCode]);
       if (existing) {
         return res.status(409).json({ error: 'Ce code promo existe déjà' });
       }
     }
     
-    const promoCode = {
-      name: name && name.trim() ? name.trim().slice(0, 100) : null,
-      code: finalCode,
-      discountType,
-      discountValue: parseFloat(discountValue),
-      maxUses: parseInt(maxUses),
-      currentUses: 0,
-      isActive: isActive !== false,
-      startDate: startDate ? new Date(startDate) : null,
-      endDate: endDate ? new Date(endDate) : null,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-    
-    const result = await db.collection('promo_codes').insertOne(promoCode);
-    
+    const id = randomUUID();
+    try {
+      await query(
+        'INSERT INTO promo_codes (id, name, code, discount_type, discount_value, max_uses, current_uses, is_active, start_date, end_date) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)',
+        [
+          id,
+          name && name.trim() ? name.trim().slice(0, 100) : null,
+          finalCode,
+          discountType,
+          parseFloat(discountValue),
+          parseInt(maxUses),
+          isActive !== false ? 1 : 0,
+          startDate ? new Date(startDate) : null,
+          endDate ? new Date(endDate) : null,
+        ]
+      );
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ error: 'Ce code promo existe déjà' });
+      }
+      throw err;
+    }
+
+    const created = await queryOne('SELECT * FROM promo_codes WHERE id = ?', [id]);
     res.status(201).json({
       message: 'Code promo créé avec succès',
-      promoCode: {
-        id: result.insertedId.toString(),
-        ...promoCode
-      }
+      promoCode: mapPromoCode(created)
     });
   } catch (error) {
     console.error('Erreur lors de la création du code promo:', error);
@@ -2560,18 +2743,22 @@ app.put('/api/promo-codes/:id', authenticateAdmin, async (req, res) => {
     const { id } = req.params;
     const { name, code, discountType, discountValue, maxUses, startDate, endDate, isActive } = req.body;
     
-    const existingCode = await db.collection('promo_codes').findOne({ _id: new ObjectId(id) });
+    const existingCode = await queryOne('SELECT * FROM promo_codes WHERE id = ?', [id]);
     if (!existingCode) {
       return res.status(404).json({ error: 'Code promo non trouvé' });
     }
-    
-    const updateData = {};
+
+    const updates = [];
+    const values = [];
+    let newStartDate;
+    let newEndDate;
+    let newDiscountType;
     
     if (name !== undefined) {
       if (name === null || name === '') {
-        updateData.name = null;
+        updates.push('name = ?'); values.push(null);
       } else if (typeof name === 'string' && name.trim().length >= 2 && name.trim().length <= 100) {
-        updateData.name = name.trim();
+        updates.push('name = ?'); values.push(name.trim());
       } else {
         return res.status(400).json({ error: 'Le nom doit contenir entre 2 et 100 caractères' });
       }
@@ -2582,21 +2769,19 @@ app.put('/api/promo-codes/:id', authenticateAdmin, async (req, res) => {
       if (!/^[A-Z0-9]{3,50}$/.test(newCode)) {
         return res.status(400).json({ error: 'Le code doit contenir uniquement des lettres majuscules et chiffres (3-50 caractères)' });
       }
-      const codeExists = await db.collection('promo_codes').findOne({ 
-        code: newCode,
-        _id: { $ne: new ObjectId(id) }
-      });
+      const codeExists = await queryOne('SELECT id FROM promo_codes WHERE code = ? AND id <> ?', [newCode, id]);
       if (codeExists) {
         return res.status(409).json({ error: 'Ce code promo existe déjà' });
       }
-      updateData.code = newCode;
+      updates.push('code = ?'); values.push(newCode);
     }
     
     if (discountType !== undefined) {
       if (discountType !== 'percentage' && discountType !== 'fixed') {
         return res.status(400).json({ error: 'Le type de réduction doit être "percentage" ou "fixed"' });
       }
-      updateData.discountType = discountType;
+      newDiscountType = discountType;
+      updates.push('discount_type = ?'); values.push(discountType);
     }
     
     if (discountValue !== undefined) {
@@ -2604,14 +2789,14 @@ app.put('/api/promo-codes/:id', authenticateAdmin, async (req, res) => {
       if (isNaN(value) || value <= 0) {
         return res.status(400).json({ error: 'La valeur de réduction doit être un nombre positif' });
       }
-      const type = updateData.discountType || existingCode.discountType;
+      const type = newDiscountType || existingCode.discount_type;
       if (type === 'percentage' && value > 100) {
         return res.status(400).json({ error: 'Le pourcentage de réduction ne peut pas dépasser 100%' });
       }
       if (type === 'fixed' && value > 10000) {
         return res.status(400).json({ error: 'La réduction fixe ne peut pas dépasser 10000€' });
       }
-      updateData.discountValue = value;
+      updates.push('discount_value = ?'); values.push(value);
     }
     
     if (maxUses !== undefined) {
@@ -2619,26 +2804,28 @@ app.put('/api/promo-codes/:id', authenticateAdmin, async (req, res) => {
       if (isNaN(uses) || uses < 1 || uses > 1000000) {
         return res.status(400).json({ error: 'Le nombre d\'utilisations max doit être un nombre entre 1 et 1000000' });
       }
-      if (uses < existingCode.currentUses) {
+      if (uses < existingCode.current_uses) {
         return res.status(400).json({ error: 'Le nombre d\'utilisations max ne peut pas être inférieur au nombre d\'utilisations actuelles' });
       }
-      updateData.maxUses = uses;
+      updates.push('max_uses = ?'); values.push(uses);
     }
     
     if (startDate !== undefined) {
-      updateData.startDate = startDate ? new Date(startDate) : null;
+      newStartDate = startDate ? new Date(startDate) : null;
+      updates.push('start_date = ?'); values.push(newStartDate);
     }
     
     if (endDate !== undefined) {
-      updateData.endDate = endDate ? new Date(endDate) : null;
+      newEndDate = endDate ? new Date(endDate) : null;
+      updates.push('end_date = ?'); values.push(newEndDate);
     }
     
     if (isActive !== undefined) {
-      updateData.isActive = isActive === true;
+      updates.push('is_active = ?'); values.push(isActive === true ? 1 : 0);
     }
     
-    const finalStartDate = updateData.startDate !== undefined ? updateData.startDate : existingCode.startDate;
-    const finalEndDate = updateData.endDate !== undefined ? updateData.endDate : existingCode.endDate;
+    const finalStartDate = startDate !== undefined ? newStartDate : existingCode.start_date;
+    const finalEndDate = endDate !== undefined ? newEndDate : existingCode.end_date;
     
     if (finalStartDate && finalEndDate) {
       const start = new Date(finalStartDate);
@@ -2648,31 +2835,15 @@ app.put('/api/promo-codes/:id', authenticateAdmin, async (req, res) => {
       }
     }
     
-    updateData.updatedAt = new Date();
+    updates.push('updated_at = NOW(3)');
+    values.push(id);
+    await query(`UPDATE promo_codes SET ${updates.join(', ')} WHERE id = ?`, values);
     
-    await db.collection('promo_codes').updateOne(
-      { _id: new ObjectId(id) },
-      { $set: updateData }
-    );
-    
-    const updatedCode = await db.collection('promo_codes').findOne({ _id: new ObjectId(id) });
+    const updatedCode = await queryOne('SELECT * FROM promo_codes WHERE id = ?', [id]);
     
     res.json({
       message: 'Code promo mis à jour avec succès',
-      promoCode: {
-        id: updatedCode._id.toString(),
-        name: updatedCode.name || null,
-        code: updatedCode.code,
-        discountType: updatedCode.discountType,
-        discountValue: updatedCode.discountValue,
-        maxUses: updatedCode.maxUses,
-        currentUses: updatedCode.currentUses || 0,
-        isActive: updatedCode.isActive !== false,
-        startDate: updatedCode.startDate || null,
-        endDate: updatedCode.endDate || null,
-        createdAt: updatedCode.createdAt,
-        updatedAt: updatedCode.updatedAt
-      }
+      promoCode: mapPromoCode(updatedCode)
     });
   } catch (error) {
     console.error('Erreur lors de la mise à jour du code promo:', error);
@@ -2684,9 +2855,9 @@ app.delete('/api/promo-codes/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     
-    const result = await db.collection('promo_codes').deleteOne({ _id: new ObjectId(id) });
+    const result = await query('DELETE FROM promo_codes WHERE id = ?', [id]);
     
-    if (result.deletedCount === 0) {
+    if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Code promo non trouvé' });
     }
     
@@ -2709,13 +2880,12 @@ app.post('/api/promo-codes/validate', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Le total doit être un nombre positif' });
     }
     
-    const promoCode = await db.collection('promo_codes').findOne({ 
-      code: code.toUpperCase().trim() 
-    });
+    const row = await queryOne('SELECT * FROM promo_codes WHERE code = ?', [code.toUpperCase().trim()]);
     
-    if (!promoCode) {
+    if (!row) {
       return res.status(404).json({ error: 'Code promo invalide' });
     }
+    const promoCode = mapPromoCode(row);
     
     if (promoCode.isActive === false) {
       return res.status(400).json({ error: 'Ce code promo est désactivé' });
@@ -2758,21 +2928,39 @@ app.post('/api/promo-codes/validate', authenticateToken, async (req, res) => {
   }
 });
 
+/** Fragments SET pour écraser l'adresse de livraison d'une commande. */
+function shippingAddressUpdate(ship) {
+  const columns = {
+    ship_first_name: ship.firstName,
+    ship_last_name: ship.lastName,
+    ship_email: ship.email,
+    ship_phone: ship.phone,
+    ship_address: ship.address,
+    ship_city: ship.city,
+    ship_postal_code: ship.postalCode,
+    ship_country: ship.country,
+  };
+  return {
+    updates: Object.keys(columns).map(c => `${c} = ?`),
+    values: Object.values(columns).map(v => (v === undefined ? null : v)),
+  };
+}
+
 app.post('/api/orders/:id/create-payment-intent', authenticateToken, async (req, res) => {
   if (!stripe) {
     return res.status(503).json({ error: 'Stripe non configuré. Ajoutez STRIPE_SECRET_KEY dans Backend/.env (voir STRIPE.md).' });
   }
   try {
-    const order = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+    const order = await queryOne('SELECT id, user_id, status, total FROM orders WHERE id = ?', [req.params.id]);
     if (!order) return res.status(404).json({ error: 'Commande non trouvée' });
-    if (order.userId !== req.user.userId) return res.status(403).json({ error: 'Non autorisé' });
+    if (order.user_id !== req.user.userId) return res.status(403).json({ error: 'Non autorisé' });
     if (order.status !== 'validated') return res.status(400).json({ error: 'La commande doit être validée avant le paiement' });
     const amountCents = Math.round(Number(order.total) * 100);
     if (amountCents < 50) return res.status(400).json({ error: 'Montant minimum 0,50 €' });
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountCents,
       currency: 'eur',
-      metadata: { orderId: String(order._id) },
+      metadata: { orderId: String(order.id) },
       automatic_payment_methods: { enabled: true }
     });
     res.json({ clientSecret: paymentIntent.client_secret });
@@ -2787,7 +2975,7 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
   console.log('[PAYMENT] POST /api/orders/:id/payment', orderIdParam, 'paymentIntentId:', req.body?.paymentIntentId ? 'present' : 'absent');
   try {
     const { paymentMethod, cardNumber, expiryDate, cvv, cardholderName, shippingAddress, promoCode, paymentIntentId } = req.body;
-    const order = await db.collection('orders').findOne({ _id: new ObjectId(orderIdParam) });
+    const order = await findOrderById(orderIdParam);
     if (!order) {
       return res.status(404).json({ error: 'Commande non trouvée' });
     }
@@ -2826,47 +3014,23 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
               : 'Paiement non finalisé. Veuillez retourner sur la page paiement et cliquer sur « Payer » en validant jusqu\'au bout.';
         return res.status(400).json({ error: msg });
       }
-      const updateData = {
-        status: 'paid',
-        paymentInfo: { method: 'stripe', paymentIntentId, paidAt: new Date() },
-        updatedAt: new Date()
-      };
-      if (shippingAddress) updateData.shippingAddress = shippingAddress;
-      await db.collection('orders').updateOne(
-        { _id: new ObjectId(req.params.id) },
-        { $set: updateData }
-      );
-      const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+      const updates = ["status = 'paid'", 'payment_info = ?', 'updated_at = NOW(3)'];
+      const values = [toJson({ method: 'stripe', paymentIntentId, paidAt: new Date() })];
+      if (shippingAddress) {
+        const ship = shippingAddressUpdate(shippingAddress);
+        updates.push(...ship.updates);
+        values.push(...ship.values);
+      }
+      values.push(req.params.id);
+      await query(`UPDATE orders SET ${updates.join(', ')} WHERE id = ?`, values);
+
+      const updatedOrder = await findOrderById(req.params.id);
       await insertPaymentStat(updatedOrder);
 
-      const user = await db.collection('users').findOne(
-        { _id: new ObjectId(updatedOrder.userId) },
-        { projection: { email: 1, firstName: 1, lastName: 1 } }
-      );
-      const productMap = await getProductMapByIds((updatedOrder.items || []).map(i => i.productId));
-      const ship = updatedOrder.shippingAddress || {};
-      const itemsForEmail = (updatedOrder.items || []).map(item => ({
-        name: (productMap[item.productId] && productMap[item.productId].name) || `Produit #${item.productId}`,
-        quantity: item.quantity,
-        price: item.price
-      }));
-      const shippingCost = updatedOrder.shippingAmount != null ? Number(updatedOrder.shippingAmount) : 5.9;
-      const orderData = {
-        orderNumber: updatedOrder.orderNumber || updatedOrder._id.toString(),
-        firstName: ship.firstName || user?.firstName || '',
-        lastName: ship.lastName || user?.lastName || '',
-        items: itemsForEmail,
-        totalAmount: Number(updatedOrder.total),
-        shippingCost,
-        shippingAddress: ship,
-        customerName: [ship.firstName, ship.lastName].filter(Boolean).join(' ') || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Client'),
-        customerEmail: ship.email || user?.email || '',
-        customerPhone: ship.phone || '',
-        paymentMethod: 'Stripe'
-      };
+      const { orderData, clientEmail } = await buildOrderEmailData(updatedOrder, { withContact: true });
+      orderData.paymentMethod = 'Stripe';
       try {
         // Facture envoyée au client (email livraison prioritaire, sinon email compte)
-        const clientEmail = ship.email || user?.email;
         if (clientEmail) {
           await sendOrderConfirmationEmail(clientEmail, orderData);
           await sendInvoiceEmail(clientEmail, orderData);
@@ -2882,64 +3046,59 @@ app.post('/api/orders/:id/payment', authenticateToken, async (req, res) => {
     let appliedPromoCode = null;
     
     if (promoCode && typeof promoCode === 'string' && promoCode.trim() !== '') {
-      const promo = await db.collection('promo_codes').findOne({ 
-        code: promoCode.toUpperCase().trim() 
-      });
+      const promo = await queryOne('SELECT * FROM promo_codes WHERE code = ?', [promoCode.toUpperCase().trim()]);
       
-      if (promo && promo.isActive !== false && promo.currentUses < promo.maxUses) {
+      if (promo && toBool(promo.is_active) && promo.current_uses < promo.max_uses) {
         const now = new Date();
-        const isValidDate = (!promo.startDate || new Date(promo.startDate) <= now) && 
-                           (!promo.endDate || new Date(promo.endDate) >= now);
+        const isValidDate = (!promo.start_date || new Date(promo.start_date) <= now) && 
+                           (!promo.end_date || new Date(promo.end_date) >= now);
         
         if (isValidDate) {
+          const discountValue = toNum(promo.discount_value);
           let discountAmount = 0;
-          if (promo.discountType === 'percentage') {
-            discountAmount = (order.total * promo.discountValue) / 100;
+          if (promo.discount_type === 'percentage') {
+            discountAmount = (order.total * discountValue) / 100;
           } else {
-            discountAmount = Math.min(promo.discountValue, order.total);
+            discountAmount = Math.min(discountValue, order.total);
           }
           
           finalTotal = Math.max(0, order.total - discountAmount);
           appliedPromoCode = {
             code: promo.code,
             name: promo.name,
-            discountType: promo.discountType,
-            discountValue: promo.discountValue,
+            discountType: promo.discount_type,
+            discountValue,
             discountAmount: parseFloat(discountAmount.toFixed(2))
           };
           
-          await db.collection('promo_codes').updateOne(
-            { _id: promo._id },
-            { 
-              $inc: { currentUses: 1 },
-              $set: { updatedAt: new Date() }
-            }
+          await query(
+            'UPDATE promo_codes SET current_uses = current_uses + 1, updated_at = NOW(3) WHERE id = ?',
+            [promo.id]
           );
         }
       }
     }
     
-    const updateData = {
-      status: 'paid',
-      paymentInfo: {
+    const updates = ["status = 'paid'", 'payment_info = ?', 'total = ?', 'original_total = ?', 'promo_code = ?', 'updated_at = NOW(3)'];
+    const values = [
+      toJson({
         method: paymentMethod,
         cardNumber: cardNumber ? cardNumber.slice(-4) : null,
         paidAt: new Date()
-      },
-      total: parseFloat(finalTotal.toFixed(2)),
-      originalTotal: order.total,
-      promoCode: appliedPromoCode,
-      updatedAt: new Date()
-    };
+      }),
+      parseFloat(finalTotal.toFixed(2)),
+      order.total,
+      toJson(appliedPromoCode),
+    ];
     if (shippingAddress) {
-      updateData.shippingAddress = shippingAddress;
+      const ship = shippingAddressUpdate(shippingAddress);
+      updates.push(...ship.updates);
+      values.push(...ship.values);
     }
-    await db.collection('orders').updateOne(
-      { _id: new ObjectId(req.params.id) },
-      { $set: updateData }
-    );
+    values.push(req.params.id);
+    await query(`UPDATE orders SET ${updates.join(', ')} WHERE id = ?`, values);
 
-    const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(req.params.id) });
+    const updatedOrder = await findOrderById(req.params.id);
     await insertPaymentStat(updatedOrder);
 
     res.json({ message: 'Paiement enregistré', status: 'paid' });
@@ -2975,10 +3134,7 @@ try {
 }
 
 process.on('SIGTERM', async () => {
-  if (client) {
-    await client.close();
-    logger.info('Connexion MongoDB fermée');
-  }
+  await closePool();
+  logger.info('Pool MariaDB fermé');
   process.exit(0);
 });
-

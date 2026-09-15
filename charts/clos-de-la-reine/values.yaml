@@ -13,7 +13,7 @@ imagePullSecrets:
 
 # Backend (Node)
 backend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:02a44cf5f5a2cc14d0144607b0b8013bb40e01ba0cd73c094fde84bc7ea3c06f
+  image: ghcr.io/emmguardia/clos-de-la-reine-back@sha256:1a1568512b10e307ceb43e02a3851310207dc2d9bf013365bf4cdb75dda44d02
   imagePullPolicy: IfNotPresent
   replicas: 1
   strategy:
@@ -23,6 +23,7 @@ backend:
   port: 3000
   env:
     PORT: "3000"
+    MARIADB_PORT: "3306"
     NODE_ENV: production
     # URL du frontend (CORS + liens emails reset-password). À adapter si tu changes de domaine (ex: https://leclosdelareine.com)
     FRONTEND_URL: "https://leclosdelareine.com"
@@ -47,7 +48,7 @@ backend:
 
 # Frontend (nginx)
 frontend:
-  image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:a3fe10f6b0705280831002fed5362a9db46aa4f2325f94741aefab715d101445
+  image: ghcr.io/emmguardia/clos-de-la-reine-front@sha256:bbc5af34663476b16441a9f9e42959a1e3a0a7ba728deb768f00948639c32dc5
   replicas: 1
   strategy:
     rollingUpdate:

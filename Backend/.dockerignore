@@ -18,3 +18,4 @@ coverage/
 src/
 package*.json
 
+docker-compose*.yml

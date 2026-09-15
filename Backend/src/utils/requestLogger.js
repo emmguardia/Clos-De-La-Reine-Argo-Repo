@@ -4,12 +4,13 @@ import { httpRequestsTotal, httpRequestDuration } from './metrics.js';
 
 // Normalise les routes dynamiques pour éviter la "cardinality explosion" dans Prometheus.
 // ex: /api/products/42  →  /api/products/:id
-//     /api/orders/507f1f77bcf86cd799439011  →  /api/orders/:id
+//     /api/orders/3f1b8c2e-....  →  /api/orders/:id
 function normalizeRoute(url) {
   return url
     .split('?')[0]
     .replace(/\/\d+/g, '/:id')
-    .replace(/\/[a-f0-9]{24}/g, '/:id') // ObjectIDs Mongo
+    .replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '/:id') // UUID
+    .replace(/\/[a-f0-9]{24}/g, '/:id') // ObjectIDs hérités de MongoDB
     .replace(/\/$/, '') || '/';
 }
 

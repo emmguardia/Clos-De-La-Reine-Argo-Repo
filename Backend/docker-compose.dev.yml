@@ -1,0 +1,49 @@
+# Pile de développement local : MariaDB + backend.
+#   docker compose -f docker-compose.dev.yml up
+#
+# Le schéma est créé au démarrage du backend (ensureSchema), aucune étape
+# manuelle n'est nécessaire. Les données vivent dans le volume mariadb-data.
+services:
+  mariadb:
+    image: mariadb:11.4
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: clos_de_la_reine
+      MARIADB_USER: clos
+      MARIADB_PASSWORD: clos
+    ports:
+      - "3307:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    image: node:26-slim
+    working_dir: /app
+    command: sh -c "npm install -g pnpm@10.33.4 --silent && pnpm install && node --watch src/server.js"
+    environment:
+      NODE_ENV: development
+      PORT: "3000"
+      MARIADB_HOST: mariadb
+      MARIADB_PORT: "3306"
+      MARIADB_USER: clos
+      MARIADB_PASSWORD: clos
+      MARIADB_DATABASE: clos_de_la_reine
+      JWT_SECRET: dev-only-secret-changez-moi
+      FRONTEND_URL: http://localhost:5173
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - backend-node-modules:/app/node_modules
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+volumes:
+  mariadb-data:
+  backend-node-modules:

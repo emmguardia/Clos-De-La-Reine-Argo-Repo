@@ -1,0 +1,32 @@
+# Application ArgoCD pour l'environnement Prod
+# À appliquer : kubectl apply -f argocd/clos-de-la-reine.yaml -n argocd
+#
+# Pendant du fichier clos-de-la-reine-dev.yaml : branche main + values.yaml.
+# `server: https://kubernetes.default.svc` = le cluster qui héberge ArgoCD.
+# Si ArgoCD pilote le nouveau cluster à distance, remplacer par l'URL de ce
+# cluster telle qu'elle apparaît dans `argocd cluster list`.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: clos-de-la-reine
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: siteweb
+  source:
+    repoURL: https://github.com/emmguardia/Clos-De-La-Reine-Argo-Repo
+    targetRevision: main
+    path: charts/clos-de-la-reine
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: clos-de-la-reine
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

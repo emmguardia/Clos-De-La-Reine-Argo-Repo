@@ -23,6 +23,7 @@ backend:
   port: 3000
   env:
     PORT: "3000"
+    MARIADB_PORT: "3306"
     NODE_ENV: production
     # URL du frontend (CORS + liens emails reset-password). À adapter si tu changes de domaine (ex: https://leclosdelareine.com)
     FRONTEND_URL: "https://leclosdelareine.com"

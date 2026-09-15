@@ -4,3 +4,8 @@ metadata:
   name: {{ include "clos.namespace" . }}
   labels:
     app.kubernetes.io/name: clos-de-la-reine
+    # Exigé par la NetworkPolicy allow-db-from-apps du namespace database, qui
+    # n'accepte sur le port 3306 que les namespaces portant ce label. Sans lui,
+    # les connexions vers galera-lb sont rejetées (ECONNREFUSED) et le backend
+    # tourne en boucle de reconnexion. Même convention que les autres sites.
+    access-db: allowed

@@ -21,6 +21,14 @@ spec:
       labels:
         app: clos-de-la-reine-front
     spec:
+      # 2 réplicas répartis sur 2 nœuds : la perte d'un nœud ne coupe pas le site.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: clos-de-la-reine-front
       imagePullSecrets:
         {{- toYaml .Values.imagePullSecrets | nindent 8 }}
       volumes:

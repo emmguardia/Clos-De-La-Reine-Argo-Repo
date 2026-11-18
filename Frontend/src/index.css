@@ -88,23 +88,41 @@ h1, h2, h3, h4 {
   letter-spacing: -0.02em;
 }
 
-/* Product modal — heights fiables sur mobile (évite les bugs JIT Tailwind) */
+/* Product modal — plein écran sur téléphone : l'image en haut, le texte qui
+   défile, et le bouton panier toujours visible en bas (100dvh = hauteur
+   réellement visible, barre d'adresse comprise ; 100vh en secours). */
+.product-modal-card {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
 .product-modal-image {
-  height: 30vh;
-  min-height: 30vh;
+  height: 34vh;
+  height: 34dvh;
   flex-shrink: 0;
 }
 .product-modal-text {
-  height: 60vh;
+  flex: 1 1 0%;
+  min-height: 0;
   overflow: hidden;
+}
+.product-modal-actions {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 @media (min-width: 768px) {
+  .product-modal-card {
+    display: block;
+    height: auto;
+    max-height: 90vh;
+  }
   .product-modal-image {
     height: 80vh;
     min-height: 80vh;
   }
   .product-modal-text {
+    flex: none;
     height: 80vh;
   }
 }

@@ -1,6 +1,6 @@
 import { ShoppingCart, Heart, User, Menu, X, ChevronDown, Package } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { trackEvent } from '../utils/analytics';
 import { useCart } from '../hooks/useCart';
 import { useFavorites } from '../hooks/useFavorites';
@@ -15,6 +15,21 @@ export default function Header() {
   const { items: cartItems, refreshCart } = useCart();
   const { favorites, refreshFavorites } = useFavorites();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  // Accueil : en-tête transparent posé sur la grande photo, blanc dès qu'on descend
+  const { pathname } = useLocation();
+  const isHome = pathname === '/';
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    if (!isHome) return;
+    const onScroll = () => setScrolled(window.scrollY > 40);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [isHome]);
+  const overlay = isHome && !scrolled && !isMenuOpen;
+  const linkTone = overlay ? 'text-white/90 hover:text-white' : 'text-gray-600 hover:text-gray-900';
+  const iconTone = overlay ? 'text-white' : 'text-gray-600';
+  const iconHover = overlay ? 'hover:bg-white/15' : 'hover:bg-gray-50';
   const [user, setUser] = useState<UserData | null>(() => {
     try {
       const userStr = localStorage.getItem('user');
@@ -105,39 +120,39 @@ export default function Header() {
     };
   }, [isProfileMenuOpen]);
   return (
-    <header className="sticky top-0 bg-white/85 backdrop-blur-md z-50 border-b border-black/5 transition-all duration-300">
+    <header className={`${isHome ? 'fixed inset-x-0' : 'sticky'} top-0 z-50 border-b transition-all duration-300 ${overlay ? 'bg-transparent border-transparent' : 'bg-white/85 backdrop-blur-md border-black/5'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <Link to="/" className="flex items-center space-x-3 group cursor-pointer" onClick={() => trackEvent('header_logo_click', { source: 'header' })}>
             <img src="/Images/Logo.webp" alt="Logo" className="w-10 h-10" />
-            <span className="text-sm font-light tracking-wide md:text-xl">Le Clos De La Reine</span>
+            <span className={`text-sm font-light tracking-wide md:text-xl transition-colors ${overlay ? 'text-white' : ''}`}>Le Clos De La Reine</span>
           </Link>
           <nav className="hidden md:flex items-center space-x-8">
-            <Link to="/" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 relative group">
+            <Link to="/" className={`text-sm ${linkTone} transition-colors duration-200 relative group`}>
               Accueil
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gray-900 group-hover:w-full transition-all duration-300"></span>
+              <span className={`absolute bottom-0 left-0 w-0 h-0.5 ${overlay ? 'bg-white' : 'bg-gray-900'} group-hover:w-full transition-all duration-300`}></span>
             </Link>
-            <Link to="/boutique" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 relative group" onClick={() => trackEvent('nav_click', { link: 'boutique', source: 'header' })}>
+            <Link to="/boutique" className={`text-sm ${linkTone} transition-colors duration-200 relative group`} onClick={() => trackEvent('nav_click', { link: 'boutique', source: 'header' })}>
               Boutique
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gray-900 group-hover:w-full transition-all duration-300"></span>
+              <span className={`absolute bottom-0 left-0 w-0 h-0.5 ${overlay ? 'bg-white' : 'bg-gray-900'} group-hover:w-full transition-all duration-300`}></span>
             </Link>
-            <Link to="/contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 relative group" onClick={() => trackEvent('nav_click', { link: 'contact', source: 'header' })}>
+            <Link to="/contact" className={`text-sm ${linkTone} transition-colors duration-200 relative group`} onClick={() => trackEvent('nav_click', { link: 'contact', source: 'header' })}>
               Contact
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gray-900 group-hover:w-full transition-all duration-300"></span>
+              <span className={`absolute bottom-0 left-0 w-0 h-0.5 ${overlay ? 'bg-white' : 'bg-gray-900'} group-hover:w-full transition-all duration-300`}></span>
             </Link>
-            <Link to="/faq" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 relative group">
+            <Link to="/faq" className={`text-sm ${linkTone} transition-colors duration-200 relative group`}>
               FAQ
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gray-900 group-hover:w-full transition-all duration-300"></span>
+              <span className={`absolute bottom-0 left-0 w-0 h-0.5 ${overlay ? 'bg-white' : 'bg-gray-900'} group-hover:w-full transition-all duration-300`}></span>
             </Link>
-            <Link to="/galerie" className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 relative group">
+            <Link to="/galerie" className={`text-sm ${linkTone} transition-colors duration-200 relative group`}>
               Galerie
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gray-900 group-hover:w-full transition-all duration-300"></span>
+              <span className={`absolute bottom-0 left-0 w-0 h-0.5 ${overlay ? 'bg-white' : 'bg-gray-900'} group-hover:w-full transition-all duration-300`}></span>
             </Link>
           </nav>
           <div className="flex items-center space-x-1 sm:space-x-4">
             {/* Favoris — desktop seulement */}
-            <Link to="/favoris" className="relative p-2 hover:bg-gray-50 rounded-full transition-all duration-200 transform hover:scale-110 hidden md:flex" onClick={() => trackEvent('header_favoris_click', { source: 'header' })}>
-              <Heart className="w-5 h-5 text-gray-600" />
+            <Link to="/favoris" className={`relative p-2 ${iconHover} rounded-full transition-all duration-200 transform hover:scale-110 hidden md:flex`} onClick={() => trackEvent('header_favoris_click', { source: 'header' })}>
+              <Heart className={`w-5 h-5 ${iconTone}`} />
               {favoritesCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                   {favoritesCount}
@@ -149,7 +164,7 @@ export default function Header() {
               <div className="relative hidden md:block" ref={profileMenuRef}>
                 <button
                   onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                  className="flex items-center space-x-2 px-3 py-2 hover:bg-gray-50 rounded-2xl transition-all duration-200 relative"
+                  className={`flex items-center space-x-2 px-3 py-2 ${iconHover} rounded-2xl transition-all duration-200 relative`}
                 >
                   {newOrderBadge > 0 && (
                     <span className="absolute -top-0.5 -right-0.5 bg-gray-900 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
@@ -161,10 +176,10 @@ export default function Header() {
                       {user.firstName.charAt(0).toUpperCase()}
                     </span>
                   </div>
-                  <span className="text-sm text-gray-700 font-light">
+                  <span className={`text-sm font-light ${overlay ? 'text-white' : 'text-gray-700'}`}>
                     Bonjour {user.firstName.slice(0, 20)}
                   </span>
-                  <ChevronDown className={`w-4 h-4 text-gray-600 transition-transform duration-200 ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-4 h-4 ${iconTone} transition-transform duration-200 ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {isProfileMenuOpen && (
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-slideDown">
@@ -214,13 +229,13 @@ export default function Header() {
                 )}
               </div>
             ) : (
-              <Link to="/connexion" className="p-2 hover:bg-gray-50 rounded-full transition-all duration-200 transform hover:scale-110 hidden md:flex">
-                <User className="w-5 h-5 text-gray-600" />
+              <Link to="/connexion" className={`p-2 ${iconHover} rounded-full transition-all duration-200 transform hover:scale-110 hidden md:flex`}>
+                <User className={`w-5 h-5 ${iconTone}`} />
               </Link>
             )}
             {/* Panier — toujours visible */}
-            <Link to="/panier" className="relative p-2 hover:bg-gray-50 rounded-full transition-all duration-200 transform hover:scale-110" onClick={() => trackEvent('header_panier_click', { source: 'header', cart_count: cartCount })}>
-              <ShoppingCart className="w-5 h-5 text-gray-600" />
+            <Link to="/panier" className={`relative p-2 ${iconHover} rounded-full transition-all duration-200 transform hover:scale-110`} onClick={() => trackEvent('header_panier_click', { source: 'header', cart_count: cartCount })}>
+              <ShoppingCart className={`w-5 h-5 ${iconTone}`} />
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                   {cartCount}
@@ -229,13 +244,13 @@ export default function Header() {
             </Link>
             {/* Hamburger — mobile seulement */}
             <button
-              className="md:hidden p-2 hover:bg-gray-50 rounded-full transition-all duration-200"
+              className={`md:hidden p-2 ${iconHover} rounded-full transition-all duration-200`}
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               aria-label={isMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
             >
               {isMenuOpen
                 ? <X className="w-5 h-5 text-gray-600" />
-                : <Menu className="w-5 h-5 text-gray-600" />
+                : <Menu className={`w-5 h-5 ${iconTone}`} />
               }
             </button>
           </div>

@@ -1,62 +1,201 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { trackEvent } from '../utils/analytics';
 import { useFeaturedProducts } from '../hooks/useFeaturedProducts';
 import ProductCard from '../components/ProductCard';
 import ProductModal from '../components/ProductModal';
-import type { ProductCategory, Product } from '../data/products';
+import type { Product } from '../data/products';
 import SEO from '../components/SEO';
-const heroImage = '/Images/header.webp';
-interface FeaturedProduct {
-  id: string;
-  title: string;
-  subtitle: string;
-  price: string;
-  badge: string;
-  image: string;
-  tone: string;
-  to: string;
-  category: ProductCategory;
-  collection: string;
-}
-const featuredProducts: FeaturedProduct[] = [
+
+// Bannière : la collection du moment. Pour changer les photos, remplacer les
+// fichiers dans Public/Images/accueil (même nom) ou modifier cette liste.
+const heroCollection = {
+  name: "Pain d'Épices",
+  link: `/boutique?collection=${encodeURIComponent("Pain d'Épices")}`,
+  slides: [
+    { desktop: '/Images/accueil/banniere-1.webp', mobile: '/Images/accueil/banniere-1-mobile.webp', alt: 'Samoyède en harnais velours rouge avec une petite fille au pied du sapin' },
+    { desktop: '/Images/accueil/banniere-2.webp', mobile: '/Images/accueil/banniere-2-mobile.webp', alt: 'Deux petites filles et un samoyède en harnais velours rouge' },
+    { desktop: '/Images/accueil/banniere-3.webp', mobile: '/Images/accueil/banniere-3-mobile.webp', alt: 'Colliers et laisses en velours rouge sous le sapin' },
+  ],
+};
+
+// Les 2 produits les plus aimés : chaque tuile fait défiler ses photos.
+const favorites = [
   {
-    id: '1',
-    title: 'Collier tartan bleu',
-    subtitle: 'Collier et laisse assortis, bleu profond',
-    price: '27€',
-    badge: 'Collier phare',
-    image: '/Images/Back_to_school_1.webp',
-    tone: 'from-[#f2dedd]/90 via-white to-[#e5f2eb]/60',
-    to: '/boutique?category=colliers',
-    category: 'colliers',
+    name: 'Tartan bleu',
     collection: 'Back to School',
+    link: `/boutique?collection=${encodeURIComponent('Back to School')}&couleur=Bleu`,
+    images: [1, 2, 3, 4].map((i) => `/Images/accueil/tartan-bleu-${i}.webp`),
   },
   {
-    id: '2',
-    title: 'Laisse tartan beige',
-    subtitle: 'Tissu écossais beige, boucle dorée élégante, finition soignée.',
-    price: '37€',
-    badge: 'Laisse phare',
-    image: '/Images/Collier_BTS1.webp',
-    tone: 'from-[#e5f2eb]/90 via-white to-[#f8f4ef]/60',
-    to: '/boutique?category=laisses',
-    category: 'laisses',
-    collection: 'Back to School',
-  },
-  {
-    id: '3 ',
-    title: 'Harnais tartan beige',
-    subtitle: 'Matières douces et respirantes, coupe ergonomique',
-    price: '47€',
-    badge: 'Harnais phare',
-    image: '/Images/Back_to_school_3.webp',
-    tone: 'from-[#f8f4ef]/90 via-white to-[#f2dedd]/60',
-    to: '/boutique?category=harnais',
-    category: 'harnais',
-    collection: 'Back to School',
+    name: 'Toile de Jouy bleu',
+    collection: 'Noblesse',
+    link: `/boutique?collection=Noblesse&couleur=Bleu`,
+    images: [1, 2, 3, 4].map((i) => `/Images/accueil/toile-de-jouy-bleu-${i}.webp`),
   },
 ];
+
+const categories = [
+  { label: 'Colliers', value: 'colliers', image: '/Images/accueil/colliers.webp' },
+  { label: 'Laisses', value: 'laisses', image: '/Images/accueil/laisses.webp' },
+  { label: 'Harnais', value: 'harnais', image: '/Images/accueil/harnais.webp' },
+];
+
+const HERO_DELAY_MS = 5000;
+
+function HeroCarousel() {
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+  const count = heroCollection.slides.length;
+  const go = useCallback((i: number) => setIndex((i + count) % count), [count]);
+
+  useEffect(() => {
+    if (paused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const timer = window.setTimeout(() => go(index + 1), HERO_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [index, paused, go]);
+
+  return (
+    <section
+      className="relative h-[72svh] min-h-[480px] md:h-[100svh] md:max-h-[1000px] w-full overflow-hidden bg-[#e9e2d8]"
+      aria-roledescription="carrousel"
+      aria-label={`Nouvelle collection ${heroCollection.name}`}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+      onTouchEnd={(e) => {
+        if (touchStartX.current === null) return;
+        const dx = e.changedTouches[0].clientX - touchStartX.current;
+        if (Math.abs(dx) > 40) go(index + (dx < 0 ? 1 : -1));
+        touchStartX.current = null;
+      }}
+    >
+      {heroCollection.slides.map((slide, i) => (
+        <picture
+          key={slide.desktop}
+          className={`absolute inset-0 transition-opacity duration-1000 ${i === index ? 'opacity-100' : 'opacity-0'}`}
+          aria-hidden={i !== index}
+        >
+          <source media="(min-width: 768px)" srcSet={slide.desktop} />
+          <img
+            src={slide.mobile}
+            alt={slide.alt}
+            className="h-full w-full object-cover"
+            loading={i === 0 ? 'eager' : 'lazy'}
+            fetchPriority={i === 0 ? 'high' : 'auto'}
+          />
+        </picture>
+      ))}
+      {/* Dégradés : lisibilité du menu en haut et du titre en bas */}
+      <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/35 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/5 to-transparent" />
+
+      <button
+        type="button"
+        onClick={() => go(index - 1)}
+        className="absolute left-4 top-1/2 -translate-y-1/2 hidden md:flex h-11 w-11 items-center justify-center rounded-full bg-white/80 text-xl text-gray-900 hover:bg-white transition-colors"
+        aria-label="Photo précédente"
+      >
+        ‹
+      </button>
+      <button
+        type="button"
+        onClick={() => go(index + 1)}
+        className="absolute right-4 top-1/2 -translate-y-1/2 hidden md:flex h-11 w-11 items-center justify-center rounded-full bg-white/80 text-xl text-gray-900 hover:bg-white transition-colors"
+        aria-label="Photo suivante"
+      >
+        ›
+      </button>
+
+      <div className="absolute inset-x-0 bottom-0 px-5 pb-8 sm:px-12 sm:pb-14 text-white">
+        <h1 className="sr-only">Le Clos de la Reine — colliers, laisses et harnais pour chien faits main en France</h1>
+        <p className="text-xs uppercase tracking-[0.35em] text-white/85">Nouvelle collection</p>
+        <p className="mt-2 text-5xl sm:text-7xl font-light" style={{ fontFamily: 'Playfair Display, serif' }}>
+          {heroCollection.name}
+        </p>
+        <Link
+          to={heroCollection.link}
+          className="mt-4 inline-block border-b border-white/80 pb-1 text-sm hover:border-white transition-colors"
+          onClick={() => trackEvent('hero_cta_click', { cta: 'decouvrir_collection', source: 'home' })}
+        >
+          Découvrir la collection
+        </Link>
+        <div className="mt-6 flex items-center gap-2">
+          {heroCollection.slides.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => go(i)}
+              className={`h-1.5 rounded-full transition-all duration-300 ${i === index ? 'w-6 bg-white' : 'w-1.5 bg-white/55'}`}
+              aria-label={`Photo ${i + 1}`}
+              aria-current={i === index}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FavoriteTile({ item }: { item: typeof favorites[number] }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [index, setIndex] = useState(0);
+
+  const scrollTo = (i: number) => {
+    const el = trackRef.current;
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' });
+  };
+
+  return (
+    <article>
+      <div className="relative aspect-[4/5] overflow-hidden bg-[#e9e2d8]">
+        {/* Défilement natif au doigt (scroll-snap), points cliquables sur ordinateur */}
+        <div
+          ref={trackRef}
+          className="flex h-full overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            setIndex(Math.round(el.scrollLeft / el.clientWidth));
+          }}
+        >
+          {item.images.map((src, i) => (
+            <Link
+              key={src}
+              to={item.link}
+              className="h-full w-full shrink-0 snap-start"
+              onClick={() => trackEvent('home_favorite_click', { product: item.name, collection: item.collection })}
+            >
+              <img
+                src={src}
+                alt={`${item.name} — collection ${item.collection}, photo ${i + 1}`}
+                loading="lazy"
+                draggable={false}
+                className="h-full w-full object-cover"
+              />
+            </Link>
+          ))}
+        </div>
+        <div className="absolute inset-x-0 bottom-2.5 flex justify-center gap-1.5">
+          {item.images.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => scrollTo(i)}
+              className={`h-1.5 rounded-full transition-all duration-300 ${i === index ? 'w-5 bg-white' : 'w-1.5 bg-white/60'}`}
+              aria-label={`${item.name}, photo ${i + 1}`}
+            />
+          ))}
+        </div>
+      </div>
+      <Link to={item.link} className="block pt-2 text-center">
+        <p className="text-xs sm:text-sm text-gray-900">{item.name}</p>
+        <p className="text-[11px] sm:text-xs text-gray-500">{item.collection} · dès 27 €</p>
+      </Link>
+    </article>
+  );
+}
+
 export default function HomePage() {
   const { products: newProducts, loading } = useFeaturedProducts(4);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -92,185 +231,78 @@ export default function HomePage() {
           "sameAs": []
         }}
       />
-      <section className="relative overflow-hidden bg-gradient-to-b from-white via-gray-50 to-gray-100">
-        <div className="absolute inset-0 overflow-hidden">
-          <img
-            src={heroImage}
-            alt="Sélection premium pour vos compagnons"
-            className="h-full w-full object-cover"
-            style={{ objectPosition: 'center 60%' }}
-            loading="eager"
-            fetchPriority="high"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-white via-white/75 to-white/30" />
+      <HeroCarousel />
+
+      <section className="bg-[var(--cream)] pt-10 pb-4 sm:pt-14">
+        <p className="text-center uppercase tracking-[0.3em] text-[11px] text-gray-500">Les plus aimés</p>
+        <div className="mx-auto mt-5 grid max-w-[340px] grid-cols-2 gap-3 px-0 sm:max-w-[640px] sm:gap-4">
+          {favorites.map((item) => <FavoriteTile key={item.name} item={item} />)}
         </div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-28">
-          <div className="max-w-3xl space-y-8">
-            <p className="uppercase tracking-[0.35em] text-xs text-gray-500 animate-fadeIn">
-              Maison d'élégance canine
-            </p>
-            <h1 className="text-4xl sm:text-6xl font-light text-gray-900 leading-tight animate-fadeIn">
-              Le raffinement pour compagnons d'exception.
-            </h1>
-            <p className="text-lg text-gray-600 max-w-2xl animate-fadeIn-delay-1">
-              Une sélection exigeante alliant noblesse des matières et confort, dédiée à l'élégance de vos précieux animaux.
-            </p>
-            <div className="flex flex-wrap items-center gap-4 animate-fadeIn-delay-2">
-              <a
-                href="#pieces-phares"
-                className="bg-gray-900 text-white px-8 py-3 rounded-full hover:bg-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg shadow-gray-900/10"
-                onClick={() => trackEvent('hero_cta_click', { cta: 'decouvrir_collection', source: 'home' })}
-              >
-                Découvrir la collection
-              </a>
-              <a
-                href="#nouveautes"
-                className="px-8 py-3 rounded-full border border-gray-300 text-gray-900 hover:border-gray-600 hover:text-gray-900 transition-all duration-300"
-                onClick={() => trackEvent('hero_cta_click', { cta: 'nouveautes', source: 'home' })}
-              >
-                Nouveautés
-              </a>
-            </div>
-            <div className="flex items-center gap-6 text-sm text-gray-500 animate-fadeIn-delay-3">
-              <div className="flex items-center gap-2">
-                <span className="block h-px w-10 bg-gray-400" />
-                Passion & Esthétisme
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="block h-px w-10 bg-gray-400" />
-                Exigence & Réflexion
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="block h-px w-10 bg-gray-400" />
-                Authentique & Unique
-              </div>
-            </div>
-          </div>
-        </div>
+
+        <nav aria-label="Catégories" className="mx-auto mt-10 grid max-w-[340px] grid-cols-3 gap-4 sm:max-w-[460px]">
+          {categories.map((c) => (
+            <Link
+              key={c.value}
+              to={`/boutique?category=${c.value}`}
+              className="group flex flex-col items-center gap-2"
+              onClick={() => trackEvent('home_category_click', { category: c.value })}
+            >
+              <span className="block aspect-square w-full overflow-hidden rounded-full bg-[#e9e2d8] ring-1 ring-black/5">
+                <img src={c.image} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+              </span>
+              <span className="text-xs sm:text-sm text-gray-900">{c.label}</span>
+            </Link>
+          ))}
+        </nav>
       </section>
-      <section id="pieces-phares" className="bg-white py-16 sm:py-20">
+
+      <section id="nouveautes" className="bg-[var(--cream)] py-12 sm:py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-10">
-            <div>
-              <p className="uppercase tracking-[0.3em] text-xs text-gray-500">Sélection</p>
-              <h2 className="text-3xl sm:text-4xl font-light text-gray-900 mt-2">
-                Pièces phares
-              </h2>
-              <p className="text-gray-900 mt-3 max-w-xl">
-                Découvrez notre dernière collection phare Back to School.
-              </p>
-            </div>
+          <header className="flex items-end justify-between gap-4 mb-6 sm:mb-8">
+            <h2 className="text-2xl sm:text-4xl font-light text-gray-900">Toute la boutique</h2>
             <Link
               to="/boutique"
-              className="self-start sm:self-auto px-5 py-2 rounded-full border border-gray-300 text-sm text-gray-800 hover:border-gray-900 transition-colors"
-              onClick={() => trackEvent('home_section_click', { section: 'pieces_phares', action: 'voir_tout' })}
+              className="text-sm text-gray-700 underline underline-offset-4 hover:text-gray-900"
+              onClick={() => trackEvent('home_section_click', { section: 'boutique', action: 'voir_tout' })}
             >
               Voir tout
             </Link>
           </header>
-          <div className="grid gap-6 lg:grid-cols-2">
-            {featuredProducts.map((product, index) => (
-              <article
-                key={product.id}
-                className={`relative overflow-hidden rounded-[32px] group shadow-xl shadow-gray-200/60 isolate ${
-                  index === 0 ? 'lg:row-span-2 min-h-[420px]' : 'min-h-[320px]'
-                }`}
-              >
-                <div className="absolute inset-0">
-                  <img
-                    src={product.image}
-                    loading="lazy"
-                    alt={product.title}
-                    className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                  <div
-                    className={`absolute inset-0 bg-gradient-to-br ${product.tone} opacity-60`}
-                  />
-                </div>
-                <div className="relative h-full flex flex-col justify-between p-8 sm:p-10">
-                  <div className="flex items-center gap-3">
-                    <span className="px-4 py-1 rounded-full bg-white/80 backdrop-blur-md text-xs uppercase tracking-[0.2em] text-gray-900 shadow-lg">
-                      {product.badge}
-                    </span>
-                    <span className="h-px w-10 bg-gray-900/70" />
-                    <span className="text-sm text-gray-900 font-medium drop-shadow-lg">{product.collection}</span>
-                  </div>
-                  <div className={`space-y-4 max-w-md ${index === 0 ? '' : 'space-y-2'}`}>
-                    <h3 className={`font-light leading-tight text-gray-900 drop-shadow-2xl ${index === 0 ? 'text-3xl' : 'text-xl'}`}>
-                      {product.title}
-                    </h3>
-                    <p className={`text-gray-900 font-medium drop-shadow-lg ${index === 0 ? 'text-sm sm:text-base' : 'text-xs'}`}>{product.subtitle}</p>
-                    <div className="flex items-center gap-4">
-                      <span className={`font-light text-gray-900 drop-shadow-lg ${index === 0 ? 'text-2xl' : 'text-lg'}`}>{product.price}</span>
-                      <Link
-                        to={product.to}
-                        className={`rounded-full bg-gray-900 text-white font-medium hover:bg-gray-800 transition-all duration-200 shadow-lg ${index === 0 ? 'px-4 py-2 text-sm' : 'px-3 py-1.5 text-xs'}`}
-                        onClick={() => trackEvent('home_featured_click', { product: product.title, category: product.category })}
-                      >
-                        Découvrir
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-      <section id="nouveautes" className="bg-gradient-to-b from-white to-[#f8f4ef] py-16 sm:py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-10">
-            <div>
-              <p className="uppercase tracking-[0.3em] text-xs text-gray-500">Nouveautés</p>
-              <h2 className="text-3xl sm:text-4xl font-light text-gray-900 mt-2">
-                Dernières arrivées
-              </h2>
-              <p className="text-gray-500 mt-3 max-w-xl">
-                Découvrez nos dernières créations et collections saisonnières.
-              </p>
-            </div>
-            <Link
-              to="/boutique"
-              className="self-start sm:self-auto px-5 py-2 rounded-full border border-gray-300 text-sm text-gray-800 hover:border-gray-900 transition-colors"
-              onClick={() => trackEvent('home_section_click', { section: 'nouveautes', action: 'voir_tout' })}
-            >
-              Voir tout
-            </Link>
-          </header>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
             {loading ? (
-              <div className="col-span-4 text-center py-8 text-gray-500">Chargement...</div>
+              <div className="col-span-2 lg:col-span-4 text-center py-8 text-gray-500">Chargement...</div>
             ) : newProducts.length > 0 ? (
               newProducts.map((product) => (
-              <ProductCard 
-                key={product.id} 
-                product={product} 
-                showCollection 
-                onProductClick={(product) => {
-                  setSelectedProduct(product);
-                  setIsModalOpen(true);
-                }}
-              />
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  showCollection
+                  onProductClick={(product) => {
+                    setSelectedProduct(product);
+                    setIsModalOpen(true);
+                  }}
+                />
               ))
             ) : (
-              <div className="col-span-4 text-center py-8 text-gray-500">Aucun produit disponible</div>
+              <div className="col-span-2 lg:col-span-4 text-center py-8 text-gray-500">Aucun produit disponible</div>
             )}
           </div>
         </div>
       </section>
-      <section className="py-16 bg-white">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 grid md:grid-cols-2 gap-10 items-center">
+
+      <section className="py-12 sm:py-16 bg-[var(--cream)]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 grid md:grid-cols-2 gap-8 md:gap-10 items-center">
           <article className="space-y-4">
             <p className="uppercase tracking-[0.28em] text-xs text-gray-500">Maison</p>
             <h2 className="text-3xl font-light text-gray-900">Le Clos de la Reine</h2>
             <p className="text-gray-600 leading-relaxed">
-            Une maison française qui imagine colliers, laisses et harnais au 
-            croisement de l'élégance et de la fonctionnalité. 
+            Une maison française qui imagine colliers, laisses et harnais au
+            croisement de l'élégance et de la fonctionnalité.
             Matières douces, finitions soignées, palette crème, rose poudré et
              vert clair pour sublimer vos compagnons et votre intérieur.
             </p>
-            <ul className="flex gap-4 text-sm text-gray-700 list-none">
-              <li className="px-4 py-2 rounded-full bg-[#f8f4ef]">Détails soignés</li>
+            <ul className="flex flex-wrap gap-3 text-sm text-gray-700 list-none">
+              <li className="px-4 py-2 rounded-full bg-white">Détails soignés</li>
               <li className="px-4 py-2 rounded-full bg-[#e5f2eb]">Tissus élégants</li>
               <li className="px-4 py-2 rounded-full bg-[#f2dedd]">Production atelier</li>
             </ul>
@@ -285,13 +317,14 @@ export default function HomePage() {
           </figure>
         </div>
       </section>
-      <section className="py-16 bg-gradient-to-b from-[#f8f4ef] via-white to-[#e5f2eb]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 grid md:grid-cols-2 gap-10 items-center">
-          <div className="overflow-hidden rounded-[28px] shadow-xl shadow-black/10 order-2 md:order-1 transition duration-300 ease-in-out hover:scale-[1.02]">
+
+      <section className="py-12 sm:py-16 bg-[var(--cream)]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 grid md:grid-cols-2 gap-8 md:gap-10 items-center">
+          <div className="overflow-hidden rounded-[28px] shadow-xl shadow-black/10 order-2 md:order-1">
             <img
               src="/Images/Profile2.webp"
               alt="Joanne, fondatrice"
-              className="w-full h-full object-cover transition-transform duration-300 ease-in-out hover:scale-[1.02]"
+              className="w-full h-full object-cover"
               loading="lazy"
             />
           </div>
@@ -327,7 +360,7 @@ export default function HomePage() {
                 href="https://dudomainedesrevesbleus.chiens-de-france.com/cocker-spaniel-anglais"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-full border border-gray-300 text-sm text-gray-800 hover:border-gray-900 hover:bg-gray-50 transition-colors"
+                className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-full border border-gray-300 text-sm text-gray-800 hover:border-gray-900 hover:bg-white transition-colors"
               >
                 Voir le site de l'élevage
               </a>
@@ -335,12 +368,35 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-      <ProductModal 
-        product={selectedProduct} 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
+
+      {/* Texte de référencement en bas de page, comme les grandes boutiques en ligne */}
+      <section className="bg-white py-12 sm:py-14">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 space-y-3 text-sm text-gray-600 leading-relaxed">
+          <h2 className="text-xl sm:text-2xl font-light text-gray-900">Colliers, laisses et harnais pour chien, faits main en France</h2>
+          <p>
+            Le Clos de la Reine crée des <strong className="font-medium text-gray-800">colliers pour chien</strong>, des{' '}
+            <strong className="font-medium text-gray-800">laisses</strong> et des <strong className="font-medium text-gray-800">harnais</strong> en tissu,
+            cousus à la main en petites séries. Tartan, vichy, velours, toile de Jouy ou motif marin : chaque collection se décline
+            en collier, laisse et harnais assortis, pour les petits comme pour les grands chiens.
+          </p>
+          <p>
+            Les colliers et harnais existent du XS au XL, les laisses en 1 m et 1,20 m, avec des finitions dorées et des matières
+            douces pour le confort de votre compagnon. Livraison partout en France, paiement sécurisé.
+          </p>
+          <p className="flex flex-wrap gap-x-5 gap-y-2 pt-1">
+            <Link to="/boutique?category=colliers" className="text-gray-900 underline underline-offset-4">Colliers pour chien</Link>
+            <Link to="/boutique?category=laisses" className="text-gray-900 underline underline-offset-4">Laisses pour chien</Link>
+            <Link to="/boutique?category=harnais" className="text-gray-900 underline underline-offset-4">Harnais pour chien</Link>
+            <Link to="/faq" className="text-gray-900 underline underline-offset-4">Questions fréquentes</Link>
+          </p>
+        </div>
+      </section>
+
+      <ProductModal
+        product={selectedProduct}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
       />
     </>
   );
-} 
-
+}

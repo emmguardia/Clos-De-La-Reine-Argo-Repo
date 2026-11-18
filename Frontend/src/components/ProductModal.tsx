@@ -1,5 +1,5 @@
-import { X, ChevronLeft, ChevronRight, Heart, ShoppingCart, ChevronDown, Check } from 'lucide-react';
-import { useState, useEffect, useMemo, useCallback, type CSSProperties } from 'react';
+import { X, ChevronLeft, ChevronRight, Heart, ShoppingCart, ChevronDown, Check, Scissors, Lock, Truck } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import type { Product } from '../data/products';
 import { fetchProductById } from '../data/products';
@@ -92,21 +92,24 @@ function ProductModalBody({
     },
   }), [product, images]);
 
-  // Inline styles pour les hauteurs — inline styles > CSS classes, fonctionne même si Tailwind JIT manque la classe
-  const isSmallScreen = typeof window !== 'undefined' && window.innerWidth < 768;
-  const imageStyle: CSSProperties = { height: isSmallScreen ? '30vh' : '80vh', minHeight: isSmallScreen ? '30vh' : '80vh', flexShrink: 0 };
-  const textStyle: CSSProperties = { height: isSmallScreen ? '60vh' : '80vh', overflow: 'hidden' };
-
   const [guideOpen, setGuideOpen] = useState(true);
   const needsSizeSelection = product.category === 'laisses' || product.category === 'colliers' || product.category === 'harnais';
   const laisseSizes = ['1m', '1m20'];
   const collarHarnessSizes = ['XS', 'S', 'M', 'L', 'XL'];
   const [selectedSize, setSelectedSize] = useState<string>('');
+  const [sizeMissing, setSizeMissing] = useState(false);
+  const sizeSelectRef = useRef<HTMLSelectElement>(null);
   const isUnavailable = product.disponible === false;
   const [adding, setAdding] = useState(false);
   const handleAddToCart = async () => {
     if (isUnavailable) return;
-    if (needsSizeSelection && !selectedSize) return;
+    if (needsSizeSelection && !selectedSize) {
+      // Bouton toujours actif : on montre plutôt où choisir la taille
+      setSizeMissing(true);
+      sizeSelectRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      sizeSelectRef.current?.focus();
+      return;
+    }
     setAdding(true);
     await addToCart(product.id, 1, needsSizeSelection ? selectedSize : undefined, product.name);
     trackEvent('add_to_cart', {
@@ -125,7 +128,7 @@ function ProductModalBody({
       <script type="application/ld+json">{JSON.stringify(productJsonLd)}</script>
     </Helmet>
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4 animate-fadeIn"
       role="dialog"
       aria-modal="true"
       aria-label="Détail du produit"
@@ -136,15 +139,15 @@ function ProductModalBody({
         aria-hidden
       />
 
-      {/* Carte produit — même taille d’image que l’autre Clos de la Reine (60vh / 80vh) */}
+      {/* Carte produit — plein écran sur téléphone (bouton panier toujours visible), 80vh sur ordinateur */}
       <div
-        className="relative z-10 w-full max-w-6xl rounded-3xl overflow-hidden bg-white animate-slideDown max-h-[90vh]"
+        className="product-modal-card relative z-10 w-full max-w-6xl md:rounded-3xl overflow-hidden bg-white animate-slideDown"
         style={{ boxShadow: 'var(--shadow)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-col md:flex-row md:min-h-0 md:items-start">
+        <div className="flex flex-col md:flex-row h-full md:h-auto min-h-0 md:items-start">
           {/* Gauche : image — mobile h-[35%] du full-screen, desktop 80vh */}
-          <div className="relative w-full md:w-1/2 bg-gray-100 flex-shrink-0" style={imageStyle}>
+          <div className="product-modal-image relative w-full md:w-1/2 bg-gray-100">
             <div className="relative w-full h-full overflow-hidden">
               {images[currentIndex] ? (
                 <img
@@ -197,7 +200,7 @@ function ProductModalBody({
           </div>
 
           {/* Droite : infos — mobile flex-1 (65% restant), desktop 80vh */}
-          <div className="w-full md:w-1/2 p-4 md:p-10 flex flex-col bg-white min-h-0" style={textStyle}>
+          <div className="product-modal-text w-full md:w-1/2 p-4 md:p-10 flex flex-col bg-white min-h-0">
             <button
               type="button"
               onClick={onClose}
@@ -254,10 +257,12 @@ function ProductModalBody({
                       {product.category === 'laisses' ? '1 m ou 1,20 m' : 'XS à XL'}
                     </p>
                     <select
+                      ref={sizeSelectRef}
                       value={selectedSize}
-                      onChange={(e) => setSelectedSize(e.target.value)}
+                      onChange={(e) => { setSelectedSize(e.target.value); setSizeMissing(false); }}
+                      aria-invalid={sizeMissing}
                       className="w-full px-4 py-3 rounded-2xl border text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
-                      style={{ borderColor: 'var(--ink)', color: 'var(--ink)' }}
+                      style={{ borderColor: sizeMissing ? '#dc2626' : 'var(--ink)', color: 'var(--ink)' }}
                     >
                       <option value="">Choisir ma taille</option>
                       {(product.category === 'laisses' ? laisseSizes : collarHarnessSizes).map((size) => (
@@ -266,6 +271,9 @@ function ProductModalBody({
                         </option>
                       ))}
                     </select>
+                    {sizeMissing && (
+                      <p className="text-xs text-red-600" role="alert">Choisissez une taille pour l'ajouter au panier.</p>
+                    )}
                   </>
                 ) : (
                   <div className="flex flex-wrap gap-2">
@@ -321,39 +329,48 @@ function ProductModalBody({
             </div>
             </div>
 
-            <div className="flex-shrink-0 mt-2 md:mt-4 pt-2 md:pt-4 space-y-2 md:space-y-3 border-t border-gray-200">
-              {isUnavailable ? (
-                <div className="w-full py-3 md:py-4 rounded-full font-medium flex items-center justify-center gap-2 bg-gray-100 text-gray-400 cursor-not-allowed select-none">
-                  <ShoppingCart className="w-5 h-5" />
-                  Non disponible
-                </div>
-              ) : (
-              <button
-                type="button"
-                onClick={handleAddToCart}
-                disabled={(needsSizeSelection && !selectedSize) || adding}
-                className={`w-full py-3 md:py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${adding ? 'scale-95' : ''}`}
-                style={{ background: 'var(--ink)', color: 'var(--cream)' }}
-              >
-                {adding ? (
-                  <Check className="w-5 h-5 text-green-300" />
+            <div className="product-modal-actions flex-shrink-0 mt-2 md:mt-4 pt-3 md:pt-4 border-t border-gray-200">
+              <div className="flex gap-2 md:flex-col md:gap-3">
+                {isUnavailable ? (
+                  <div className="flex-1 md:w-full py-3 md:py-4 rounded-full font-medium flex items-center justify-center gap-2 bg-gray-100 text-gray-400 cursor-not-allowed select-none">
+                    <ShoppingCart className="w-5 h-5" />
+                    Non disponible
+                  </div>
                 ) : (
-                  <ShoppingCart className="w-5 h-5" />
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  disabled={adding}
+                  className={`flex-1 md:w-full py-3 md:py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed ${adding ? 'scale-95' : ''}`}
+                  style={{ background: 'var(--ink)', color: 'var(--cream)' }}
+                >
+                  {adding ? (
+                    <Check className="w-5 h-5 text-green-300" />
+                  ) : (
+                    <ShoppingCart className="w-5 h-5" />
+                  )}
+                  {adding ? 'Ajouté !' : `Ajouter au panier · ${product.price.toFixed(0)} €`}
+                </button>
                 )}
-                {adding ? 'Ajouté !' : 'Ajouter au panier'}
-              </button>
-              )}
-              <button
-                type="button"
-                onClick={onFavoriteClick}
-                className={`w-full py-3 md:py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 border-2 ${
-                  favorite ? 'border-red-400 text-red-600' : 'border-[var(--ink)]/20'
-                }`}
-                style={{ color: favorite ? undefined : 'var(--ink)', background: favorite ? 'rgb(254 226 226)' : 'transparent' }}
-              >
-                <Heart className={`w-5 h-5 ${favorite ? 'fill-current' : ''}`} />
-                {favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-              </button>
+                <button
+                  type="button"
+                  onClick={onFavoriteClick}
+                  aria-label={favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                  className={`w-12 shrink-0 md:w-full py-3 md:py-4 rounded-full font-medium flex items-center justify-center gap-2 transition-all duration-300 border-2 ${
+                    favorite ? 'border-red-400 text-red-600' : 'border-[var(--ink)]/20'
+                  }`}
+                  style={{ color: favorite ? undefined : 'var(--ink)', background: favorite ? 'rgb(254 226 226)' : 'transparent' }}
+                >
+                  <Heart className={`w-5 h-5 ${favorite ? 'fill-current' : ''}`} />
+                  <span className="hidden md:inline">{favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}</span>
+                </button>
+              </div>
+              {/* Réassurance juste sous le bouton panier */}
+              <ul className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] md:text-xs leading-tight text-gray-600 list-none">
+                <li className="flex flex-col items-center gap-1"><Scissors className="w-4 h-4" aria-hidden />Fait main en France</li>
+                <li className="flex flex-col items-center gap-1"><Lock className="w-4 h-4" aria-hidden />Paiement sécurisé</li>
+                <li className="flex flex-col items-center gap-1"><Truck className="w-4 h-4" aria-hidden />Livré en 10 jours ouvrés en moyenne</li>
+              </ul>
             </div>
           </div>
         </div>

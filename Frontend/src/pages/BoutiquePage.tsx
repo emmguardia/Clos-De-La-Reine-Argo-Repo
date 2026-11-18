@@ -14,8 +14,9 @@ export default function BoutiquePage() {
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'all'>(
     categoryParam && ['colliers', 'harnais', 'laisses'].includes(categoryParam) ? categoryParam : 'all'
   );
-  const [selectedCollection, setSelectedCollection] = useState<string>('all');
-  const [selectedColor, setSelectedColor] = useState<string>('all');
+  // Liens de l'accueil : /boutique?collection=Noblesse&couleur=Bleu
+  const [selectedCollection, setSelectedCollection] = useState<string>(searchParams.get('collection') || 'all');
+  const [selectedColor, setSelectedColor] = useState<string>(searchParams.get('couleur') || 'all');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 

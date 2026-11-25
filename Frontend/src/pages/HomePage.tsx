@@ -15,9 +15,9 @@ const heroCollection = {
   name: 'Héritage',
   link: `/boutique?collection=${encodeURIComponent('Héritage')}`,
   slides: [
+    { image: '/Images/accueil/shooting-cocker-laisse-voiture.webp', position: 'center 30%', alt: 'Cocker en laisse pied-de-poule dans une voiture ancienne' },
     { image: '/Images/accueil/shooting-cockers-harnais-porte.webp', position: 'center 25%', alt: 'Deux cockers en harnais pied-de-poule devant une porte en bois' },
     { image: '/Images/accueil/shooting-joanne-voiture-chiot.webp', position: 'center 40%', alt: 'Joanne et un chiot cocker noir sur la banquette d’une voiture ancienne' },
-    { image: '/Images/accueil/shooting-cocker-laisse-voiture.webp', position: 'center 30%', alt: 'Cocker en laisse pied-de-poule dans une voiture ancienne' },
   ],
 };
 

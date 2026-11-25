@@ -74,16 +74,28 @@ function HeroCarousel() {
       }}
     >
       {heroCollection.slides.map((slide, i) => (
-        <img
+        <div
           key={slide.image}
-          src={slide.image}
-          alt={slide.alt}
           aria-hidden={i !== index}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${i === index ? 'opacity-100' : 'opacity-0'}`}
-          style={{ objectPosition: slide.position }}
-          loading={i === 0 ? 'eager' : 'lazy'}
-          fetchPriority={i === 0 ? 'high' : 'auto'}
-        />
+          className={`absolute inset-0 transition-opacity duration-1000 ${i === index ? 'opacity-100' : 'opacity-0'}`}
+        >
+          {/* Téléphone : photo entière (pas recadrée), le vide autour est
+              rempli par la même photo floutée. Ordinateur : plein cadre. */}
+          <img
+            src={slide.image}
+            alt=""
+            className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl brightness-75 md:hidden"
+            loading={i === 0 ? 'eager' : 'lazy'}
+          />
+          <img
+            src={slide.image}
+            alt={slide.alt}
+            className="relative h-full w-full object-contain md:object-cover"
+            style={{ objectPosition: slide.position }}
+            loading={i === 0 ? 'eager' : 'lazy'}
+            fetchPriority={i === 0 ? 'high' : 'auto'}
+          />
+        </div>
       ))}
       {/* Dégradés : lisibilité du menu en haut et du titre en bas */}
       <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/35 to-transparent" />

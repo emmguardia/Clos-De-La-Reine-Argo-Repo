@@ -150,14 +150,25 @@ function ProductModalBody({
           <div className="product-modal-image relative w-full md:w-1/2 bg-gray-100">
             <div className="relative w-full h-full overflow-hidden">
               {images[currentIndex] ? (
-                <img
-                  key={`${product.id}-${currentIndex}`}
-                  loading="lazy"
-                  src={images[currentIndex]}
-                  alt={`${product.name} - Image ${currentIndex + 1}`}
-                  className="absolute inset-0 w-full h-full object-cover animate-imageFade"
-                  draggable={false}
-                />
+                <>
+                  {/* Téléphone : photo entière, fond = même photo floutée */}
+                  <img
+                    key={`${product.id}-${currentIndex}-fond`}
+                    src={images[currentIndex]}
+                    alt=""
+                    aria-hidden
+                    className="absolute inset-0 w-full h-full scale-110 object-cover blur-2xl brightness-90 md:hidden"
+                    draggable={false}
+                  />
+                  <img
+                    key={`${product.id}-${currentIndex}`}
+                    loading="lazy"
+                    src={images[currentIndex]}
+                    alt={`${product.name} - Image ${currentIndex + 1}`}
+                    className="absolute inset-0 w-full h-full object-contain md:object-cover animate-imageFade"
+                    draggable={false}
+                  />
+                </>
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-200 text-gray-500">
                   Image non disponible

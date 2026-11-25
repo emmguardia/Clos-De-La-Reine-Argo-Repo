@@ -51,12 +51,21 @@ export default function ProductCard({ product, showCollection = true, compact = 
         }
       }}
     >
-      <div className={`${compact ? 'h-52' : 'h-28 sm:h-56'} relative overflow-hidden`}>
+      {/* Cadre au format des photos (2:3) : la photo s'affiche en entier.
+          Une photo d'un autre format garde un fond = elle-même floutée. */}
+      <div className={`${compact ? 'h-52' : 'aspect-[2/3]'} relative overflow-hidden bg-[#e9e2d8]`}>
+        <img
+          src={product.image}
+          alt=""
+          aria-hidden
+          loading="lazy"
+          className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl brightness-90"
+        />
         <img
           src={product.image}
           alt={`${product.name} — ${product.category} pour chien artisanal | Clos de la Reine`}
           loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+          className="relative h-full w-full object-contain transition-transform duration-700 group-hover:scale-105"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/10" />
         {isUnavailable && (

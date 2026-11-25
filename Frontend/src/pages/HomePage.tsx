@@ -9,13 +9,15 @@ import SEO from '../components/SEO';
 
 // Bannière : la collection du moment. Pour changer les photos, remplacer les
 // fichiers dans Public/Images/accueil (même nom) ou modifier cette liste.
+// L'ordre des slides = l'ordre de cette liste. Une même photo sert sur
+// ordinateur et téléphone ; `position` règle le cadrage (object-position).
 const heroCollection = {
-  name: "Pain d'Épices",
-  link: `/boutique?collection=${encodeURIComponent("Pain d'Épices")}`,
+  name: 'Héritage',
+  link: `/boutique?collection=${encodeURIComponent('Héritage')}`,
   slides: [
-    { desktop: '/Images/accueil/banniere-1.webp', mobile: '/Images/accueil/banniere-1-mobile.webp', alt: 'Samoyède en harnais velours rouge avec une petite fille au pied du sapin' },
-    { desktop: '/Images/accueil/banniere-2.webp', mobile: '/Images/accueil/banniere-2-mobile.webp', alt: 'Deux petites filles et un samoyède en harnais velours rouge' },
-    { desktop: '/Images/accueil/banniere-3.webp', mobile: '/Images/accueil/banniere-3-mobile.webp', alt: 'Colliers et laisses en velours rouge sous le sapin' },
+    { image: '/Images/accueil/shooting-cockers-harnais-porte.webp', position: 'center 25%', alt: 'Deux cockers en harnais pied-de-poule devant une porte en bois' },
+    { image: '/Images/accueil/shooting-joanne-voiture-chiot.webp', position: 'center 40%', alt: 'Joanne et un chiot cocker noir sur la banquette d’une voiture ancienne' },
+    { image: '/Images/accueil/shooting-cocker-laisse-voiture.webp', position: 'center 30%', alt: 'Cocker en laisse pied-de-poule dans une voiture ancienne' },
   ],
 };
 
@@ -72,20 +74,16 @@ function HeroCarousel() {
       }}
     >
       {heroCollection.slides.map((slide, i) => (
-        <picture
-          key={slide.desktop}
-          className={`absolute inset-0 transition-opacity duration-1000 ${i === index ? 'opacity-100' : 'opacity-0'}`}
+        <img
+          key={slide.image}
+          src={slide.image}
+          alt={slide.alt}
           aria-hidden={i !== index}
-        >
-          <source media="(min-width: 768px)" srcSet={slide.desktop} />
-          <img
-            src={slide.mobile}
-            alt={slide.alt}
-            className="h-full w-full object-cover"
-            loading={i === 0 ? 'eager' : 'lazy'}
-            fetchPriority={i === 0 ? 'high' : 'auto'}
-          />
-        </picture>
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${i === index ? 'opacity-100' : 'opacity-0'}`}
+          style={{ objectPosition: slide.position }}
+          loading={i === 0 ? 'eager' : 'lazy'}
+          fetchPriority={i === 0 ? 'high' : 'auto'}
+        />
       ))}
       {/* Dégradés : lisibilité du menu en haut et du titre en bas */}
       <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/35 to-transparent" />

@@ -1035,7 +1035,8 @@ app.get('/api/products', async (req, res) => {
 
     const [products, totalRows, metaProducts] = await Promise.all([
       query(
-        `SELECT ${columns} FROM products ${whereSql} ORDER BY id ASC LIMIT ? OFFSET ?`,
+        // id incrémental = ordre de création : boutique du plus récent au plus ancien
+        `SELECT ${columns} FROM products ${whereSql} ORDER BY id ${idsParam ? 'ASC' : 'DESC'} LIMIT ? OFFSET ?`,
         [...params, idsParam ? 500 : limit, skip]
       ),
       idsParam ? Promise.resolve(null) : query(`SELECT COUNT(*) AS total FROM products ${whereSql}`, params),
